@@ -1,6 +1,6 @@
-/* Branding overrides
-   Keep the approved British Airways Virtual wordmark intact instead of
-   colour-inverting the red/blue speedmarque. */
+/* Canonical British Airways Virtual branding overrides.
+   These rules preserve the exact proportions of the user-supplied artwork and
+   use the dedicated white-letter asset on navy surfaces. */
 
 .footer-logo,
 .login-brand img,
@@ -11,34 +11,67 @@
 }
 
 .site-brand img {
-  width: clamp(330px, 20vw, 430px);
-}
-
-.login-brand img {
-  width: clamp(375px, 21vw, 470px);
-  height: 80px;
-}
-
-.account-brand img {
-  width: clamp(390px, 22vw, 500px);
-  height: 82px;
+  width: 176px !important;
+  height: auto !important;
+  max-height: 78px;
+  object-fit: contain;
+  display: block;
 }
 
 .footer-logo {
-  width: clamp(320px, 19vw, 410px) !important;
-  height: 92px !important;
+  width: 250px !important;
+  height: auto !important;
+  max-height: none !important;
+  object-fit: contain;
+  display: block;
+}
+
+.login-header,
+.account-header {
+  min-height: 100px;
+  height: 100px;
+}
+
+.login-brand img,
+.account-brand img {
+  width: 190px !important;
+  height: auto !important;
+  max-height: 92px;
+  object-fit: contain;
+  display: block;
 }
 
 .login-page-footer img,
 .account-footer img {
-  width: clamp(320px, 19vw, 420px);
-  height: 94px;
+  width: 270px !important;
+  height: auto !important;
+  max-height: none !important;
+  object-fit: contain;
+  display: block;
 }
 
 @media (max-width: 700px) {
-  .site-brand img { width: 250px; }
+  .site-brand img {
+    width: 150px !important;
+    height: auto !important;
+  }
+
+  .login-header,
+  .account-header {
+    min-height: 82px;
+    height: 82px;
+  }
+
   .login-brand img,
-  .account-brand img { width: 255px; height: 58px; }
+  .account-brand img {
+    width: 155px !important;
+    height: auto !important;
+  }
+
+  .footer-logo,
   .login-page-footer img,
-  .account-footer img { width: 270px; height: 70px; }
+  .account-footer img {
+    width: 220px !important;
+    height: auto !important;
+  }
 }
