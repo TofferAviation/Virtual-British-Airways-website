@@ -13,6 +13,7 @@ import "./oneworld.css";
 import "./fleet-v2.css";
 import "./fleet-banner-fix.css";
 import "./about-va.css";
+import "./va-points.css";
 
 export const metadata: Metadata = {
   title: {
