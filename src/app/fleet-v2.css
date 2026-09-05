@@ -1,0 +1,296 @@
+/* British Airways Virtual — Fleet showcase */
+
+.fleet-showcase-page{
+  min-height:100vh;
+  background:#f3f6f9;
+  color:#071d49;
+}
+
+.fleet-showcase-hero{
+  position:relative;
+  min-height:300px;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 18% 28%,rgba(255,255,255,.98) 0 13%,rgba(255,255,255,.54) 30%,transparent 49%),
+    radial-gradient(circle at 47% 14%,rgba(255,255,255,.88) 0 12%,transparent 39%),
+    linear-gradient(118deg,#edf6fd 0%,#dfeef8 44%,#c9ddea 100%);
+}
+
+.fleet-showcase-hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,rgba(255,255,255,.38) 0%,rgba(255,255,255,.10) 45%,rgba(7,29,73,.03) 100%);
+  pointer-events:none;
+}
+
+.fleet-showcase-hero-inner{
+  position:relative;
+  z-index:2;
+  width:min(1180px,92vw);
+  margin:0 auto;
+  min-height:300px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:flex-start;
+  padding:42px 0 78px;
+}
+
+.fleet-showcase-kicker{
+  margin-bottom:9px;
+  color:#0767c8;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.17em;
+  text-transform:uppercase;
+}
+
+.fleet-showcase-hero h1{
+  margin:0 0 10px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:clamp(48px,5vw,68px);
+  line-height:1;
+  font-weight:400;
+  color:#071d49;
+}
+
+.fleet-showcase-hero p{
+  max-width:610px;
+  margin:0;
+  color:#53647b;
+  font-size:16px;
+  line-height:1.55;
+}
+
+.fleet-hero-mark{
+  position:absolute;
+  z-index:1;
+  right:max(3vw,calc((100vw - 1240px)/2));
+  top:34px;
+  width:min(36vw,470px);
+  height:230px;
+  opacity:.96;
+  filter:drop-shadow(0 12px 18px rgba(14,42,76,.09));
+}
+
+.fleet-hero-mark span{
+  position:absolute;
+  right:0;
+  width:100%;
+  height:72px;
+  border-radius:120px 18px 120px 18px;
+  transform:skewX(-24deg) rotate(-5deg);
+  transform-origin:right center;
+}
+
+.fleet-hero-mark .mark-red{
+  top:22px;
+  background:linear-gradient(100deg,#b90d2d 0%,#dd1735 58%,#a40627 100%);
+}
+
+.fleet-hero-mark .mark-white{
+  top:83px;
+  width:88%;
+  background:linear-gradient(100deg,#f8fafc 0%,#fff 60%,#e8eef4 100%);
+}
+
+.fleet-hero-mark .mark-blue{
+  top:143px;
+  width:75%;
+  background:linear-gradient(100deg,#233f78 0%,#153262 58%,#0a224b 100%);
+}
+
+.fleet-showcase-shell{
+  position:relative;
+  z-index:4;
+  width:min(1180px,92vw);
+  margin:0 auto;
+  padding:0 0 72px;
+}
+
+.fleet-overview-card{
+  margin-top:-54px;
+  margin-bottom:20px;
+  min-height:92px;
+  display:grid;
+  grid-template-columns:repeat(3,1fr) 220px;
+  align-items:center;
+  background:#fff;
+  border:1px solid #dfe5ec;
+  border-radius:7px;
+  box-shadow:0 12px 30px rgba(24,46,77,.10);
+  overflow:hidden;
+}
+
+.fleet-overview-stat{
+  min-height:58px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  border-right:1px solid #e2e7ed;
+}
+
+.fleet-overview-stat strong{
+  color:#071d49;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:30px;
+  font-weight:400;
+  line-height:1;
+}
+
+.fleet-overview-stat span{
+  margin-top:7px;
+  color:#69798e;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+.fleet-overview-action{
+  padding:0 16px;
+}
+
+.fleet-overview-action .button{
+  width:100%;
+  min-height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  border-radius:4px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:17px;
+}
+
+.fleet-showcase-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:16px;
+}
+
+.fleet-showcase-card{
+  position:relative;
+  min-height:218px;
+  padding:24px 24px 22px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  background:#fff;
+  border:1px solid #dce3eb;
+  border-radius:6px;
+  box-shadow:0 3px 12px rgba(17,39,69,.045);
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+}
+
+.fleet-showcase-card:hover{
+  transform:translateY(-2px);
+  border-color:#c9d6e5;
+  box-shadow:0 10px 24px rgba(17,39,69,.08);
+}
+
+.fleet-showcase-card::after{
+  content:"";
+  position:absolute;
+  right:-36px;
+  bottom:-62px;
+  width:155px;
+  height:155px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(7,103,200,.08) 0 32%,rgba(7,103,200,.03) 33% 54%,transparent 55%);
+  pointer-events:none;
+}
+
+.fleet-card-family{
+  position:relative;
+  z-index:1;
+  margin-bottom:8px;
+  color:#0767c8;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.15em;
+  text-transform:uppercase;
+}
+
+.fleet-showcase-card h2{
+  position:relative;
+  z-index:1;
+  margin:0 0 9px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:27px;
+  line-height:1.08;
+  font-weight:400;
+  color:#071d49;
+}
+
+.fleet-showcase-card p{
+  position:relative;
+  z-index:1;
+  margin:0;
+  max-width:82%;
+  color:#66758a;
+  font-size:13px;
+  line-height:1.5;
+}
+
+.fleet-card-note{
+  position:relative;
+  z-index:1;
+  margin-top:14px;
+  color:#94a0ae;
+  font-size:11px;
+}
+
+.fleet-card-link{
+  position:relative;
+  z-index:2;
+  margin-top:auto;
+  padding-top:24px;
+  display:inline-flex;
+  align-items:center;
+  gap:14px;
+  width:max-content;
+  color:#075aaa;
+  font-size:13px;
+  font-weight:700;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+
+.fleet-card-link span{
+  font-size:23px;
+  font-weight:400;
+  line-height:1;
+  text-decoration:none;
+}
+
+.fleet-showcase-footnote{
+  margin:22px 0 0;
+  color:#758295;
+  font-size:11px;
+  line-height:1.5;
+}
+
+@media(max-width:1000px){
+  .fleet-hero-mark{opacity:.62;right:-70px;width:430px}
+  .fleet-overview-card{grid-template-columns:repeat(3,1fr)}
+  .fleet-overview-action{grid-column:1/-1;padding:14px;border-top:1px solid #e2e7ed}
+  .fleet-overview-action .button{max-width:260px;margin:0 auto}
+  .fleet-showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media(max-width:700px){
+  .fleet-showcase-hero{min-height:340px}
+  .fleet-showcase-hero-inner{min-height:340px;padding:42px 0 92px}
+  .fleet-showcase-hero p{max-width:90%;font-size:14px}
+  .fleet-hero-mark{right:-170px;top:74px;opacity:.28}
+  .fleet-overview-card{grid-template-columns:1fr 1fr;margin-top:-62px}
+  .fleet-overview-stat{padding:15px 8px;border-bottom:1px solid #e2e7ed}
+  .fleet-overview-stat:nth-child(2){border-right:0}
+  .fleet-overview-stat:nth-child(3){grid-column:1/-1;border-right:0}
+  .fleet-overview-action{grid-column:1/-1}
+  .fleet-showcase-grid{grid-template-columns:1fr}
+  .fleet-showcase-card{min-height:190px}
+}
