@@ -13,7 +13,7 @@ export default function LoginPage() {
           <Link href="/help">Help</Link>
         </nav>
         <Link className="login-brand" href="/">
-          <Image src="/branding/ba-virtual-logo.svg" alt="British Airways Virtual" width={760} height={190} priority />
+          <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={1000} height={430} priority />
         </Link>
         <div className="login-header-actions">
           <Link href="/account" className="login-header-button">Log in</Link>
@@ -49,7 +49,7 @@ export default function LoginPage() {
       </section>
 
       <footer className="login-page-footer">
-        <Image src="/branding/ba-virtual-logo.svg" alt="British Airways Virtual" width={760} height={190} />
+        <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={1000} height={430} />
         <div>
           <strong>Flight simulation only</strong>
           <p>Independent virtual airline project · Not affiliated with British Airways Plc</p>
