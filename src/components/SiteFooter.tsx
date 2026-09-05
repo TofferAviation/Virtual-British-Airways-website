@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { BrandLogo } from "@/components/BrandLogo";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const cookieStore = await cookies();
+  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+
   return (
     <footer className="site-footer">
       <div className="footer-grid">
@@ -21,7 +25,7 @@ export function SiteFooter() {
         </div>
         <div>
           <h3>Pilots</h3>
-          <Link href="/login">Pilot login</Link>
+          <Link href={isLoggedIn ? "/account" : "/login"}>{isLoggedIn ? "Pilot account" : "Pilot login"}</Link>
           <Link href="/account">Account</Link>
           <Link href="/account">Membership</Link>
         </div>
