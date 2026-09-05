@@ -1,0 +1,102 @@
+/* Dark integrated header + homepage hero treatment inspired by the BA reference. */
+
+.legal-strip{
+  min-height:22px;
+  padding:4px 16px;
+  background:#061a3b;
+  color:#fff;
+  border:0;
+  font-size:9px;
+  letter-spacing:.035em;
+}
+
+.site-header{
+  min-height:78px!important;
+  height:78px!important;
+  background:#061a3b!important;
+  border-bottom:1px solid rgba(255,255,255,.08)!important;
+  box-shadow:none!important;
+}
+
+.site-brand img{
+  width:168px!important;
+  max-height:68px!important;
+}
+
+.site-nav>a,
+.site-nav-trigger{
+  color:#fff!important;
+}
+
+.site-nav>a:hover,
+.site-nav>a:focus-visible,
+.site-nav-discover:hover>.site-nav-trigger,
+.site-nav-discover:focus-within>.site-nav-trigger{
+  color:#fff!important;
+  background:rgba(255,255,255,.08)!important;
+  border-bottom-color:#fff!important;
+}
+
+.site-header .button-outline{
+  color:#fff!important;
+  border-color:rgba(255,255,255,.78)!important;
+  background:transparent!important;
+}
+
+.site-header .button-outline:hover,
+.site-header .button-outline:focus-visible{
+  color:#fff!important;
+  background:rgba(255,255,255,.10)!important;
+  border-color:#fff!important;
+}
+
+/* Keep the mega menu itself light even though the header is dark. */
+.site-mega-menu{
+  border-top-color:rgba(255,255,255,.10)!important;
+}
+.site-mega-column h3{color:#071d49!important}
+.site-mega-column a{color:#3564a7!important}
+
+/* Cinematic navy treatment over the existing homepage banner image. */
+.home-hero{
+  min-height:570px;
+  background-position:center 48%!important;
+  box-shadow:inset 0 24px 45px rgba(2,16,40,.18),inset 0 -90px 120px rgba(2,16,40,.38);
+}
+
+.home-hero-overlay{
+  background:
+    linear-gradient(180deg,rgba(3,20,47,.22) 0%,rgba(3,20,47,.34) 42%,rgba(3,20,47,.72) 100%),
+    linear-gradient(90deg,rgba(3,20,47,.42) 0%,rgba(3,20,47,.18) 50%,rgba(3,20,47,.30) 100%)!important;
+}
+
+.home-hero-content{
+  text-shadow:0 2px 18px rgba(0,0,0,.34);
+}
+
+.home-hero-content .button-light{
+  border:1px solid rgba(255,255,255,.78);
+  background:rgba(255,255,255,.96);
+  box-shadow:0 5px 18px rgba(0,17,44,.18);
+}
+
+.home-hero-content .status-pill{
+  background:rgba(3,20,47,.44);
+  border-color:rgba(255,255,255,.34);
+  box-shadow:0 5px 18px rgba(0,17,44,.16);
+}
+
+@media(max-width:1040px){
+  .site-header{
+    min-height:72px!important;
+    height:72px!important;
+  }
+  .site-brand img{width:150px!important;max-height:62px!important}
+}
+
+@media(max-width:700px){
+  .legal-strip{min-height:20px;font-size:8px}
+  .site-header{min-height:68px!important;height:68px!important}
+  .site-brand img{width:138px!important;max-height:58px!important}
+  .home-hero{min-height:520px}
+}
