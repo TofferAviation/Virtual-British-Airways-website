@@ -14,6 +14,7 @@ import "./fleet-v2.css";
 import "./fleet-banner-fix.css";
 import "./about-va.css";
 import "./va-points.css";
+import "./tier-points.css";
 
 export const metadata: Metadata = {
   title: {
