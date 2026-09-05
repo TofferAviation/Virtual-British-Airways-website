@@ -1,18 +1,14 @@
-import Image from "next/image";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function SiteFooter() {
   return (
     <footer className="site-footer">
       <div className="footer-grid">
         <div>
-          <Image
-            className="footer-logo"
-            src="/branding/ba-virtual-logo-white.svg"
-            alt="British Airways Virtual"
-            width={360}
-            height={176}
-          />
+          <div className="footer-logo">
+            <BrandLogo variant="white" />
+          </div>
           <p className="footer-copy">
             Structured virtual-airline operations, pilot careers and community flying inspired by the British Airways network.
           </p>
