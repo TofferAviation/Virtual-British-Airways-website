@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 import { pilot, recentFlights } from "@/lib/mockData";
 
 export const metadata = { title: "Pilot account" };
@@ -23,7 +23,7 @@ export default async function AccountPage({
           <Link href="/help">Help</Link>
         </nav>
         <Link className="account-brand" href="/">
-          <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={360} height={176} priority />
+          <BrandLogo variant="white" priority />
         </Link>
         <div className="account-header-actions">
           <span>{pilot.id}</span>
@@ -123,7 +123,7 @@ export default async function AccountPage({
       </section>
 
       <footer className="account-footer">
-        <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={360} height={176} />
+        <div className="account-footer-logo"><BrandLogo variant="white" /></div>
         <div className="account-footer-links"><Link href="/help">Help</Link><Link href="/">Home</Link><a href="#">Privacy</a><a href="#">Terms</a></div>
         <p>British Airways Virtual · Flight simulation only · Not affiliated with British Airways Plc</p>
       </footer>
