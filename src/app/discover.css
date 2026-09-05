@@ -40,12 +40,14 @@
 .discover-operation-card p{font-size:13px;color:#5e6979;line-height:1.55;margin:0 0 18px}
 .discover-operation-card a{font-size:13px;color:#075aaa;text-decoration:underline}
 
-.discover-more{padding:58px 0 66px;background:#eef3f8}
-.discover-more h2{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:400;margin:0 0 26px}
-.discover-country-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.discover-country-link{background:#fff;border:1px solid #d7dfe8;padding:17px 16px;color:#071d49;font-size:14px;display:flex;justify-content:space-between;align-items:center}
-.discover-country-link span:last-child{color:#075aaa}
-.discover-country-link:hover{text-decoration:underline}
+.discover-more{padding:58px 0 72px;background:#f7f8fa}
+.discover-more h2{font-size:46px;line-height:1.05;font-weight:300;letter-spacing:-.025em;margin:0 0 36px;color:#071d49}
+.discover-country-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 18px}
+.discover-country-card{display:block;background:#fff;border:1px solid #d7dde6;border-radius:9px;overflow:hidden;color:#075aaa;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.discover-country-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(7,29,73,.10);border-color:#c4cfdd}
+.discover-country-image{height:150px;background-size:cover;background-position:center;background-color:#dbe4ee}
+.discover-country-copy{min-height:82px;padding:25px 23px 24px;display:flex;align-items:flex-start}
+.discover-country-copy span{font-size:18px;line-height:1.3;text-decoration:underline;text-underline-offset:3px;font-weight:400}
 
 .discover-note{padding:44px 0 54px;background:#fff}
 .discover-note h2{font-size:22px;font-weight:400;margin:0 0 12px}
@@ -66,4 +68,6 @@
   .discover-operation-grid{grid-template-columns:1fr}
   .discover-country-grid{grid-template-columns:1fr}
   .discover-card-image{height:190px}
+  .discover-country-image{height:190px}
+  .discover-more h2{font-size:36px}
 }
