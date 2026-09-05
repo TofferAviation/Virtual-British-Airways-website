@@ -5,22 +5,21 @@
   height:auto;
   min-height:0;
   max-height:none;
-  aspect-ratio:2048 / 682;
+  aspect-ratio:2172 / 724;
   margin:26px auto 0;
   overflow:hidden;
-  background-image:url('/branding/fleet-banner-hq.jpg') !important;
-  background-size:contain !important;
-  background-position:center center !important;
-  background-repeat:no-repeat !important;
+  /* Prefer the exact original PNG when present locally; fall back to the existing repo WebP so the hero never disappears. */
+  background-image:url('/branding/fleet-banner.png'), url('/branding/fleet-banner.webp') !important;
+  background-size:contain, contain !important;
+  background-position:center center, center center !important;
+  background-repeat:no-repeat, no-repeat !important;
   background-color:#fff;
   image-rendering:auto;
 }
 
-/* Keep the supplied banner artwork clean and sharp. */
 .fleet-showcase-hero::before{display:none !important}
 .fleet-showcase-hero::after{display:none !important}
 
-/* Pull the overview panel gently into the banner without covering its text. */
 .fleet-showcase-shell{
   width:min(1180px,94vw);
 }
@@ -43,7 +42,7 @@
 @media(max-width:1100px){
   .fleet-showcase-hero{
     width:min(94vw,980px);
-    aspect-ratio:2048 / 682;
+    aspect-ratio:2172 / 724;
     margin-top:20px;
   }
   .fleet-overview-card{margin-top:-18px}
@@ -52,7 +51,7 @@
 @media(max-width:700px){
   .fleet-showcase-hero{
     width:96vw;
-    aspect-ratio:2048 / 682;
+    aspect-ratio:2172 / 724;
     margin-top:14px;
   }
   .fleet-overview-card{margin-top:10px}
