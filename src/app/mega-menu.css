@@ -3,15 +3,15 @@
 .site-nav-trigger{height:100%;display:flex;align-items:center;padding:0 16px;font-size:14px;color:#303847;border-bottom:3px solid transparent}
 .site-nav-discover:hover>.site-nav-trigger,.site-nav-discover:focus-within>.site-nav-trigger{background:#f6f8fa;border-bottom-color:var(--blue)}
 
-/* Full-width BA-style panel. It opens directly below the main header and keeps
-   all columns top-aligned so there is no large dead space between headings and links. */
+/* Full-width BA-style panel. The panel spans the viewport, while the actual
+   menu content is centered inside it and each column is center-aligned. */
 .site-mega-menu{position:absolute;left:0;right:0;top:100%;background:#fff;border-top:1px solid #e7ebef;border-bottom:1px solid #d9dfe7;box-shadow:0 8px 20px rgba(7,29,73,.08);opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-12px);transition:opacity .22s ease,transform .24s ease,visibility 0s linear .24s;z-index:80}
 .site-nav-discover:hover>.site-mega-menu,.site-nav-discover:focus-within>.site-mega-menu{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);transition:opacity .22s ease,transform .24s ease,visibility 0s}
 
-.site-mega-inner{width:100%;margin:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));column-gap:clamp(28px,3.3vw,64px);align-items:start;padding:28px clamp(30px,2.2vw,46px) 34px}
-.site-mega-column{min-width:0;align-self:start}
-.site-mega-column h3{margin:0 0 10px;color:#071d49;font-size:16px;line-height:1.25;font-weight:400;white-space:normal}
-.site-mega-column a{display:block!important;height:auto!important;min-height:0!important;padding:5px 0!important;border:0!important;background:transparent!important;color:#3564a7!important;font-size:15px!important;line-height:1.35!important;white-space:normal!important;align-items:initial!important}
+.site-mega-inner{width:min(1320px,94vw);margin:0 auto;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));column-gap:clamp(24px,3vw,56px);align-items:start;padding:28px 18px 34px;text-align:center}
+.site-mega-column{min-width:0;align-self:start;text-align:center}
+.site-mega-column h3{margin:0 0 10px;color:#071d49;font-size:16px;line-height:1.25;font-weight:400;white-space:normal;text-align:center}
+.site-mega-column a{display:block!important;height:auto!important;min-height:0!important;padding:5px 0!important;border:0!important;background:transparent!important;color:#3564a7!important;font-size:15px!important;line-height:1.35!important;white-space:normal!important;align-items:initial!important;text-align:center!important}
 .site-mega-column a:hover,.site-mega-column a:focus-visible{background:transparent!important;border:0!important;color:#075aaa!important;text-decoration:underline;outline:none}
 
 @media(prefers-reduced-motion:reduce){
@@ -19,7 +19,7 @@
 }
 
 @media(max-width:1280px){
-  .site-mega-inner{grid-template-columns:repeat(3,minmax(0,1fr));gap:26px 42px;padding-left:30px;padding-right:30px}
+  .site-mega-inner{grid-template-columns:repeat(3,minmax(0,1fr));gap:26px 42px;width:min(980px,92vw)}
 }
 
 @media(max-width:1040px){
