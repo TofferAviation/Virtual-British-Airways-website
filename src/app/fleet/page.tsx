@@ -18,16 +18,10 @@ export default function FleetPage() {
             <div className="fleet-showcase-kicker">Virtual operations</div>
             <h1>Fleet</h1>
             <p>
-              Explore the British Airways Virtual fleet catalogue. Aircraft availability, registrations,
-              maintenance status and Phoenix assignment rules will be connected to live operational data as the
-              platform develops.
+              Initial fleet catalogue for the British Airways Virtual production website. Aircraft availability,
+              registrations, maintenance status and Phoenix assignment rules will be connected to live operational
+              data later.
             </p>
-          </div>
-
-          <div className="fleet-hero-mark" aria-hidden="true">
-            <span className="mark-red" />
-            <span className="mark-white" />
-            <span className="mark-blue" />
           </div>
         </section>
 
@@ -57,19 +51,14 @@ export default function FleetPage() {
               <article className="fleet-showcase-card" key={aircraft.type}>
                 <div className="fleet-card-family">{aircraft.family}</div>
                 <h2>{aircraft.type}</h2>
-                <p>{aircraft.count} aircraft in the current British Airways Virtual seed fleet.</p>
-                <div className="fleet-card-note">Aircraft artwork will be added when approved models are supplied.</div>
+                <p>{aircraft.count} aircraft in the initial seed dataset.</p>
+                <div className="fleet-card-image-space" aria-hidden="true" />
                 <Link className="fleet-card-link" href={`/book?aircraft=${encodeURIComponent(aircraft.type)}`}>
                   View available flights <span aria-hidden="true">→</span>
                 </Link>
               </article>
             ))}
           </section>
-
-          <p className="fleet-showcase-footnote">
-            Fleet quantities are currently development seed data and will later be replaced by live operational
-            records from the British Airways Virtual backend.
-          </p>
         </div>
       </main>
 
