@@ -13,6 +13,13 @@ type DestinationCard = {
   image: string;
 };
 
+type DiscoverMoreCard = {
+  title: string;
+  href: string;
+  image: string;
+  alt: string;
+};
+
 const ukDestinations: DestinationCard[] = [
   { city: "London", code: "LHR", label: "London Heathrow", image: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1200&q=85" },
   { city: "Edinburgh", code: "EDI", label: "Scotland", image: "https://images.unsplash.com/photo-1506377585622-bedcbb5a8b2c?auto=format&fit=crop&w=1200&q=85" },
@@ -47,6 +54,105 @@ const worldDestinations: DestinationCard[] = [
   { city: "Mauritius", code: "MRU", label: "Indian Ocean", image: "https://images.unsplash.com/photo-1589197331516-4d84b72ebde3?auto=format&fit=crop&w=1200&q=85" },
 ];
 
+const discoverMoreCards: DiscoverMoreCard[] = [
+  {
+    title: "Argentina flights",
+    href: "/book?to=EZE",
+    image: "https://images.unsplash.com/photo-1589909202802-8f4aadce1849?auto=format&fit=crop&w=1100&q=82",
+    alt: "Obelisk and city centre in Buenos Aires, Argentina",
+  },
+  {
+    title: "Australia flights",
+    href: "/book?to=SYD",
+    image: "https://images.unsplash.com/photo-1556089309-389321ee92d9?auto=format&fit=crop&w=1100&q=82",
+    alt: "Sydney Opera House in Australia",
+  },
+  {
+    title: "Brazil flights",
+    href: "/book?to=GIG",
+    image: "https://images.unsplash.com/photo-1621764541297-91694f8e90c9?auto=format&fit=crop&w=1100&q=82",
+    alt: "Rio de Janeiro city and bay in Brazil",
+  },
+  {
+    title: "Caribbean flights",
+    href: "/book?to=ANU",
+    image: "https://images.unsplash.com/photo-1583860168269-5d0b9e9131b2?auto=format&fit=crop&w=1100&q=82",
+    alt: "Fort James Beach in Antigua and Barbuda",
+  },
+  {
+    title: "China flights",
+    href: "/book?to=PVG",
+    image: "https://images.unsplash.com/photo-1693721783596-afebf1d4354f?auto=format&fit=crop&w=1100&q=82",
+    alt: "Great Wall of China near Beijing",
+  },
+  {
+    title: "Costa Rica flights",
+    href: "/book?to=SJO",
+    image: "https://images.unsplash.com/photo-1630488991068-d12e7e0dadb7?auto=format&fit=crop&w=1100&q=82",
+    alt: "Tropical beach in Costa Rica",
+  },
+  {
+    title: "Egypt flights",
+    href: "/book?to=CAI",
+    image: "https://images.unsplash.com/photo-1639157451911-365bf4fc26ed?auto=format&fit=crop&w=1100&q=82",
+    alt: "Pyramids of Giza in Egypt",
+  },
+  {
+    title: "Ghana flights",
+    href: "/book?to=ACC",
+    image: "https://images.unsplash.com/photo-1651860282137-a59f01d2db7b?auto=format&fit=crop&w=1100&q=82",
+    alt: "Cape Coast shoreline in Ghana",
+  },
+  {
+    title: "Indian Ocean flights",
+    href: "/book?to=MLE",
+    image: "https://images.unsplash.com/photo-1586500036065-bdaeac7a4feb?auto=format&fit=crop&w=1100&q=82",
+    alt: "White sand beach and turquoise water in the Maldives",
+  },
+  {
+    title: "Japan flights",
+    href: "/book?to=HND",
+    image: "https://images.unsplash.com/photo-1743731853247-79c0bfb78b33?auto=format&fit=crop&w=1100&q=82",
+    alt: "Mount Fuji and a Japanese temple",
+  },
+  {
+    title: "London flights",
+    href: "/book?to=LHR",
+    image: "https://images.unsplash.com/photo-1765924848146-c0a553565688?auto=format&fit=crop&w=1100&q=82",
+    alt: "Big Ben and Westminster Bridge in London",
+  },
+  {
+    title: "Scotland flights",
+    href: "/book?to=EDI",
+    image: "https://images.unsplash.com/photo-1663942465127-0b0f35c90704?auto=format&fit=crop&w=1100&q=82",
+    alt: "Edinburgh skyline from Calton Hill in Scotland",
+  },
+  {
+    title: "South Africa flights",
+    href: "/book?to=CPT",
+    image: "https://images.unsplash.com/photo-1721155265830-1622a3383da4?auto=format&fit=crop&w=1100&q=82",
+    alt: "Cape Town and Table Mountain in South Africa",
+  },
+  {
+    title: "Thailand flights",
+    href: "/book?to=BKK",
+    image: "https://images.unsplash.com/photo-1762698352682-4f93466b58ea?auto=format&fit=crop&w=1100&q=82",
+    alt: "Ornate temple architecture in Bangkok, Thailand",
+  },
+  {
+    title: "United Arab Emirates flights",
+    href: "/book?to=DXB",
+    image: "https://images.unsplash.com/photo-1721977568971-f07e1aa58cf9?auto=format&fit=crop&w=1100&q=82",
+    alt: "Dubai Marina in the United Arab Emirates",
+  },
+  {
+    title: "USA flights",
+    href: "/book?to=JFK",
+    image: "https://images.unsplash.com/photo-1663052721527-0d971e81d257?auto=format&fit=crop&w=1100&q=82",
+    alt: "New York skyline with the Empire State Building",
+  },
+];
+
 function DestinationGrid({ items }: { items: DestinationCard[] }) {
   return (
     <div className="discover-card-grid">
@@ -64,9 +170,6 @@ function DestinationGrid({ items }: { items: DestinationCard[] }) {
 }
 
 export default function DestinationsPage() {
-  const countries = [...new Set(airports.map((airport) => airport.country))].sort();
-  const discoverMore = countries.slice(0, 20);
-
   return (
     <>
       <SiteHeader />
@@ -190,9 +293,17 @@ export default function DestinationsPage() {
           <div className="discover-wrap">
             <h2>Discover more</h2>
             <div className="discover-country-grid">
-              {discoverMore.map((country) => (
-                <Link className="discover-country-link" href={`/book?country=${encodeURIComponent(country)}`} key={country}>
-                  <span>{country}</span><span>→</span>
+              {discoverMoreCards.map((card) => (
+                <Link className="discover-country-card" href={card.href} key={card.title}>
+                  <div
+                    className="discover-country-image"
+                    role="img"
+                    aria-label={card.alt}
+                    style={{ backgroundImage: `url(${card.image})` }}
+                  />
+                  <div className="discover-country-copy">
+                    <span>{card.title}</span>
+                  </div>
                 </Link>
               ))}
             </div>
