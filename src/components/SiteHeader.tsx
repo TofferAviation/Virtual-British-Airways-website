@@ -51,7 +51,7 @@ export async function SiteHeader() {
               <div className="site-mega-column">
                 <h3>Pilot Club</h3>
                 <Link href={isLoggedIn ? "/account" : "/login"}>About your account</Link>
-                <Link href={isLoggedIn ? "/account#membership" : "/login"}>About tier points</Link>
+                <a href="/tier-points">About tier points</a>
                 <a href="/va-points">VA Points</a>
                 <Link href={isLoggedIn ? "/account#trips" : "/login"}>Flight history</Link>
                 <Link href={isLoggedIn ? "/account" : "/login"}>Pilot progression</Link>
