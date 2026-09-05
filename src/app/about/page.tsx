@@ -89,21 +89,14 @@ export default function AboutPage() {
           <strong>About the VA</strong>
         </div>
 
-        <section className="about-va-hero">
-          <div className="about-va-hero-copy">
-            <span className="about-va-kicker">About the VA</span>
-            <h1>Built around the operation, not just the flight.</h1>
-            <p>
-              British Airways Virtual is being developed as a complete pilot experience — combining a realistic
-              route network, career progression, live operational data and Phoenix integration inside one coherent
-              British Airways-inspired environment.
-            </p>
-          </div>
-          <div className="about-va-hero-mark" aria-hidden="true">
-            <span className="about-va-mark-red" />
-            <span className="about-va-mark-white" />
-            <span className="about-va-mark-blue" />
-          </div>
+        <section
+          className="about-va-banner"
+          role="img"
+          aria-label="About the VA. Built around the operation, not just the flight. British Airways Virtual is being developed as a complete connected pilot experience."
+        >
+          <span className="about-va-visually-hidden">
+            Built around the operation, not just the flight. British Airways Virtual is being developed as a complete pilot experience combining a realistic route network, career progression, live operational data and Phoenix integration.
+          </span>
         </section>
 
         <nav className="about-va-section-nav" aria-label="About the VA sections">
