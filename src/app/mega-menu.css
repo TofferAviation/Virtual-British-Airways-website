@@ -1,11 +1,11 @@
 /* Shared Discover mega-menu navigation. */
 
-/* Keep the brand on the left and account actions on the right, while the
-   primary navigation itself is genuinely centered in the browser width. */
-.site-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
-.site-brand{grid-column:1;justify-self:start}
-.site-nav{grid-column:2;justify-self:center;display:flex;align-items:center;height:100%;flex:none}
-.header-actions{grid-column:3;justify-self:end;margin-left:0}
+/* Center the logo + primary navigation as one group so the BA Virtual logo
+   sits directly beside Discover. Account actions remain pinned to the right. */
+.site-header{display:flex;align-items:center;justify-content:center;gap:10px}
+.site-brand{flex:0 0 auto;margin:0;justify-self:auto}
+.site-nav{display:flex;align-items:center;height:100%;flex:0 0 auto;gap:3px;margin:0}
+.header-actions{position:absolute;right:clamp(28px,4vw,78px);top:50%;transform:translateY(-50%);margin-left:0}
 
 .site-nav-item{height:100%;display:flex;align-items:center}
 .site-nav-trigger{height:100%;display:flex;align-items:center;padding:0 16px;font-size:14px;color:#303847;border-bottom:3px solid transparent}
@@ -31,8 +31,8 @@
 }
 
 @media(max-width:1040px){
-  .site-header{display:flex}
+  .site-header{display:flex;justify-content:flex-start;gap:16px}
   .site-nav{display:none}
-  .header-actions{margin-left:auto}
+  .header-actions{position:static;transform:none;margin-left:auto}
   .site-mega-menu{display:none}
 }
