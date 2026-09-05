@@ -13,8 +13,8 @@ export function SiteHeader() {
           <Image
             src="/branding/ba-virtual-logo.svg"
             alt="British Airways Virtual"
-            width={760}
-            height={190}
+            width={360}
+            height={176}
             priority
           />
         </Link>
