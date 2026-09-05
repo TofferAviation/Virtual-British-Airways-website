@@ -15,6 +15,15 @@ function UserIcon() {
   );
 }
 
+function OneworldBadge() {
+  return (
+    <span aria-hidden="true">
+      <span>one</span>
+      <span>world</span>
+    </span>
+  );
+}
+
 export async function SiteHeader() {
   const cookieStore = await cookies();
   const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
@@ -34,6 +43,7 @@ export async function SiteHeader() {
                 <Link href="/">About the VA</Link>
                 <Link href="/fleet">Our fleet</Link>
                 <Link href="/destinations">Our network</Link>
+                <Link href="/oneworld">Partners and alliances</Link>
                 <Link href="/help">What&apos;s new</Link>
                 <Link href="/help">Operations information</Link>
               </div>
@@ -106,7 +116,9 @@ export async function SiteHeader() {
               <span>Kristoffer</span>
             </Link>
             <Link className="header-logout-button" href="/api/auth/logout">Log out</Link>
-            <Link className="header-avatar" href="/account" aria-label="Pilot account" />
+            <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information">
+              <OneworldBadge />
+            </Link>
           </>
         ) : (
           <>
@@ -114,7 +126,9 @@ export async function SiteHeader() {
               <UserIcon />
               <span>Pilot log in</span>
             </Link>
-            <Link className="header-avatar" href="/login" aria-label="Pilot log in" />
+            <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information">
+              <OneworldBadge />
+            </Link>
           </>
         )}
       </div>
