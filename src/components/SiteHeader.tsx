@@ -14,7 +14,7 @@ export async function SiteHeader() {
       </div>
       <header className="site-header">
         <Link className="site-brand" href="/" aria-label="British Airways Virtual home">
-          <BrandLogo priority />
+          <BrandLogo variant="white" priority />
         </Link>
 
         <nav className="site-nav" aria-label="Primary navigation">
