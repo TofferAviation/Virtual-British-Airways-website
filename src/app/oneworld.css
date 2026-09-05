@@ -1,6 +1,6 @@
 /* British Airways Virtual — oneworld reference page */
 .ow-page{background:#fff;color:#071d49}
-.ow-breadcrumbs{width:min(1180px,92vw);margin:0 auto;padding:18px 0 16px;display:flex;align-items:center;gap:9px;font-size:12px;color:#5d6a7d}
+.ow-breadcrumbs{width:min(1180px,92vw);margin:0 auto;padding:18px 0 16px;display:flex;align-items:center;gap:9px;font-size:12px;color:#5d6a7d;background:#fff}
 .ow-breadcrumbs a{color:#075aaa;text-decoration:underline}
 
 .ow-hero{min-height:360px;background:linear-gradient(110deg,#eef4fb 0%,#dfeaf6 52%,#edf2f8 100%);display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);align-items:center;gap:54px;padding:58px max(4vw,calc((100vw - 1180px)/2));border:0}
@@ -12,17 +12,19 @@
 .ow-roundel{justify-self:end;width:230px;height:230px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 34% 26%,rgba(255,255,255,.7),rgba(255,255,255,.08) 30%),linear-gradient(145deg,#6d63c8 0%,#3e3f91 44%,#1c245d 100%);border:3px solid rgba(255,255,255,.9);box-shadow:0 20px 50px rgba(20,40,83,.22),inset 0 0 26px rgba(255,255,255,.14);color:#fff;text-transform:lowercase;line-height:.8}
 .ow-roundel span{font-size:44px;font-weight:300;letter-spacing:-.06em}.ow-roundel small{margin-top:17px;font-size:10px;letter-spacing:.28em}
 
+/* Keep the page surface continuous: no horizontal divider bands between sections. */
 .ow-section-nav{display:flex;justify-content:center;gap:0;border:0;background:#fff;position:sticky;top:84px;z-index:20;box-shadow:none}
-.ow-section-nav a{padding:18px 28px;color:#075aaa;font-size:14px;border-bottom:3px solid transparent}.ow-section-nav a:hover{background:#f7f9fb;border-bottom-color:#075aaa}
+.ow-section-nav a{padding:18px 28px;color:#075aaa;font-size:14px;border-bottom:3px solid transparent;background:transparent}
+.ow-section-nav a:hover{background:transparent;border-bottom-color:#075aaa}
 
-.ow-content{width:min(1180px,92vw);margin:0 auto;padding:72px 0}
+.ow-content{width:min(1180px,92vw);margin:0 auto;padding:72px 0;background:#fff}
 .ow-content h2,.ow-benefits h2,.ow-cta h2{margin:0 0 18px;font-size:clamp(32px,3vw,44px);line-height:1.12}
 .ow-intro-grid{display:grid;grid-template-columns:1.6fr .7fr;gap:64px;align-items:start}.ow-intro-grid>div>p{margin:0 0 18px;color:#536077;font-size:16px;line-height:1.75}
 .ow-notice{background:#f3f7fb;border-left:5px solid #075aaa;padding:24px 26px}.ow-notice strong{display:block;margin-bottom:8px;font-size:15px}.ow-notice p{margin:0;color:#59677b;font-size:13px;line-height:1.6}
 
-.ow-benefits{background:#eaf1f8;border:0}.ow-benefits .ow-content{padding-top:62px;padding-bottom:62px}.ow-benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:30px}.ow-benefit-grid article{min-height:215px;background:#fff;border:1px solid #d7dee8;padding:28px;box-shadow:0 4px 12px rgba(14,35,69,.04)}.ow-benefit-number{display:block;color:#075aaa;font-size:12px;font-weight:700;letter-spacing:.12em}.ow-benefit-grid h3{margin:24px 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:400}.ow-benefit-grid p{margin:0;color:#5c6879;font-size:14px;line-height:1.65}
+.ow-benefits{background:#fff;border:0}.ow-benefits .ow-content{padding-top:62px;padding-bottom:62px;background:#fff}.ow-benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:30px}.ow-benefit-grid article{min-height:215px;background:#fff;border:1px solid #d7dee8;padding:28px;box-shadow:0 4px 12px rgba(14,35,69,.04)}.ow-benefit-number{display:block;color:#075aaa;font-size:12px;font-weight:700;letter-spacing:.12em}.ow-benefit-grid h3{margin:24px 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:400}.ow-benefit-grid p{margin:0;color:#5c6879;font-size:14px;line-height:1.65}
 
-.ow-members{padding-bottom:84px}.ow-members-lead{max-width:760px;margin:0 0 30px;color:#5a6678;line-height:1.65}.ow-member-grid{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid #dce1e8;border-left:1px solid #dce1e8}.ow-member-card{min-height:112px;display:grid;grid-template-columns:92px 1fr auto;align-items:center;gap:20px;padding:20px 22px;border-right:1px solid #dce1e8;border-bottom:1px solid #dce1e8;background:#fff;transition:background .18s ease}.ow-member-card:hover{background:#f8fafc}.ow-member-logo{width:86px;height:64px;display:flex;align-items:center;justify-content:center;padding:4px 8px;background:#fff}.ow-member-logo img{display:block;max-width:76px;max-height:54px;width:auto;height:auto;object-fit:contain}.ow-member-card h3{margin:0 0 6px;font-size:17px;font-weight:400}.ow-member-card p{margin:0;color:#7a8492;font-size:12px}.ow-card-arrow{color:#075aaa;font-size:22px}
+.ow-members{padding-bottom:84px;background:#fff}.ow-members-lead{max-width:760px;margin:0 0 30px;color:#5a6678;line-height:1.65}.ow-member-grid{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid #dce1e8;border-left:1px solid #dce1e8}.ow-member-card{min-height:112px;display:grid;grid-template-columns:92px 1fr auto;align-items:center;gap:20px;padding:20px 22px;border-right:1px solid #dce1e8;border-bottom:1px solid #dce1e8;background:#fff;transition:background .18s ease}.ow-member-card:hover{background:#f8fafc}.ow-member-logo{width:86px;height:64px;display:flex;align-items:center;justify-content:center;padding:4px 8px;background:#fff}.ow-member-logo img{display:block;max-width:76px;max-height:54px;width:auto;height:auto;object-fit:contain}.ow-member-card h3{margin:0 0 6px;font-size:17px;font-weight:400}.ow-member-card p{margin:0;color:#7a8492;font-size:12px}.ow-card-arrow{color:#075aaa;font-size:22px}
 
 .ow-cta{width:min(1180px,92vw);margin:0 auto 74px;padding:38px 42px;background:#071d49;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:32px}.ow-cta h2{color:#fff;margin-bottom:8px}.ow-cta p{margin:0;color:#dbe4f0}.ow-cta .ow-kicker{color:#dce8f5}.ow-cta .button{flex:0 0 auto}
 
