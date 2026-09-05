@@ -1,11 +1,12 @@
 /* Fleet banner asset override */
 .fleet-showcase-hero{
   position:relative;
-  width:100%;
+  width:min(1180px,94vw);
   height:auto;
   min-height:0;
   max-height:none;
-  aspect-ratio:3 / 1;
+  aspect-ratio:2169 / 723;
+  margin:26px auto 0;
   overflow:hidden;
   background-image:url('/branding/fleet-banner.webp') !important;
   background-size:contain !important;
@@ -14,25 +15,17 @@
   background-color:#fff;
 }
 
-/* Soft white feathering only at the extreme left/right edges. */
-.fleet-showcase-hero::before{
-  content:'';
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  background:linear-gradient(
-    90deg,
-    #fff 0%,
-    rgba(255,255,255,.72) 1.5%,
-    rgba(255,255,255,0) 5.5%,
-    rgba(255,255,255,0) 94.5%,
-    rgba(255,255,255,.72) 98.5%,
-    #fff 100%
-  );
-  z-index:1;
-}
-
+/* Keep the supplied banner artwork clean and sharp. */
+.fleet-showcase-hero::before{display:none !important}
 .fleet-showcase-hero::after{display:none !important}
+
+/* Pull the overview panel gently into the banner without covering its text. */
+.fleet-showcase-shell{
+  width:min(1180px,94vw);
+}
+.fleet-overview-card{
+  margin-top:-24px;
+}
 
 .fleet-visually-hidden{
   position:absolute!important;
@@ -46,25 +39,20 @@
   border:0!important;
 }
 
-/* Keep the banner's native composition on every screen instead of cropping it. */
 @media(max-width:1100px){
   .fleet-showcase-hero{
-    aspect-ratio:3 / 1;
-    height:auto;
-    min-height:0;
-    max-height:none;
-    background-size:contain !important;
-    background-position:center center !important;
+    width:min(94vw,980px);
+    aspect-ratio:2169 / 723;
+    margin-top:20px;
   }
+  .fleet-overview-card{margin-top:-18px}
 }
 
 @media(max-width:700px){
   .fleet-showcase-hero{
-    aspect-ratio:3 / 1;
-    height:auto;
-    min-height:0;
-    max-height:none;
-    background-size:contain !important;
-    background-position:center center !important;
+    width:96vw;
+    aspect-ratio:2169 / 723;
+    margin-top:14px;
   }
+  .fleet-overview-card{margin-top:10px}
 }
