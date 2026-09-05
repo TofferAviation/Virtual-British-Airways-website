@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { pilot, recentFlights } from "@/lib/mockData";
 
@@ -9,6 +11,11 @@ export default async function AccountPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const cookieStore = await cookies();
+  if (cookieStore.get("bav_demo_session")?.value !== "1") {
+    redirect("/login");
+  }
+
   const params = await searchParams;
   const assignment = typeof params.assignment === "string" ? params.assignment : "BA267";
   const from = typeof params.from === "string" ? params.from : "LHR";
@@ -43,7 +50,7 @@ export default async function AccountPage({
 
         <div className="account-v2-header-actions">
           <span className="account-v2-pilot"><span className="account-v2-user-icon" aria-hidden="true" />Pilot</span>
-          <Link href="/login" className="account-v2-logout">Log out</Link>
+          <Link href="/api/auth/logout" className="account-v2-logout">Log out</Link>
           <span className="account-v2-avatar" aria-hidden="true" />
         </div>
       </header>
