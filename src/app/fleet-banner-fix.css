@@ -2,25 +2,37 @@
 .fleet-showcase-hero{
   position:relative;
   width:100%;
-  aspect-ratio:3/1;
-  min-height:0;
-  max-height:none;
+  height:300px;
+  min-height:300px;
+  max-height:300px;
+  aspect-ratio:auto;
   overflow:hidden;
   background-image:url('/branding/fleet-banner.webp') !important;
-  background-size:cover !important;
-  background-position:center center !important;
+  background-size:100% auto !important;
+  background-position:center 46% !important;
   background-repeat:no-repeat !important;
   background-color:#fff;
 }
+
 .fleet-showcase-hero::before{
   content:'';
   position:absolute;
   inset:0;
   pointer-events:none;
-  background:linear-gradient(90deg,#fff 0%,rgba(255,255,255,.78) 2%,rgba(255,255,255,0) 7%,rgba(255,255,255,0) 93%,rgba(255,255,255,.78) 98%,#fff 100%);
+  background:linear-gradient(
+    90deg,
+    #fff 0%,
+    rgba(255,255,255,.78) 2%,
+    rgba(255,255,255,0) 7%,
+    rgba(255,255,255,0) 93%,
+    rgba(255,255,255,.78) 98%,
+    #fff 100%
+  );
   z-index:1;
 }
+
 .fleet-showcase-hero::after{display:none !important}
+
 .fleet-visually-hidden{
   position:absolute!important;
   width:1px!important;
@@ -32,10 +44,23 @@
   white-space:nowrap!important;
   border:0!important;
 }
+
+@media(max-width:1100px){
+  .fleet-showcase-hero{
+    height:260px;
+    min-height:260px;
+    max-height:260px;
+    background-size:cover !important;
+    background-position:center 45% !important;
+  }
+}
+
 @media(max-width:700px){
   .fleet-showcase-hero{
-    aspect-ratio:3/1;
-    min-height:0;
-    background-position:center center!important;
+    height:210px;
+    min-height:210px;
+    max-height:210px;
+    background-size:cover !important;
+    background-position:center 44% !important;
   }
 }
