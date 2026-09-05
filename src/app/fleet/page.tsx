@@ -13,16 +13,11 @@ export default function FleetPage() {
       <SiteHeader />
 
       <main className="fleet-showcase-page">
-        <section className="fleet-showcase-hero">
-          <div className="fleet-showcase-hero-inner">
-            <div className="fleet-showcase-kicker">Virtual operations</div>
-            <h1>Fleet</h1>
-            <p>
-              Initial fleet catalogue for the British Airways Virtual production website. Aircraft availability,
-              registrations, maintenance status and Phoenix assignment rules will be connected to live operational
-              data later.
-            </p>
-          </div>
+        <section
+          className="fleet-showcase-hero"
+          aria-label="British Airways Virtual fleet — Same spirit, a higher horizon"
+        >
+          <h1 className="fleet-visually-hidden">Fleet</h1>
         </section>
 
         <div className="fleet-showcase-shell">
