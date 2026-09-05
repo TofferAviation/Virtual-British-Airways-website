@@ -1,8 +1,79 @@
-/* Canonical British Airways Virtual branding overrides.
-   These rules preserve the exact proportions of the user-supplied artwork and
-   use the dedicated white-letter asset on navy surfaces. */
+/* British Airways Virtual branding
+   The canonical logo is embedded in BrandLogo.tsx so browser/SVG loading
+   cannot break it. Blue artwork is used on light surfaces; every blue/navy
+   part is white on dark surfaces, while the red speedmarque is retained. */
 
-.footer-logo,
+.site-header {
+  min-height: 108px;
+  height: 108px;
+}
+
+.site-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.site-brand img {
+  width: 190px !important;
+  height: auto !important;
+  max-height: 94px;
+  object-fit: contain;
+  display: block;
+}
+
+.login-header,
+.account-header {
+  min-height: 112px;
+  height: 112px;
+}
+
+.login-brand,
+.account-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-brand img,
+.account-brand img {
+  width: 205px !important;
+  height: auto !important;
+  max-height: 100px;
+  object-fit: contain;
+  display: block;
+}
+
+.footer-logo {
+  width: 255px !important;
+  height: auto !important;
+  display: block;
+}
+
+.footer-logo img {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+  display: block;
+}
+
+.login-footer-logo,
+.account-footer-logo {
+  width: 265px;
+  display: block;
+}
+
+.login-footer-logo img,
+.account-footer-logo img {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+  display: block;
+}
+
+/* Override older prototype image sizing/filter rules. */
+.footer-logo img,
 .login-brand img,
 .login-page-footer img,
 .account-brand img,
@@ -10,68 +81,32 @@
   filter: none !important;
 }
 
-.site-brand img {
-  width: 176px !important;
-  height: auto !important;
-  max-height: 78px;
-  object-fit: contain;
-  display: block;
-}
-
-.footer-logo {
-  width: 250px !important;
-  height: auto !important;
-  max-height: none !important;
-  object-fit: contain;
-  display: block;
-}
-
-.login-header,
-.account-header {
-  min-height: 100px;
-  height: 100px;
-}
-
-.login-brand img,
-.account-brand img {
-  width: 190px !important;
-  height: auto !important;
-  max-height: 92px;
-  object-fit: contain;
-  display: block;
-}
-
-.login-page-footer img,
-.account-footer img {
-  width: 270px !important;
-  height: auto !important;
-  max-height: none !important;
-  object-fit: contain;
-  display: block;
-}
-
 @media (max-width: 700px) {
+  .site-header {
+    min-height: 88px;
+    height: 88px;
+  }
+
   .site-brand img {
-    width: 150px !important;
-    height: auto !important;
+    width: 155px !important;
+    max-height: 78px;
   }
 
   .login-header,
   .account-header {
-    min-height: 82px;
-    height: 82px;
+    min-height: 88px;
+    height: 88px;
   }
 
   .login-brand img,
   .account-brand img {
     width: 155px !important;
-    height: auto !important;
+    max-height: 78px;
   }
 
   .footer-logo,
-  .login-page-footer img,
-  .account-footer img {
+  .login-footer-logo,
+  .account-footer-logo {
     width: 220px !important;
-    height: auto !important;
   }
 }
