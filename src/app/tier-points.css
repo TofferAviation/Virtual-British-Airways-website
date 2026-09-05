@@ -1,0 +1,18 @@
+/* British Airways Virtual — Tier Points */
+.tp-page .tp-badge-text{font-size:27px}
+.tp-examples,.tp-used{padding:22px 0 10px}
+.tp-examples h2,.tp-used h2{margin:0 0 2px;font-family:Georgia,'Times New Roman',serif;font-weight:400;color:#071d49;font-size:clamp(32px,3vw,43px);line-height:1.08}
+.tp-example-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:7px}
+.tp-example-grid article{display:grid;grid-template-columns:62px 1fr;gap:15px;align-items:center;min-height:102px;padding:11px 15px;background:#fff;border:1px solid #d8e1eb}
+.tp-example-grid h3{margin:0 0 1px;font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.08;color:#17365f}
+.tp-example-grid strong{display:block;color:#075aaa;font-family:Georgia,'Times New Roman',serif;font-size:18px;line-height:1.05}
+.tp-example-grid p{margin:2px 0 0;color:#65748a;font-size:11px;line-height:1.35}
+.tp-used{padding-top:9px;padding-bottom:42px}
+.tp-used .vap-reward-grid{margin-top:7px}
+.tp-used .vap-points-action{margin-top:0;transform:translateY(-1px)}
+.tp-used .vap-primary-button{min-width:188px;padding:9px 22px}
+
+@media(max-width:800px){
+  .tp-example-grid{grid-template-columns:1fr}
+  .tp-examples,.tp-used{padding-top:30px}
+}
