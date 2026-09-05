@@ -19,6 +19,7 @@ export async function SiteFooter() {
         </div>
         <div>
           <h3>Virtual airline</h3>
+          <Link href="/about">About the VA</Link>
           <Link href="/fleet">Fleet</Link>
           <Link href="/destinations">Destinations</Link>
           <Link href="/book">Schedules</Link>
