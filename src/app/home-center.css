@@ -1,0 +1,33 @@
+/* Homepage hero centering overrides. */
+.home-hero{
+  justify-content:center;
+  text-align:center;
+}
+
+.home-hero-content{
+  width:min(780px,92vw);
+  max-width:780px;
+  margin:0 auto;
+  text-align:center;
+}
+
+.home-hero p{
+  max-width:680px;
+  margin:0 auto 27px;
+}
+
+.home-hero .eyebrow{
+  text-align:center;
+}
+
+.home-hero-content .button,
+.home-hero-content .status-pill{
+  vertical-align:middle;
+}
+
+@media(max-width:700px){
+  .home-hero-content{
+    width:100%;
+    max-width:100%;
+  }
+}
