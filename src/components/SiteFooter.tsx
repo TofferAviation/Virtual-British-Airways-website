@@ -8,10 +8,10 @@ export function SiteFooter() {
         <div>
           <Image
             className="footer-logo"
-            src="/branding/ba-virtual-logo.svg"
+            src="/branding/ba-virtual-logo-white.svg"
             alt="British Airways Virtual"
-            width={760}
-            height={190}
+            width={1000}
+            height={430}
           />
           <p className="footer-copy">
             Structured virtual-airline operations, pilot careers and community flying inspired by the British Airways network.
