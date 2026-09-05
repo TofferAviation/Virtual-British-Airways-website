@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export const metadata = { title: "Pilot login" };
 
@@ -13,7 +13,7 @@ export default function LoginPage() {
           <Link href="/help">Help</Link>
         </nav>
         <Link className="login-brand" href="/">
-          <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={360} height={176} priority />
+          <BrandLogo variant="white" priority />
         </Link>
         <div className="login-header-actions">
           <Link href="/account" className="login-header-button">Log in</Link>
@@ -49,7 +49,7 @@ export default function LoginPage() {
       </section>
 
       <footer className="login-page-footer">
-        <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={360} height={176} />
+        <div className="login-footer-logo"><BrandLogo variant="white" /></div>
         <div>
           <strong>Flight simulation only</strong>
           <p>Independent virtual airline project · Not affiliated with British Airways Plc</p>
