@@ -69,6 +69,11 @@
 .account-v2-footer a{display:block;color:#fff;font-size:8px;padding:4px 0;line-height:1.3}
 .account-v2-footer a:hover{text-decoration:underline}
 
+/* Desktop: intentionally render this account view at a 150% visual scale. */
+@media(min-width:901px){
+  .account-v2-page{zoom:1.5}
+}
+
 @media(max-width:900px){
   .account-v2-header{padding:0 24px}
   .account-v2-nav{gap:20px}
