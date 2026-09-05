@@ -1,9 +1,9 @@
 /* Account v2 — matches the compact British Airways-style account reference. */
-.account-v2-page{min-height:100vh;background:#f5f6f8;color:#071d49;font-family:Arial,Helvetica,sans-serif}
+.account-v2-page{min-height:100vh;min-height:100dvh;background:#f5f6f8;color:#071d49;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column}
 .account-v2-page a{text-decoration:none}
 .account-v2-container{width:min(660px,92vw);margin:0 auto}
 
-.account-v2-header{height:55px;min-height:55px;background:#001a3a;color:#fff;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 48px;position:relative;z-index:20}
+.account-v2-header{height:55px;min-height:55px;background:#001a3a;color:#fff;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 48px;position:relative;z-index:20;flex-shrink:0}
 .account-v2-nav{display:flex;align-items:center;gap:34px;font-size:11px;white-space:nowrap}
 .account-v2-nav a,.account-v2-header-actions a{color:#fff}
 .account-v2-brand{display:flex;align-items:center;justify-content:center;height:55px}
@@ -16,7 +16,7 @@
 .account-v2-logout{min-width:96px;padding:8px 18px;border:1px solid rgba(255,255,255,.95);border-radius:5px;text-align:center;font-size:10px;font-weight:700}
 .account-v2-avatar{width:27px;height:27px;border-radius:50%;border:1px solid #fff;background:radial-gradient(circle at 30% 30%,#e4e6ff,#4c3daf 55%,#142956);display:inline-block}
 
-.account-v2-hero{background:linear-gradient(100deg,#0765d4 0%,#0861c9 52%,#084b9f 100%);color:#fff;padding:43px 0 53px}
+.account-v2-hero{background:linear-gradient(100deg,#0765d4 0%,#0861c9 52%,#084b9f 100%);color:#fff;padding:43px 0 53px;flex-shrink:0}
 .account-v2-welcome{font-size:10px;margin:0 0 9px}
 .account-v2-hero h1{font-size:28px;line-height:1.15;font-weight:400;letter-spacing:-.015em;margin:0 0 13px}
 .account-v2-meta{display:flex;align-items:center;gap:7px;font-size:8.5px;line-height:1.2;flex-wrap:wrap}
@@ -29,12 +29,12 @@
 .account-v2-points article>strong{display:block;font-size:24px;font-weight:400;line-height:1;margin-bottom:8px}
 .account-v2-points article>small{display:block;color:#637083;font-size:8px;line-height:1.35}
 
-.account-v2-tabs{background:#fff;border-bottom:1px solid #d9dfe7}
+.account-v2-tabs{background:#fff;border-bottom:1px solid #d9dfe7;flex-shrink:0}
 .account-v2-tabs-inner{display:flex;gap:24px}
 .account-v2-tabs a{color:#071d49;font-size:9px;padding:13px 11px 11px;border-bottom:2px solid transparent;white-space:nowrap}
 .account-v2-tabs a.active{color:#075aaa;border-bottom-color:#075aaa}
 
-.account-v2-main{background:#f5f6f8;padding:24px 0 78px;min-height:505px}
+.account-v2-main{background:#f5f6f8;padding:24px 0 78px;min-height:505px;flex-shrink:0}
 .account-v2-main h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:25px;line-height:1.1;margin:0 0 5px;color:#071d49}
 .account-v2-subtitle{font-size:9px;line-height:1.4;color:#657184;margin:0 0 17px}
 .account-v2-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
@@ -61,7 +61,7 @@
 .account-v2-progress span{display:block;height:100%;background:#075aaa}
 .account-v2-tier-box p{font-size:7.5px;line-height:1.45;color:#657184;margin:0}
 
-.account-v2-footer{background:#071d49;color:#fff;min-height:220px;padding:58px 0 42px}
+.account-v2-footer{background:#071d49;color:#fff;min-height:220px;padding:58px 0 42px;flex:1 0 auto;box-sizing:border-box}
 .account-v2-footer-inner{width:min(760px,92vw);margin:0 auto;display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:48px;align-items:start}
 .account-v2-footer-brand{width:180px;display:block}
 .account-v2-footer-brand img{display:block;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;filter:none!important}
