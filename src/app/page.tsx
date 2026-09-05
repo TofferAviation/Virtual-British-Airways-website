@@ -1,11 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { FlightSearch } from "@/components/FlightSearch";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { featuredDestinations, fleet } from "@/lib/mockData";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+
   return (
     <>
       <SiteHeader />
@@ -35,7 +39,7 @@ export default function HomePage() {
               <div className="feature-icon">✈</div>
               <div><h3>Scheduled flights</h3><p>Find an available service, choose your aircraft and reserve your next assignment.</p></div>
             </Link>
-            <Link className="feature-card" href="/account">
+            <Link className="feature-card" href={isLoggedIn ? "/account" : "/login"}>
               <div className="feature-icon">◉</div>
               <div><h3>Pilot account</h3><p>See flight hours, landing statistics, VA points, tier progression and recent flights.</p></div>
             </Link>
@@ -86,9 +90,9 @@ export default function HomePage() {
             </p>
           </div>
           <div className="cta-panel">
-            <h3>Already flying with us?</h3>
-            <p>Open the pilot portal foundation and preview the account experience.</p>
-            <Link className="button button-primary" href="/login">Pilot log in</Link>
+            <h3>{isLoggedIn ? "Welcome back, Pilot" : "Already flying with us?"}</h3>
+            <p>{isLoggedIn ? "Your pilot session is active across the website." : "Open the pilot portal foundation and preview the account experience."}</p>
+            <Link className="button button-primary" href={isLoggedIn ? "/account" : "/login"}>{isLoggedIn ? "Open pilot account" : "Pilot log in"}</Link>
           </div>
         </section>
       </main>
