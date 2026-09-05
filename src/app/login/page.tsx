@@ -1,9 +1,16 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 
 export const metadata = { title: "Pilot login" };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const cookieStore = await cookies();
+  if (cookieStore.get("bav_demo_session")?.value === "1") {
+    redirect("/account");
+  }
+
   return (
     <main className="login-page">
       <header className="login-header">
@@ -16,7 +23,7 @@ export default function LoginPage() {
           <BrandLogo variant="white" priority />
         </Link>
         <div className="login-header-actions">
-          <Link href="/account" className="login-header-button">Log in</Link>
+          <Link href="/api/auth/mock-login" className="login-header-button">Log in</Link>
           <span className="account-avatar" aria-hidden="true" />
         </div>
       </header>
@@ -33,11 +40,11 @@ export default function LoginPage() {
             <li>Keep your website and Phoenix identity aligned</li>
           </ul>
           <div className="login-cta-row">
-            <Link className="button button-primary" href="/account">Preview signed-in account</Link>
+            <Link className="button button-primary" href="/api/auth/mock-login">Preview signed-in account</Link>
             <a className="button button-outline" href="https://vamsys.io" rel="noreferrer">Open vAMSYS</a>
           </div>
           <p className="login-security-copy">
-            The production login will hand authentication to vAMSYS or another approved identity flow. This website will not ask pilots to give us their vAMSYS password directly.
+            This development login creates a temporary site-wide pilot session so every page reflects the same signed-in state. The production flow will hand authentication to vAMSYS or another approved identity provider and will not ask pilots to give us their vAMSYS password directly.
           </p>
         </div>
 
