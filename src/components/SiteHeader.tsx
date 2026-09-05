@@ -40,7 +40,7 @@ export async function SiteHeader() {
             <div className="site-mega-inner">
               <div className="site-mega-column">
                 <h3>British Airways Virtual</h3>
-                <Link href="/">About the VA</Link>
+                <Link href="/about">About the VA</Link>
                 <Link href="/fleet">Our fleet</Link>
                 <Link href="/destinations">Our network</Link>
                 <Link href="/oneworld">Partners and alliances</Link>
