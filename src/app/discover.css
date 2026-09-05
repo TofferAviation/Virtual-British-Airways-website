@@ -1,0 +1,69 @@
+/* Discover / destinations page — modelled on the current BA flights landing-page structure. */
+.discover-page{background:#fff;color:#071d49;font-family:Arial,Helvetica,sans-serif}
+.discover-wrap{width:min(1180px,92vw);margin:0 auto}
+
+.discover-top{background:#f4f6f8;padding:42px 0 34px;border-bottom:1px solid #dde3ea}
+.discover-top h1{margin:0 0 24px;font-size:42px;line-height:1.08;font-weight:400;letter-spacing:-.02em;color:#071d49}
+.discover-top .flight-search{margin:0;box-shadow:0 2px 12px rgba(3,29,73,.12)}
+
+.discover-section{padding:54px 0 20px}
+.discover-section.alt{background:#f4f6f8;margin-top:42px;padding:56px 0}
+.discover-heading-row{display:flex;align-items:end;justify-content:space-between;gap:28px;margin-bottom:24px}
+.discover-heading-row h2,.discover-section>div>h2{font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:1.08;font-weight:400;margin:0;color:#071d49}
+.discover-heading-row p,.discover-section>div>p{margin:8px 0 0;color:#526176;font-size:15px;line-height:1.55;max-width:720px}
+.discover-heading-row>a{color:#075aaa;font-size:14px;text-decoration:underline;white-space:nowrap}
+
+.discover-card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.discover-destination-card{display:block;background:#fff;border:1px solid #d9e0e8;box-shadow:0 2px 7px rgba(11,39,83,.08);color:#071d49;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease}
+.discover-destination-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(11,39,83,.13)}
+.discover-card-image{height:168px;background-size:cover;background-position:center;position:relative;background-color:#d9e4ef}
+.discover-card-image:after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(0,20,48,.35),transparent 60%)}
+.discover-card-copy{padding:17px 18px 18px;min-height:94px}
+.discover-card-copy h3{font-size:20px;font-weight:400;margin:0 0 8px;color:#071d49}
+.discover-card-copy p{display:flex;justify-content:space-between;gap:12px;margin:0;color:#5c6878;font-size:13px}
+.discover-card-copy strong{color:#075aaa;font-weight:700}
+
+.discover-why{padding:62px 0 66px}
+.discover-why h2{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:400;margin:0 0 8px}
+.discover-why-lead{color:#526176;margin:0 0 30px;font-size:15px}
+.discover-benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.discover-benefit{padding:28px 26px 26px;border-top:4px solid #075aaa;background:#f7f8fa;min-height:190px}
+.discover-benefit-icon{font-size:28px;line-height:1;margin-bottom:20px;color:#075aaa}
+.discover-benefit h3{font-size:19px;font-weight:400;margin:0 0 10px}
+.discover-benefit p{color:#5e6979;font-size:14px;line-height:1.55;margin:0 0 13px}
+.discover-benefit a{font-size:13px;color:#075aaa;text-decoration:underline}
+
+.discover-operation{padding:58px 0 66px;background:#fff}
+.discover-operation-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:26px}
+.discover-operation-card{border:1px solid #d9e0e8;background:#fff;padding:24px 22px;min-height:190px}
+.discover-operation-card h3{font-size:18px;font-weight:400;margin:0 0 11px}
+.discover-operation-card p{font-size:13px;color:#5e6979;line-height:1.55;margin:0 0 18px}
+.discover-operation-card a{font-size:13px;color:#075aaa;text-decoration:underline}
+
+.discover-more{padding:58px 0 66px;background:#eef3f8}
+.discover-more h2{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:400;margin:0 0 26px}
+.discover-country-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.discover-country-link{background:#fff;border:1px solid #d7dfe8;padding:17px 16px;color:#071d49;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.discover-country-link span:last-child{color:#075aaa}
+.discover-country-link:hover{text-decoration:underline}
+
+.discover-note{padding:44px 0 54px;background:#fff}
+.discover-note h2{font-size:22px;font-weight:400;margin:0 0 12px}
+.discover-note p{font-size:12px;line-height:1.55;color:#657184;margin:0;max-width:900px}
+
+@media(max-width:900px){
+  .discover-top h1{font-size:34px}
+  .discover-card-grid{grid-template-columns:repeat(2,1fr)}
+  .discover-benefits{grid-template-columns:1fr}
+  .discover-operation-grid{grid-template-columns:repeat(2,1fr)}
+  .discover-country-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:600px){
+  .discover-top{padding-top:28px}
+  .discover-top h1{font-size:30px}
+  .discover-heading-row{align-items:start;flex-direction:column}
+  .discover-card-grid{grid-template-columns:1fr}
+  .discover-operation-grid{grid-template-columns:1fr}
+  .discover-country-grid{grid-template-columns:1fr}
+  .discover-card-image{height:190px}
+}
