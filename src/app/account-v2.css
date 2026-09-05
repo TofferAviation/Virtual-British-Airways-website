@@ -1,0 +1,100 @@
+/* Account v2 — matches the compact British Airways-style account reference. */
+.account-v2-page{min-height:100vh;background:#f5f6f8;color:#071d49;font-family:Arial,Helvetica,sans-serif}
+.account-v2-page a{text-decoration:none}
+.account-v2-container{width:min(660px,92vw);margin:0 auto}
+
+.account-v2-header{height:55px;min-height:55px;background:#001a3a;color:#fff;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 48px;position:relative;z-index:20}
+.account-v2-nav{display:flex;align-items:center;gap:34px;font-size:11px;white-space:nowrap}
+.account-v2-nav a,.account-v2-header-actions a{color:#fff}
+.account-v2-brand{display:flex;align-items:center;justify-content:center;height:55px}
+.account-v2-brand img{display:block;width:182px!important;height:auto!important;max-height:50px!important;object-fit:contain!important;filter:none!important}
+.account-v2-header-actions{justify-self:end;display:flex;align-items:center;gap:14px;font-size:10px;white-space:nowrap}
+.account-v2-pilot{display:inline-flex;align-items:center;gap:5px;font-weight:700}
+.account-v2-user-icon{position:relative;width:9px;height:11px;display:inline-block}
+.account-v2-user-icon:before{content:"";position:absolute;width:4px;height:4px;border-radius:50%;background:#fff;left:2.5px;top:0}
+.account-v2-user-icon:after{content:"";position:absolute;width:8px;height:5px;border-radius:5px 5px 2px 2px;background:#fff;left:.5px;bottom:0}
+.account-v2-logout{min-width:96px;padding:8px 18px;border:1px solid rgba(255,255,255,.95);border-radius:5px;text-align:center;font-size:10px;font-weight:700}
+.account-v2-avatar{width:27px;height:27px;border-radius:50%;border:1px solid #fff;background:radial-gradient(circle at 30% 30%,#e4e6ff,#4c3daf 55%,#142956);display:inline-block}
+
+.account-v2-hero{background:linear-gradient(100deg,#0765d4 0%,#0861c9 52%,#084b9f 100%);color:#fff;padding:43px 0 53px}
+.account-v2-welcome{font-size:10px;margin:0 0 9px}
+.account-v2-hero h1{font-size:28px;line-height:1.15;font-weight:400;letter-spacing:-.015em;margin:0 0 13px}
+.account-v2-meta{display:flex;align-items:center;gap:7px;font-size:8.5px;line-height:1.2;flex-wrap:wrap}
+.account-v2-meta strong{font-weight:700}
+.account-v2-meta-dot{opacity:.9}
+.account-v2-tier-badge{background:#fff;color:#075aaa;padding:4px 7px;border-radius:2px;font-weight:400}
+.account-v2-points{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:19px}
+.account-v2-points article{min-height:88px;background:#fff;color:#071d49;border-radius:3px;padding:15px 15px 14px;box-shadow:0 2px 7px rgba(11,39,83,.14)}
+.account-v2-points article>span{display:block;font-size:9px;margin-bottom:6px}
+.account-v2-points article>strong{display:block;font-size:24px;font-weight:400;line-height:1;margin-bottom:8px}
+.account-v2-points article>small{display:block;color:#637083;font-size:8px;line-height:1.35}
+
+.account-v2-tabs{background:#fff;border-bottom:1px solid #d9dfe7}
+.account-v2-tabs-inner{display:flex;gap:24px}
+.account-v2-tabs a{color:#071d49;font-size:9px;padding:13px 11px 11px;border-bottom:2px solid transparent;white-space:nowrap}
+.account-v2-tabs a.active{color:#075aaa;border-bottom-color:#075aaa}
+
+.account-v2-main{background:#f5f6f8;padding:24px 0 78px;min-height:505px}
+.account-v2-main h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:25px;line-height:1.1;margin:0 0 5px;color:#071d49}
+.account-v2-subtitle{font-size:9px;line-height:1.4;color:#657184;margin:0 0 17px}
+.account-v2-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.account-v2-stat{background:#fff;border:1px solid #d9e0e9;border-radius:2px;min-height:76px;padding:12px 12px 10px;box-shadow:0 2px 5px rgba(12,35,72,.06)}
+.account-v2-stat-label{display:block;font-size:7.5px;color:#68768a;letter-spacing:.06em;margin-bottom:7px}
+.account-v2-stat-value{display:block;font-size:17px;line-height:1.05;font-weight:400;color:#071d49;margin-bottom:7px;white-space:nowrap}
+.account-v2-stat-note{display:block;font-size:7px;color:#8994a3;line-height:1.3}
+
+.account-v2-lower{display:grid;grid-template-columns:2.15fr .95fr;gap:10px;margin-top:12px}
+.account-v2-card{background:#fff;border:1px solid #d9e0e9;border-radius:2px;box-shadow:0 2px 5px rgba(12,35,72,.06);padding:14px}
+.account-v2-card h3{font-size:14px;font-weight:400;margin:0 0 10px;color:#071d49}
+.account-v2-flight-list{width:100%}
+.account-v2-flight-row{display:grid;grid-template-columns:.64fr .92fr 1.35fr .72fr .72fr .52fr;gap:6px;align-items:center;padding:7px 0;border-top:1px solid #e8ecf1;font-size:7.5px;line-height:1.2;color:#14233f}
+.account-v2-flight-row:first-child{border-top:0}
+.account-v2-flight-row strong{color:#071d49;font-size:8px}
+.account-v2-flight-row span{min-width:0;white-space:nowrap}
+.account-v2-flight-points{color:#0b7a37!important;font-weight:700}
+.account-v2-assignment>strong{display:block;font-size:10px;margin:0 0 7px;color:#071d49}
+.account-v2-assignment>p{font-size:8px;line-height:1.45;color:#657184;margin:0 0 7px}
+.account-v2-assignment>a{font-size:8px;color:#075aaa;text-decoration:underline}
+.account-v2-tier-box{margin-top:13px;border:1px solid #d9e0e9;border-radius:3px;padding:11px 10px 10px}
+.account-v2-tier-head{display:flex;justify-content:space-between;gap:8px;color:#657184;font-size:7px;line-height:1.2}
+.account-v2-progress{height:6px;background:#dfe5ec;border-radius:10px;overflow:hidden;margin:8px 0 10px}
+.account-v2-progress span{display:block;height:100%;background:#075aaa}
+.account-v2-tier-box p{font-size:7.5px;line-height:1.45;color:#657184;margin:0}
+
+.account-v2-footer{background:#071d49;color:#fff;min-height:220px;padding:58px 0 42px}
+.account-v2-footer-inner{width:min(760px,92vw);margin:0 auto;display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:48px;align-items:start}
+.account-v2-footer-brand{width:180px;display:block}
+.account-v2-footer-brand img{display:block;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;filter:none!important}
+.account-v2-footer h4{font-size:10px;margin:0 0 13px;color:#fff}
+.account-v2-footer a{display:block;color:#fff;font-size:8px;padding:4px 0;line-height:1.3}
+.account-v2-footer a:hover{text-decoration:underline}
+
+@media(max-width:900px){
+  .account-v2-header{padding:0 24px}
+  .account-v2-nav{gap:20px}
+  .account-v2-lower{grid-template-columns:1fr}
+  .account-v2-stat-grid{grid-template-columns:repeat(2,1fr)}
+  .account-v2-footer-inner{grid-template-columns:1.4fr 1fr 1fr;gap:32px}
+  .account-v2-footer-inner>div:last-child{grid-column:2}
+}
+
+@media(max-width:650px){
+  .account-v2-header{height:64px;min-height:64px;padding:0 14px;grid-template-columns:auto 1fr auto}
+  .account-v2-nav{display:none}
+  .account-v2-brand{justify-self:start;height:64px}
+  .account-v2-brand img{width:145px!important;max-height:58px!important}
+  .account-v2-pilot{display:none}
+  .account-v2-logout{min-width:74px;padding:7px 11px}
+  .account-v2-avatar{width:24px;height:24px}
+  .account-v2-hero{padding:34px 0 42px}
+  .account-v2-hero h1{font-size:24px}
+  .account-v2-points{grid-template-columns:1fr}
+  .account-v2-tabs-inner{gap:8px;overflow:auto}
+  .account-v2-stat-grid{grid-template-columns:1fr}
+  .account-v2-flight-row{grid-template-columns:.7fr .9fr 1.3fr .7fr}
+  .account-v2-flight-row span:nth-last-child(-n+2){display:none}
+  .account-v2-footer{padding:42px 0 36px}
+  .account-v2-footer-inner{grid-template-columns:1fr 1fr;gap:28px}
+  .account-v2-footer-brand{grid-column:1/-1;width:170px}
+  .account-v2-footer-inner>div:last-child{grid-column:auto}
+}

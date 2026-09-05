@@ -13,156 +13,153 @@ export default async function AccountPage({
   const assignment = typeof params.assignment === "string" ? params.assignment : "BA267";
   const from = typeof params.from === "string" ? params.from : "LHR";
   const to = typeof params.to === "string" ? params.to : "PDX";
+  const tierTarget = 3500;
+  const tierProgress = Math.min(100, (pilot.tierPoints / tierTarget) * 100);
+
+  const stats = [
+    { label: "TOTAL FLIGHTS", value: pilot.flights.toString(), note: "Accepted PIREPs" },
+    { label: "FLIGHT TIME", value: pilot.hoursDisplay, note: "Career block time" },
+    { label: "DISTANCE FLOWN", value: pilot.distanceNm.toLocaleString(), note: "Nautical miles" },
+    { label: "AVERAGE LANDING", value: `${pilot.averageLanding} fpm`, note: "Career average" },
+    { label: "BEST LANDING", value: `${pilot.bestLanding} fpm`, note: "Career best" },
+    { label: "ON-TIME RATE", value: `${pilot.onTime}%`, note: "Completed on schedule" },
+    { label: "CURRENT STREAK", value: pilot.streak.toString(), note: "Flights completed" },
+    { label: "CURRENT RANK", value: pilot.rank, note: "vAMSYS career rank" },
+  ];
 
   return (
-    <main className="account-page">
-      <header className="account-header">
-        <nav className="account-header-nav" aria-label="Pilot account navigation">
+    <main className="account-v2-page">
+      <header className="account-v2-header">
+        <nav className="account-v2-nav" aria-label="Pilot account navigation">
           <Link href="/destinations">Discover</Link>
           <Link href="/book">Book</Link>
           <Link href="/account">Manage</Link>
           <Link href="/help">Help</Link>
         </nav>
 
-        <Link className="account-brand" href="/" aria-label="British Airways Virtual home">
+        <Link className="account-v2-brand" href="/" aria-label="British Airways Virtual home">
           <BrandLogo variant="white" priority />
         </Link>
 
-        <div className="account-header-actions">
-          <span>♟ Pilot</span>
-          <Link href="/login" className="login-header-button">Log out</Link>
-          <span className="account-avatar" aria-hidden="true" />
+        <div className="account-v2-header-actions">
+          <span className="account-v2-pilot"><span className="account-v2-user-icon" aria-hidden="true" />Pilot</span>
+          <Link href="/login" className="account-v2-logout">Log out</Link>
+          <span className="account-v2-avatar" aria-hidden="true" />
         </div>
       </header>
 
-      <section className="account-hero">
-        <div className="account-hero-inner">
-          <div>
-            <div className="section-kicker account-kicker">Pilot account</div>
-            <h1>Welcome back, {pilot.name}</h1>
-            <p>{pilot.rank} · {pilot.hub} · vAMSYS/Phoenix linked</p>
+      <section className="account-v2-hero">
+        <div className="account-v2-container">
+          <p className="account-v2-welcome">Welcome back, {pilot.name}</p>
+          <h1>Your British Airways Virtual account</h1>
+
+          <div className="account-v2-meta">
+            <span className="account-v2-tier-badge">{pilot.tier} member</span>
+            <strong>Pilot ID: {pilot.id}</strong>
+            <span className="account-v2-meta-dot">•</span>
+            <strong>vAMSYS / Phoenix linked</strong>
           </div>
 
-          <div className="account-points-summary" aria-label="Pilot progression summary">
-            <div>
-              <strong>{pilot.points.toLocaleString()}</strong>
+          <div className="account-v2-points" aria-label="Pilot progression summary">
+            <article>
               <span>VA Points</span>
-            </div>
-            <div>
+              <strong>{pilot.points.toLocaleString()}</strong>
+              <small>Virtual-airline points earned through your flying</small>
+            </article>
+            <article>
+              <span>Tier points</span>
               <strong>{pilot.tierPoints.toLocaleString()}</strong>
-              <span>Tier Points</span>
-            </div>
-            <div>
-              <strong>{pilot.tier}</strong>
-              <span>Membership tier</span>
-            </div>
+              <small>Career progression toward your next virtual tier</small>
+            </article>
           </div>
         </div>
       </section>
 
-      <nav className="account-tabs" aria-label="Account sections">
-        <div className="account-tabs-inner">
-          <a className="active" href="#overview">Overview</a>
-          <a href="#flights">My flights</a>
-          <a href="#profile">Profile</a>
+      <nav className="account-v2-tabs" aria-label="Account sections">
+        <div className="account-v2-container account-v2-tabs-inner">
+          <a className="active" href="#trips">Your trips</a>
+          <a href="#profile">Your profile</a>
           <a href="#membership">Membership</a>
         </div>
       </nav>
 
-      <section className="account-content" id="overview">
-        <div className="account-stat-grid">
-          <article><span>Total flights</span><strong>{pilot.flights}</strong></article>
-          <article><span>Flight time</span><strong>{pilot.hoursDisplay}</strong></article>
-          <article><span>Distance flown</span><strong>{pilot.distanceNm.toLocaleString()} nm</strong></article>
-          <article><span>Average landing</span><strong>{pilot.averageLanding} fpm</strong></article>
-          <article><span>Best landing</span><strong>{pilot.bestLanding} fpm</strong></article>
-          <article><span>On-time rate</span><strong>{pilot.onTime}%</strong></article>
-          <article><span>Current streak</span><strong>{pilot.streak}</strong></article>
-          <article><span>Current rank</span><strong>{pilot.rank}</strong></article>
-        </div>
+      <section className="account-v2-main" id="trips">
+        <div className="account-v2-container">
+          <h2>Your pilot dashboard</h2>
+          <p className="account-v2-subtitle">The website view of the same career information that can later be synchronized with Phoenix.</p>
 
-        <div className="account-two-column">
-          <article className="account-panel next-assignment">
-            <div className="section-kicker">Next assignment</div>
-            <h2>{assignment}</h2>
-            <div className="assignment-route">
-              <strong>{from}</strong><span>→</span><strong>{to}</strong>
-            </div>
-            <p>06 Sep 2026 · Boeing 787-9 · 15:30</p>
-            <p>Your selected assignment can later be synchronized into Phoenix through the shared backend.</p>
-            <Link className="button button-primary" href="/book">Change assignment</Link>
-          </article>
-
-          <article className="account-panel membership-panel" id="membership">
-            <div className="section-kicker">Virtual membership</div>
-            <h2>{pilot.tier} tier</h2>
-            <p>{pilot.tierPoints.toLocaleString()} Tier Points earned this membership year.</p>
-            <div className="tier-progress">
-              <span style={{ width: `${Math.min(100, (pilot.tierPoints / 3500) * 100)}%` }} />
-            </div>
-            <div className="tier-labels"><span>Blue</span><strong>Bronze at 3,500</strong></div>
-            <p className="small-copy">Lifetime Tier Points: {pilot.lifetimeTierPoints.toLocaleString()}</p>
-          </article>
-        </div>
-
-        <article className="account-panel" id="flights">
-          <div className="panel-heading-row">
-            <div>
-              <div className="section-kicker">Flight history</div>
-              <h2>Recent flights</h2>
-            </div>
-            <Link href="/book">Book another flight</Link>
-          </div>
-
-          <div className="flight-history-table">
-            <div className="flight-history-head">
-              <span>Flight</span><span>Route</span><span>Aircraft</span><span>Flight time</span><span>Landing</span><span>VA Points</span>
-            </div>
-            {recentFlights.map((flight) => (
-              <div className="flight-history-row" key={`${flight.flight}-${flight.date}`}>
-                <strong>{flight.flight}</strong>
-                <span>{flight.route}</span>
-                <span>{flight.aircraft}</span>
-                <span>{flight.duration}</span>
-                <span>{flight.landing} fpm</span>
-                <span>+{flight.points}</span>
-              </div>
+          <div className="account-v2-stat-grid">
+            {stats.map((stat) => (
+              <article className="account-v2-stat" key={stat.label}>
+                <span className="account-v2-stat-label">{stat.label}</span>
+                <strong className="account-v2-stat-value">{stat.value}</strong>
+                <small className="account-v2-stat-note">{stat.note}</small>
+              </article>
             ))}
           </div>
-        </article>
 
-        <div className="account-two-column" id="profile">
-          <article className="account-panel">
-            <div className="section-kicker">Your profile</div>
-            <h2>Connected services</h2>
-            <div className="profile-list">
-              <div><span>vAMSYS</span><strong>Linked</strong></div>
-              <div><span>Phoenix</span><strong>Linked</strong></div>
-              <div><span>SimBrief</span><strong>Not connected</strong></div>
-              <div><span>Preferred hub</span><strong>{pilot.hub}</strong></div>
-              <div><span>Pilot ID</span><strong>{pilot.id}</strong></div>
-            </div>
-          </article>
+          <div className="account-v2-lower">
+            <article className="account-v2-card account-v2-flights">
+              <h3>Recent flights</h3>
+              <div className="account-v2-flight-list">
+                {recentFlights.map((flight) => (
+                  <div className="account-v2-flight-row" key={`${flight.flight}-${flight.date}`}>
+                    <strong>{flight.flight}</strong>
+                    <span>{flight.route}</span>
+                    <span>{flight.aircraft}</span>
+                    <span>{flight.duration}</span>
+                    <span>{flight.landing} fpm</span>
+                    <span className="account-v2-flight-points">+{flight.points}</span>
+                  </div>
+                ))}
+              </div>
+            </article>
 
-          <article className="account-panel">
-            <div className="section-kicker">Career progression</div>
-            <h2>VA Points</h2>
-            <div className="huge-points">{pilot.points.toLocaleString()}</div>
-            <p>These are British Airways Virtual career points only. They are not Avios and have no real-world monetary value.</p>
-            <Link className="text-link" href="/help">View points framework</Link>
-          </article>
+            <aside className="account-v2-card account-v2-assignment">
+              <h3>Next assignment</h3>
+              <strong>{assignment} · {from} → {to}</strong>
+              <p>2026-09-06 · Boeing 787-9 · 15:30</p>
+              <Link href="/book">Find a virtual flight →</Link>
+
+              <div className="account-v2-tier-box" id="membership">
+                <div className="account-v2-tier-head">
+                  <span>Next rank / tier</span>
+                  <span>{pilot.tierPoints.toLocaleString()} / {tierTarget.toLocaleString()}</span>
+                </div>
+                <div className="account-v2-progress" aria-label={`${tierProgress.toFixed(0)} percent progress toward next tier`}>
+                  <span style={{ width: `${tierProgress}%` }} />
+                </div>
+                <p>Tier points are intended to come from vAMSYS career data.</p>
+              </div>
+            </aside>
+          </div>
         </div>
       </section>
 
-      <footer className="account-footer">
-        <div className="account-footer-logo"><BrandLogo variant="white" /></div>
-        <div className="account-footer-links">
-          <Link href="/help">Help</Link>
-          <Link href="/">Home</Link>
-          <a href="#">Privacy</a>
-          <a href="#">Terms</a>
+      <footer className="account-v2-footer" id="profile">
+        <div className="account-v2-footer-inner">
+          <div className="account-v2-footer-brand">
+            <BrandLogo variant="white" />
+          </div>
+          <div>
+            <h4>About</h4>
+            <Link href="/">About the VA</Link>
+            <Link href="/fleet">Fleet</Link>
+            <Link href="/destinations">Destinations</Link>
+          </div>
+          <div>
+            <h4>Support</h4>
+            <Link href="/help">Help</Link>
+            <a href="#">Discord</a>
+            <a href="#">Operations manual</a>
+          </div>
+          <div>
+            <h4>More</h4>
+            <Link href="/book">Flights</Link>
+            <a href="#">Phoenix</a>
+            <a href="https://vamsys.io" rel="noreferrer">vAMSYS</a>
+          </div>
         </div>
-        <p>British Airways Virtual · Flight simulation only · Not affiliated with British Airways Plc</p>
       </footer>
     </main>
   );

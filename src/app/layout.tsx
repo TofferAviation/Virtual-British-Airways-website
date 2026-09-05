@@ -3,6 +3,7 @@ import "./globals.css";
 import "./portal.css";
 import "./pages.css";
 import "./branding.css";
+import "./account-v2.css";
 
 export const metadata: Metadata = {
   title: {
