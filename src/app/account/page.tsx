@@ -23,7 +23,7 @@ export default async function AccountPage({
           <Link href="/help">Help</Link>
         </nav>
         <Link className="account-brand" href="/">
-          <Image src="/branding/ba-virtual-logo.svg" alt="British Airways Virtual" width={760} height={190} priority />
+          <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={1000} height={430} priority />
         </Link>
         <div className="account-header-actions">
           <span>{pilot.id}</span>
@@ -123,7 +123,7 @@ export default async function AccountPage({
       </section>
 
       <footer className="account-footer">
-        <Image src="/branding/ba-virtual-logo.svg" alt="British Airways Virtual" width={760} height={190} />
+        <Image src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" width={1000} height={430} />
         <div className="account-footer-links"><Link href="/help">Help</Link><Link href="/">Home</Link><a href="#">Privacy</a><a href="#">Terms</a></div>
         <p>British Airways Virtual · Flight simulation only · Not affiliated with British Airways Plc</p>
       </footer>
