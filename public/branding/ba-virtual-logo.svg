@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 190" role="img" aria-labelledby="title desc">
+  <title id="title">British Airways Virtual</title>
+  <desc id="desc">British Airways Virtual wordmark for the flight-simulation website.</desc>
+  <rect width="760" height="190" fill="none"/>
+  <g transform="translate(18 28)">
+    <path d="M12 83 C96 28 197 5 312 9 C226 31 153 70 64 112 Z" fill="#075aaa"/>
+    <path d="M92 94 C163 56 230 36 309 31 C244 66 194 89 140 119 Z" fill="#d7193f"/>
+  </g>
+  <text x="333" y="92" font-family="Georgia, 'Times New Roman', serif" font-size="54" fill="#071d49" letter-spacing="-1.6">British Airways</text>
+  <text x="337" y="132" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#d7193f" letter-spacing="10">VIRTUAL</text>
+</svg>
