@@ -8,6 +8,7 @@ import "./discover.css";
 import "./mega-menu.css";
 import "./home-center.css";
 import "./dark-shell.css";
+import "./ba-reference-header.css";
 
 export const metadata: Metadata = {
   title: {
