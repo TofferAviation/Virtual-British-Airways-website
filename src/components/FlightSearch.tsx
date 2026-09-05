@@ -4,6 +4,12 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { airports } from "@/data/airports";
 
+const baseAirports = [
+  { code: "LHR", name: "London Heathrow", country: "United Kingdom" },
+  { code: "LGW", name: "London Gatwick", country: "United Kingdom" },
+  { code: "LCY", name: "London City", country: "United Kingdom" },
+];
+
 const preferredAirportCodes = ["LHR", "LGW", "LCY", "OSL", "JFK", "LAX", "DXB", "SIN"];
 
 export function FlightSearch() {
@@ -14,10 +20,14 @@ export function FlightSearch() {
   const [aircraft, setAircraft] = useState("Any aircraft");
 
   const orderedAirports = useMemo(() => {
+    const merged = [
+      ...baseAirports,
+      ...airports.filter((airport) => !baseAirports.some((base) => base.code === airport.code)),
+    ];
     const preferred = preferredAirportCodes
-      .map((code) => airports.find((airport) => airport.code === code))
-      .filter((airport): airport is (typeof airports)[number] => Boolean(airport));
-    const remaining = airports.filter((airport) => !preferredAirportCodes.includes(airport.code));
+      .map((code) => merged.find((airport) => airport.code === code))
+      .filter((airport): airport is (typeof merged)[number] => Boolean(airport));
+    const remaining = merged.filter((airport) => !preferredAirportCodes.includes(airport.code));
     return [...preferred, ...remaining];
   }, []);
 
@@ -79,7 +89,7 @@ export function FlightSearch() {
         <button className="button button-primary search-submit" type="submit">Find flights</button>
       </div>
       <div className="search-helper">
-        <span><strong>{airports.length} BA destinations</strong> loaded into the current network selector.</span>
+        <span><strong>{airports.length + baseAirports.length} BA destinations / bases</strong> loaded into the current network selector.</span>
         <span>Phoenix-ready assignment flow</span>
       </div>
     </form>
