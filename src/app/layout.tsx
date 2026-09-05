@@ -5,6 +5,7 @@ import "./pages.css";
 import "./branding.css";
 import "./account-v2.css";
 import "./discover.css";
+import "./mega-menu.css";
 
 export const metadata: Metadata = {
   title: {
