@@ -10,6 +10,7 @@ import "./home-center.css";
 import "./dark-shell.css";
 import "./ba-reference-header.css";
 import "./oneworld.css";
+import "./fleet-v2.css";
 
 export const metadata: Metadata = {
   title: {
