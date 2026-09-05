@@ -10,8 +10,8 @@ export function SiteFooter() {
             className="footer-logo"
             src="/branding/ba-virtual-logo-white.svg"
             alt="British Airways Virtual"
-            width={1000}
-            height={430}
+            width={360}
+            height={176}
           />
           <p className="footer-copy">
             Structured virtual-airline operations, pilot careers and community flying inspired by the British Airways network.
