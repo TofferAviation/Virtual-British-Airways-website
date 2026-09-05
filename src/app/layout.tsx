@@ -7,6 +7,7 @@ import "./account-v2.css";
 import "./discover.css";
 import "./mega-menu.css";
 import "./home-center.css";
+import "./dark-shell.css";
 
 export const metadata: Metadata = {
   title: {
