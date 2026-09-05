@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function SiteHeader() {
   return (
@@ -10,13 +10,7 @@ export function SiteHeader() {
       </div>
       <header className="site-header">
         <Link className="site-brand" href="/" aria-label="British Airways Virtual home">
-          <Image
-            src="/branding/ba-virtual-logo.svg"
-            alt="British Airways Virtual"
-            width={360}
-            height={176}
-            priority
-          />
+          <BrandLogo priority />
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">
           <Link href="/destinations">Discover</Link>
