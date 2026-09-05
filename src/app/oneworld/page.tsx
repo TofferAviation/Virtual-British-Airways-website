@@ -25,7 +25,10 @@ const members = [
   { name: "Royal Air Maroc", code: "AT", region: "Morocco" },
   { name: "Royal Jordanian", code: "RJ", region: "Jordan" },
   { name: "SriLankan Airlines", code: "UL", region: "Sri Lanka" },
-];
+].map((member) => ({
+  ...member,
+  logo: `https://www.gstatic.com/flights/airline_logos/70px/${member.code}.png`,
+}));
 
 export default function OneworldPage() {
   return (
@@ -123,7 +126,9 @@ export default function OneworldPage() {
           <div className="ow-member-grid">
             {members.map((member) => (
               <article className="ow-member-card" key={member.code}>
-                <div className="ow-member-code">{member.code}</div>
+                <div className="ow-member-logo">
+                  <img src={member.logo} alt={`${member.name} logo`} loading="lazy" />
+                </div>
                 <div>
                   <h3>{member.name}</h3>
                   <p>{member.region}</p>
