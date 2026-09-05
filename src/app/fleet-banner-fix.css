@@ -5,14 +5,15 @@
   height:auto;
   min-height:0;
   max-height:none;
-  aspect-ratio:2169 / 723;
+  aspect-ratio:2048 / 682;
   margin:26px auto 0;
   overflow:hidden;
-  background-image:url('/branding/fleet-banner.webp') !important;
+  background-image:url('/branding/fleet-banner-hq.jpg') !important;
   background-size:contain !important;
   background-position:center center !important;
   background-repeat:no-repeat !important;
   background-color:#fff;
+  image-rendering:auto;
 }
 
 /* Keep the supplied banner artwork clean and sharp. */
@@ -42,7 +43,7 @@
 @media(max-width:1100px){
   .fleet-showcase-hero{
     width:min(94vw,980px);
-    aspect-ratio:2169 / 723;
+    aspect-ratio:2048 / 682;
     margin-top:20px;
   }
   .fleet-overview-card{margin-top:-18px}
@@ -51,7 +52,7 @@
 @media(max-width:700px){
   .fleet-showcase-hero{
     width:96vw;
-    aspect-ratio:2169 / 723;
+    aspect-ratio:2048 / 682;
     margin-top:14px;
   }
   .fleet-overview-card{margin-top:10px}
