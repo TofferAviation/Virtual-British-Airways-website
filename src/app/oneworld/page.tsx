@@ -45,11 +45,6 @@ export default function OneworldPage() {
               <span aria-hidden="true">›</span>
               <strong>oneworld</strong>
             </div>
-            <img
-              className="ow-breadcrumb-logo"
-              src="/branding/ba-virtual-logo.svg"
-              alt="British Airways Virtual"
-            />
           </div>
         </div>
 
