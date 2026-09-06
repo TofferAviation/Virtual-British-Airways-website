@@ -7,8 +7,10 @@
 .aya-page h2{font-family:Georgia,'Times New Roman',serif;color:#00184d;font-weight:400}
 .aya-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
-.aya-banner-hero{width:100%;background:#dceeff;overflow:hidden}
-.aya-banner-frame{position:relative;width:100%;aspect-ratio:2056/765;background:#dceeff url('/branding/about-your-account-hero.png') center/100% 100% no-repeat}
+.aya-banner-hero{background:#fff;padding:14px 0 18px}
+.aya-banner-shell{width:min(1180px,92vw);margin:0 auto}
+.aya-banner-frame{position:relative;width:100%;overflow:hidden;background:#dceeff}
+.aya-banner-image{display:block;width:100%;height:auto;object-fit:contain}
 .aya-banner-hotspot{position:absolute;display:block;background:transparent;border-radius:8px;cursor:pointer;z-index:2}
 .aya-banner-hotspot:focus-visible{outline:3px solid #fff;outline-offset:2px;box-shadow:0 0 0 5px #075aaa}
 .aya-hotspot-create{left:8.55%;top:66.9%;width:14.8%;height:9.1%}
@@ -29,8 +31,8 @@
 .aya-disclaimer{height:56px;margin-top:15px;border-radius:6px;background:linear-gradient(90deg,#edf9ff,#e8f5ff);display:grid;grid-template-columns:60px 150px 1fr;align-items:center;padding:0 24px;color:#00235f}.aya-info-icon{width:35px;height:35px;color:#0570d2;display:grid;place-items:center}.aya-info-icon svg{width:35px;height:35px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.aya-disclaimer strong{font-size:11px;border-left:1px solid #7eb5e6;padding-left:22px}.aya-disclaimer p{font-size:9.5px;line-height:1.35;color:#4a6b99;margin:0}
 
 @media(max-width:900px){
-  .aya-shell{width:min(92%,920px)}.aya-banner-frame{min-width:760px;left:50%;transform:translateX(-50%)}.aya-how .aya-shell{padding:0}.aya-step-grid,.aya-essential-grid,.aya-reason-grid{grid-template-columns:1fr 1fr;gap:12px}.aya-step:after,.aya-reason:after{display:none}.aya-essential-card{height:auto;min-height:88px}.aya-disclaimer{height:auto;min-height:70px;grid-template-columns:50px 140px 1fr;padding:14px 16px}
+  .aya-shell{width:min(92%,920px)}.aya-banner-shell{width:92vw}.aya-how .aya-shell{padding:0}.aya-step-grid,.aya-essential-grid,.aya-reason-grid{grid-template-columns:1fr 1fr;gap:12px}.aya-step:after,.aya-reason:after{display:none}.aya-essential-card{height:auto;min-height:88px}.aya-disclaimer{height:auto;min-height:70px;grid-template-columns:50px 140px 1fr;padding:14px 16px}
 }
 @media(max-width:700px){
-  .aya-breadcrumb-band{height:auto;padding:9px 0}.aya-breadcrumbs{font-size:9px;flex-wrap:wrap}.aya-banner-hero{overflow-x:auto;overscroll-behavior-x:contain}.aya-banner-frame{min-width:680px}.aya-section h2{font-size:25px}.aya-step-grid,.aya-essential-grid,.aya-reason-grid{grid-template-columns:1fr}.aya-step{padding:5px 0}.aya-essential-card{min-height:82px}.aya-reason{padding:6px 0}.aya-disclaimer{grid-template-columns:42px 1fr}.aya-disclaimer strong{border-left:0;padding-left:0}.aya-disclaimer p{grid-column:1/-1;padding-top:7px}
+  .aya-breadcrumb-band{height:auto;padding:9px 0}.aya-breadcrumbs{font-size:9px;flex-wrap:wrap}.aya-banner-hero{padding:10px 0 14px}.aya-banner-shell{width:94vw}.aya-section h2{font-size:25px}.aya-step-grid,.aya-essential-grid,.aya-reason-grid{grid-template-columns:1fr}.aya-step{padding:5px 0}.aya-essential-card{min-height:82px}.aya-reason{padding:6px 0}.aya-disclaimer{grid-template-columns:42px 1fr}.aya-disclaimer strong{border-left:0;padding-left:0}.aya-disclaimer p{grid-column:1/-1;padding-top:7px}
 }
