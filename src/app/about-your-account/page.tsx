@@ -83,9 +83,9 @@ export default async function AboutYourAccountPage() {
             <div className="aya-banner-frame">
               <Image
                 className="aya-banner-image"
-                src="/branding/about-your-account-hero.webp"
-                width={1600}
-                height={595}
+                src="/branding/about-your-account-hero.png"
+                width={2056}
+                height={765}
                 sizes="(max-width: 1282px) 92vw, 1180px"
                 priority
                 alt="British Airways Virtual account banner showing the aircraft tail and virtual account benefits"
