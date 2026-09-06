@@ -11,6 +11,8 @@
 /* Show the supplied hero at its natural aspect ratio so the full artwork is visible. */
 .ow-hero-art{position:relative;width:min(1180px,92vw);margin:14px auto 0;overflow:hidden;background:#dceeff}
 .ow-hero-art-image{display:block;width:100%;height:auto;max-width:100%;object-fit:contain;object-position:center center}
+.ow-hero-logo-link{position:absolute;left:70.5%;top:20%;width:24%;height:48%;border-radius:50%;z-index:2;cursor:pointer;background:transparent}
+.ow-hero-logo-link:focus-visible{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px rgba(7,90,170,.65)}
 .ow-kicker{display:block;margin-bottom:12px;color:#075aaa;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.16em}
 .ow-content h2,.ow-benefits h2,.ow-cta h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;color:#071d49}
 
