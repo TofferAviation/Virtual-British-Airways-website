@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { getTomorrowIsoDate } from "@/lib/serverDate";
 
 const airportNames: Record<string, string> = {
   LHR: "London Heathrow",
@@ -40,7 +41,7 @@ export default async function BookPage({
   const params = await searchParams;
   const from = typeof params.from === "string" ? params.from : "LHR";
   const to = typeof params.to === "string" ? params.to : "OSL";
-  const date = typeof params.date === "string" ? params.date : new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const date = typeof params.date === "string" ? params.date : getTomorrowIsoDate();
   const flights = from === to ? [] : createFlights(from, to);
 
   return (
