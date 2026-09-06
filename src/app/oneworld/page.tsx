@@ -60,6 +60,16 @@ export default function OneworldPage() {
             alt=""
             aria-hidden="true"
           />
+          <a
+            className="ow-hero-logo-link"
+            href="https://oneworldvirtual.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Visit oneworld Virtual"
+            title="Visit oneworld Virtual"
+          >
+            <span className="ow-sr-only">Visit oneworld Virtual</span>
+          </a>
         </section>
 
         <nav className="ow-section-nav" aria-label="oneworld sections">
