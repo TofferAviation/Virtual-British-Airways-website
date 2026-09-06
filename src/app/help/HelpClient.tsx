@@ -32,9 +32,13 @@ const faqs = [
 const quickActions = [
   ["Contact the team", "Get in touch with our support team for help and advice.", "#support", "✉"],
   ["Open a support ticket", "Support-ticket integration will be connected for launch.", "#support", "◇"],
-  ["Join Discord", "Community support and pilot discussion.", "#support", "●"],
+  ["Join Discord", "Community support and pilot discussion.", "#support", "discord"],
   ["Service status", "Check system updates and planned maintenance.", "#support", "◌"],
 ];
+
+function DiscordIcon() {
+  return <img src="/branding/discord-support-icon.png" alt="" aria-hidden="true" />;
+}
 
 export function HelpClient() {
   const [query, setQuery] = useState("");
@@ -85,7 +89,9 @@ export function HelpClient() {
       <section className="hc-shell hc-quick-grid" aria-label="Support shortcuts">
         {quickActions.map(([title, body, href, icon]) => (
           <a key={title} className="hc-quick-card" href={href}>
-            <span className="hc-icon">{icon}</span>
+            <span className={`hc-icon${icon === "discord" ? " hc-icon-discord" : ""}`}>
+              {icon === "discord" ? <DiscordIcon /> : icon}
+            </span>
             <span><strong>{title}</strong><small>{body}</small></span>
             <b aria-hidden="true">›</b>
           </a>
@@ -138,7 +144,7 @@ export function HelpClient() {
       <section className="hc-shell hc-panel hc-support" id="support">
         <div className="hc-support-intro"><span className="hc-kicker">Get in touch</span><h2>Need more help?</h2><p className="hc-muted">Our support team and community are here for you.</p></div>
         <div className="hc-support-options">
-          <div><span className="hc-icon">●</span><p><strong>Community support</strong><small>Discord connection will be added using the official server invite.</small></p></div>
+          <div><span className="hc-icon hc-icon-discord"><DiscordIcon /></span><p><strong>Community support</strong><small>Discord connection will be added using the official server invite.</small></p></div>
           <div><span className="hc-icon">✉</span><p><strong>Support contact</strong><small>Production support email and ticket handling will be connected before launch.</small></p></div>
           <div><span className="hc-icon">◷</span><p><strong>Service status</strong><small>Operational status integration is prepared for the production service.</small></p></div>
         </div>
