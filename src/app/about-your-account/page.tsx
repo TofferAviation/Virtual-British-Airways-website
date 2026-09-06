@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -78,21 +79,29 @@ export default async function AboutYourAccountPage() {
 
         <section className="aya-banner-hero" aria-labelledby="aya-banner-title">
           <h1 className="aya-sr-only" id="aya-banner-title">Your account, ready for every flight.</h1>
-          <div
-            className="aya-banner-frame"
-            role="img"
-            aria-label="British Airways Virtual account banner showing an aircraft tail, account benefits and account access options"
-          >
-            <Link className="aya-banner-hotspot aya-hotspot-create" href={accountHref} aria-label={isLoggedIn ? "Open my account" : "Create an account"} />
-            <a className="aya-banner-hotspot aya-hotspot-learn" href="#how-it-works" aria-label="Learn more about your British Airways Virtual account" />
-            <Link className="aya-banner-hotspot aya-hotspot-progress" href={accountHref} aria-label="Track your progress" />
-            <Link className="aya-banner-hotspot aya-hotspot-points" href="/va-points" aria-label="Earn VA Points and Tier Points" />
-            <Link className="aya-banner-hotspot aya-hotspot-events" href="/events" aria-label="Join events" />
-            <Link className="aya-banner-hotspot aya-hotspot-community" href="/events" aria-label="Be part of the British Airways Virtual community" />
+          <div className="aya-banner-shell">
+            <div className="aya-banner-frame">
+              <Image
+                className="aya-banner-image"
+                src="/branding/about-your-account-hero.webp"
+                width={1600}
+                height={595}
+                sizes="(max-width: 1282px) 92vw, 1180px"
+                priority
+                alt="British Airways Virtual account banner showing the aircraft tail and virtual account benefits"
+              />
+
+              <Link className="aya-banner-hotspot aya-hotspot-create" href={accountHref} aria-label={isLoggedIn ? "Open my account" : "Create an account"} />
+              <a className="aya-banner-hotspot aya-hotspot-learn" href="#account-details" aria-label="Learn more about your British Airways Virtual account" />
+              <Link className="aya-banner-hotspot aya-hotspot-progress" href={accountHref} aria-label="Track your progress" />
+              <Link className="aya-banner-hotspot aya-hotspot-points" href="/va-points" aria-label="Earn VA Points and Tier Points" />
+              <Link className="aya-banner-hotspot aya-hotspot-events" href="/events" aria-label="Join events" />
+              <Link className="aya-banner-hotspot aya-hotspot-community" href="/events" aria-label="Be part of the British Airways Virtual community" />
+            </div>
           </div>
         </section>
 
-        <section className="aya-section aya-how" id="how-it-works">
+        <section className="aya-section aya-how" id="account-details">
           <div className="aya-shell">
             <span className="aya-kicker">How it works</span>
             <h2>Get started in three simple steps.</h2>
