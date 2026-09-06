@@ -8,8 +8,9 @@
 .ow-breadcrumbs a{color:#075aaa;text-decoration:underline}
 .ow-breadcrumb-logo{display:block;width:164px;height:36px;object-fit:contain;object-position:right center}
 
-.ow-hero-art{position:relative;width:100%;overflow:hidden;background:#dceeff;aspect-ratio:1536/782}
-.ow-hero-art-image{display:block;width:100%;height:100%;object-fit:cover;object-position:center center}
+/* Keep the supplied artwork at the same centred content width used across the site. */
+.ow-hero-art{position:relative;width:min(1180px,92vw);margin:14px auto 0;overflow:hidden;background:#dceeff;aspect-ratio:1536/782}
+.ow-hero-art-image{display:block;width:100%;height:100%;object-fit:contain;object-position:center center}
 .ow-kicker{display:block;margin-bottom:12px;color:#075aaa;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.16em}
 .ow-content h2,.ow-benefits h2,.ow-cta h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;color:#071d49}
 
@@ -35,8 +36,8 @@
 
 @media(max-width:900px){
   .ow-breadcrumb-logo{width:132px;height:30px}
-  .ow-hero-art{aspect-ratio:1536/782}
-  .ow-hero-art-image{object-fit:cover;object-position:center center}
+  .ow-hero-art{width:min(92vw,1180px);margin-top:10px;aspect-ratio:1536/782}
+  .ow-hero-art-image{object-fit:contain;object-position:center center}
   .ow-intro-grid{grid-template-columns:1fr;gap:28px}
   .ow-benefit-grid{grid-template-columns:1fr}
   .ow-member-grid{grid-template-columns:1fr}
@@ -48,7 +49,7 @@
   .ow-breadcrumb-row{min-height:42px}
   .ow-breadcrumbs{display:none}
   .ow-breadcrumb-logo{margin-left:auto;width:122px;height:28px}
-  .ow-hero-art{aspect-ratio:1.38}
+  .ow-hero-art{width:100%;margin-top:0;aspect-ratio:1.38}
   .ow-hero-art-image{object-fit:cover;object-position:58% center}
   .ow-content{padding:52px 0}
   .ow-member-card{grid-template-columns:70px 1fr auto;padding:16px}
