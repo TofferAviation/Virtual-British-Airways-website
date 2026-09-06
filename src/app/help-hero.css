@@ -1,0 +1,24 @@
+/* Help centre hero — exact user-supplied background asset */
+.hc-hero{
+  background-image:
+    linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.90) 34%,rgba(255,255,255,.38) 57%,rgba(255,255,255,.04) 78%),
+    url('/branding/help-hero.png');
+  background-size:cover;
+  background-position:center center;
+  background-repeat:no-repeat;
+}
+
+/* The aircraft/tail is already part of the supplied artwork. */
+.hc-hero:after{display:none}
+
+@media(max-width:900px){
+  .hc-hero{
+    background-position:62% center;
+  }
+}
+
+@media(max-width:650px){
+  .hc-hero{
+    background-position:68% center;
+  }
+}
