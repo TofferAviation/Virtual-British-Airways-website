@@ -8,13 +8,16 @@
 .ow-breadcrumbs a{color:#075aaa;text-decoration:underline}
 .ow-breadcrumb-logo{display:block;width:164px;height:36px;object-fit:contain;object-position:right center}
 
-/* Keep the supplied artwork at the same centred content width used across the site. Crop the nav row embedded in the supplied composite image; the functional HTML nav remains below. */
-.ow-hero-art{position:relative;width:min(1180px,92vw);margin:14px auto 0;overflow:hidden;background:#dceeff;aspect-ratio:1536/700}
-.ow-hero-art-image{position:absolute;left:0;top:0;display:block;width:100%;height:auto;max-width:none;object-fit:initial;object-position:initial}
+/* Keep the supplied artwork at the same centred content width used across the site.
+   If the local asset is the full 1536x1024 mock-up, object-position crops away the
+   baked-in breadcrumb and tab row. If it is already the 1536x782 hero crop, the
+   matching aspect ratio means the image remains unchanged. */
+.ow-hero-art{position:relative;width:min(1180px,92vw);margin:14px auto 0;overflow:hidden;background:#dceeff;aspect-ratio:1536/782}
+.ow-hero-art-image{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 24.4%}
 .ow-kicker{display:block;margin-bottom:12px;color:#075aaa;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.16em}
 .ow-content h2,.ow-benefits h2,.ow-cta h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;color:#071d49}
 
-/* Match the supplied hero reference: centred tabs, active overview with BA red underline. */
+/* Functional site tabs remain below the artwork. */
 .ow-section-nav{display:flex;justify-content:center;gap:0;border:0;border-bottom:1px solid #e7edf4;background:#fff;position:sticky;top:84px;z-index:20;box-shadow:none}
 .ow-section-nav a{padding:18px 28px 17px;color:#075aaa;font-size:14px;border-bottom:3px solid transparent;background:transparent}
 .ow-section-nav a:first-child{font-weight:700;color:#074e9b;border-bottom-color:#e21d2f}
@@ -36,7 +39,8 @@
 
 @media(max-width:900px){
   .ow-breadcrumb-logo{width:132px;height:30px}
-  .ow-hero-art{width:min(92vw,1180px);margin-top:10px;aspect-ratio:1536/700}
+  .ow-hero-art{width:min(92vw,1180px);margin-top:10px;aspect-ratio:1536/782}
+  .ow-hero-art-image{object-fit:cover;object-position:50% 24.4%}
   .ow-intro-grid{grid-template-columns:1fr;gap:28px}
   .ow-benefit-grid{grid-template-columns:1fr}
   .ow-member-grid{grid-template-columns:1fr}
@@ -49,7 +53,7 @@
   .ow-breadcrumbs{display:none}
   .ow-breadcrumb-logo{margin-left:auto;width:122px;height:28px}
   .ow-hero-art{width:100%;margin-top:0;aspect-ratio:1.38}
-  .ow-hero-art-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:58% 45%}
+  .ow-hero-art-image{object-fit:cover;object-position:58% 24.4%}
   .ow-content{padding:52px 0}
   .ow-member-card{grid-template-columns:70px 1fr auto;padding:16px}
   .ow-member-logo{width:64px;height:52px;padding:3px 5px}
