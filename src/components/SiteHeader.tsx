@@ -78,7 +78,7 @@ export async function SiteHeader() {
 
               <div className="site-mega-column">
                 <h3>Community</h3>
-                <Link href="/help">Events</Link>
+                <Link href="/events">Events</Link>
                 <Link href="/help">Tours</Link>
                 <Link href="/help">Discord</Link>
                 <Link href="/help">News</Link>
