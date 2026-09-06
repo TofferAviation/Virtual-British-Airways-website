@@ -17,6 +17,7 @@ import "./va-points.css";
 import "./tier-points.css";
 import "./events.css";
 import "./about-your-account.css";
+import "./help.css";
 
 export const metadata: Metadata = {
   title: {
