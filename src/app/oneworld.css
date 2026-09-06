@@ -1,21 +1,23 @@
 /* British Airways Virtual — oneworld reference page */
 .ow-page{background:#fff;color:#071d49}
-.ow-breadcrumbs{width:min(1180px,92vw);margin:0 auto;padding:18px 0 16px;display:flex;align-items:center;gap:9px;font-size:12px;color:#5d6a7d;background:#fff}
+.ow-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+.ow-breadcrumb-band{background:#fff;border-bottom:1px solid #e7edf4}
+.ow-breadcrumb-row{width:min(1180px,92vw);margin:0 auto;min-height:47px;display:flex;align-items:center;justify-content:space-between;gap:26px}
+.ow-breadcrumbs{display:flex;align-items:center;gap:9px;font-size:12px;color:#5d6a7d;background:#fff}
 .ow-breadcrumbs a{color:#075aaa;text-decoration:underline}
+.ow-breadcrumb-logo{display:block;width:164px;height:36px;object-fit:contain;object-position:right center}
 
-.ow-hero{min-height:360px;background:linear-gradient(110deg,#eef4fb 0%,#dfeaf6 52%,#edf2f8 100%);display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);align-items:center;gap:54px;padding:58px max(4vw,calc((100vw - 1180px)/2));border:0}
-.ow-hero-copy{max-width:760px}
+.ow-hero-art{position:relative;width:100%;overflow:hidden;background:#dceeff;aspect-ratio:1536/782}
+.ow-hero-art-image{display:block;width:100%;height:100%;object-fit:cover;object-position:center center}
 .ow-kicker{display:block;margin-bottom:12px;color:#075aaa;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.16em}
-.ow-hero h1,.ow-content h2,.ow-benefits h2,.ow-cta h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;color:#071d49}
-.ow-hero h1{margin:0 0 18px;font-size:clamp(42px,5vw,64px);line-height:1.02}
-.ow-hero p{max-width:760px;margin:0;color:#33435c;font-size:18px;line-height:1.65}
-.ow-roundel{justify-self:end;width:230px;height:230px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 34% 26%,rgba(255,255,255,.7),rgba(255,255,255,.08) 30%),linear-gradient(145deg,#6d63c8 0%,#3e3f91 44%,#1c245d 100%);border:3px solid rgba(255,255,255,.9);box-shadow:0 20px 50px rgba(20,40,83,.22),inset 0 0 26px rgba(255,255,255,.14);color:#fff;text-transform:lowercase;line-height:.8}
-.ow-roundel span{font-size:44px;font-weight:300;letter-spacing:-.06em}.ow-roundel small{margin-top:17px;font-size:10px;letter-spacing:.28em}
+.ow-content h2,.ow-benefits h2,.ow-cta h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;color:#071d49}
 
-/* Keep the page surface continuous: no horizontal divider bands between sections. */
-.ow-section-nav{display:flex;justify-content:center;gap:0;border:0;background:#fff;position:sticky;top:84px;z-index:20;box-shadow:none}
-.ow-section-nav a{padding:18px 28px;color:#075aaa;font-size:14px;border-bottom:3px solid transparent;background:transparent}
-.ow-section-nav a:hover{background:transparent;border-bottom-color:#075aaa}
+/* Match the supplied hero reference: centred tabs, active overview with BA red underline. */
+.ow-section-nav{display:flex;justify-content:center;gap:0;border:0;border-bottom:1px solid #e7edf4;background:#fff;position:sticky;top:84px;z-index:20;box-shadow:none}
+.ow-section-nav a{padding:18px 28px 17px;color:#075aaa;font-size:14px;border-bottom:3px solid transparent;background:transparent}
+.ow-section-nav a:first-child{font-weight:700;color:#074e9b;border-bottom-color:#e21d2f}
+.ow-section-nav a:hover{background:transparent;color:#074e9b;border-bottom-color:#e21d2f}
 
 .ow-content{width:min(1180px,92vw);margin:0 auto;padding:72px 0;background:#fff}
 .ow-content h2,.ow-benefits h2,.ow-cta h2{margin:0 0 18px;font-size:clamp(32px,3vw,44px);line-height:1.12}
@@ -31,5 +33,27 @@
 .header-oneworld{width:36px;height:36px;flex:0 0 36px;border-radius:50%;border:1px solid rgba(255,255,255,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 34% 27%,rgba(255,255,255,.7),transparent 20%),linear-gradient(145deg,#8177d8,#5049ae 50%,#1d245c);box-shadow:inset 0 0 7px rgba(255,255,255,.26),0 1px 8px rgba(0,0,0,.22);color:#fff!important;font-size:6px;line-height:.8;text-transform:lowercase;letter-spacing:-.02em}
 .header-oneworld span{display:block}.header-oneworld:hover,.header-oneworld:focus-visible{box-shadow:inset 0 0 9px rgba(255,255,255,.38),0 0 0 2px rgba(255,255,255,.18);outline:none}
 
-@media(max-width:900px){.ow-hero{grid-template-columns:1fr;padding:48px 6vw}.ow-roundel{justify-self:start;width:170px;height:170px}.ow-roundel span{font-size:34px}.ow-intro-grid{grid-template-columns:1fr;gap:28px}.ow-benefit-grid{grid-template-columns:1fr}.ow-member-grid{grid-template-columns:1fr}.ow-section-nav{overflow:auto;justify-content:flex-start}.ow-section-nav a{white-space:nowrap}.ow-cta{flex-direction:column;align-items:flex-start}}
-@media(max-width:700px){.ow-breadcrumbs{display:none}.ow-hero{min-height:330px}.ow-hero p{font-size:16px}.ow-content{padding:52px 0}.ow-member-card{grid-template-columns:70px 1fr auto;padding:16px}.ow-member-logo{width:64px;height:52px;padding:3px 5px}.ow-member-logo img{max-width:58px;max-height:44px}.ow-cta{padding:30px 24px}.header-oneworld{width:32px;height:32px;flex-basis:32px}}
+@media(max-width:900px){
+  .ow-breadcrumb-logo{width:132px;height:30px}
+  .ow-hero-art{aspect-ratio:1536/782}
+  .ow-hero-art-image{object-fit:cover;object-position:center center}
+  .ow-intro-grid{grid-template-columns:1fr;gap:28px}
+  .ow-benefit-grid{grid-template-columns:1fr}
+  .ow-member-grid{grid-template-columns:1fr}
+  .ow-section-nav{overflow:auto;justify-content:flex-start}
+  .ow-section-nav a{white-space:nowrap}
+  .ow-cta{flex-direction:column;align-items:flex-start}
+}
+@media(max-width:700px){
+  .ow-breadcrumb-row{min-height:42px}
+  .ow-breadcrumbs{display:none}
+  .ow-breadcrumb-logo{margin-left:auto;width:122px;height:28px}
+  .ow-hero-art{aspect-ratio:1.38}
+  .ow-hero-art-image{object-fit:cover;object-position:58% center}
+  .ow-content{padding:52px 0}
+  .ow-member-card{grid-template-columns:70px 1fr auto;padding:16px}
+  .ow-member-logo{width:64px;height:52px;padding:3px 5px}
+  .ow-member-logo img{max-width:58px;max-height:44px}
+  .ow-cta{padding:30px 24px}
+  .header-oneworld{width:32px;height:32px;flex-basis:32px}
+}
