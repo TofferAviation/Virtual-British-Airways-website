@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description: "Learn how your British Airways Virtual pilot account keeps flights, progress, points and settings together.",
 };
 
-type IconName = "person" | "plane" | "bars" | "gear" | "globe" | "community" | "document" | "star" | "info";
+type IconName = "person" | "plane" | "bars" | "gear" | "community" | "document" | "star" | "info";
 
 function AccountIcon({ name }: { name: IconName }) {
   const common = { viewBox: "0 0 48 48", "aria-hidden": true as const };
@@ -25,9 +25,6 @@ function AccountIcon({ name }: { name: IconName }) {
   }
   if (name === "gear") {
     return <svg {...common}><circle cx="24" cy="24" r="7" /><path d="m24 5 3 5 6-1 1 6 6 2-2 6 4 4-4 4 2 6-6 2-1 6-6-1-3 5-3-5-6 1-1-6-6-2 2-6-4-4 4-4-2-6 6-2 1-6 6 1 3-5Z" /></svg>;
-  }
-  if (name === "globe") {
-    return <svg {...common}><circle cx="24" cy="24" r="17" /><path d="M7 24h34M24 7c6 6 9 11 9 17s-3 11-9 17M24 7c-6 6-9 11-9 17s3 11 9 17" /></svg>;
   }
   if (name === "community") {
     return <svg {...common}><circle cx="18" cy="17" r="6" /><circle cx="34" cy="18" r="5" /><path d="M6 39c0-9 5-14 12-14s12 5 12 14M28 29c8-2 13 2 14 10" /></svg>;
@@ -64,6 +61,7 @@ const reasons = [
 export default async function AboutYourAccountPage() {
   const cookieStore = await cookies();
   const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const accountHref = isLoggedIn ? "/account" : "/login";
 
   return (
     <>
@@ -78,38 +76,23 @@ export default async function AboutYourAccountPage() {
           </div>
         </div>
 
-        <section className="aya-hero">
-          <div className="aya-shell aya-hero-grid">
-            <div className="aya-hero-copy">
-              <span className="aya-kicker">Account</span>
-              <h1>Your account, ready<br />for every flight.</h1>
-              <p>A British Airways Virtual account lets you track your flights, progress, points and settings — all in one place. It&apos;s free to join and only takes a few minutes.</p>
-              <div className="aya-actions">
-                <Link className="aya-primary" href={isLoggedIn ? "/account" : "/login"}>{isLoggedIn ? "Open my account" : "Create account"}<span>→</span></Link>
-                <Link className="aya-login" href={isLoggedIn ? "/account" : "/login"}>{isLoggedIn ? "Go to pilot dashboard" : "Pilot log in"}</Link>
-              </div>
-            </div>
-
-            <div className="aya-hero-art" aria-hidden="true">
-              <div className="aya-flight-icon aya-flight-icon-left"><AccountIcon name="plane" /></div>
-              <div className="aya-route aya-route-left" />
-              <div className="aya-profile-window">
-                <div className="aya-window-dots"><i /><i /><i /></div>
-                <div className="aya-profile-card">
-                  <div className="aya-profile-row"><span><AccountIcon name="person" /></span><strong>Your profile</strong><i /></div>
-                  <div className="aya-profile-row"><span><AccountIcon name="plane" /></span><strong>Your flights</strong><i /></div>
-                  <div className="aya-profile-row"><span><AccountIcon name="bars" /></span><strong>Your points</strong><i /></div>
-                  <div className="aya-profile-row"><span><AccountIcon name="gear" /></span><strong>Your settings</strong><i /></div>
-                </div>
-              </div>
-              <div className="aya-route aya-route-right" />
-              <div className="aya-flight-icon aya-globe"><AccountIcon name="globe" /></div>
-              <div className="aya-hero-tag">One place for<br />your virtual<br />journey.<span /></div>
-            </div>
+        <section className="aya-banner-hero" aria-labelledby="aya-banner-title">
+          <h1 className="aya-sr-only" id="aya-banner-title">Your account, ready for every flight.</h1>
+          <div
+            className="aya-banner-frame"
+            role="img"
+            aria-label="British Airways Virtual account banner showing an aircraft tail, account benefits and account access options"
+          >
+            <Link className="aya-banner-hotspot aya-hotspot-create" href={accountHref} aria-label={isLoggedIn ? "Open my account" : "Create an account"} />
+            <a className="aya-banner-hotspot aya-hotspot-learn" href="#how-it-works" aria-label="Learn more about your British Airways Virtual account" />
+            <Link className="aya-banner-hotspot aya-hotspot-progress" href={accountHref} aria-label="Track your progress" />
+            <Link className="aya-banner-hotspot aya-hotspot-points" href="/va-points" aria-label="Earn VA Points and Tier Points" />
+            <Link className="aya-banner-hotspot aya-hotspot-events" href="/events" aria-label="Join events" />
+            <Link className="aya-banner-hotspot aya-hotspot-community" href="/events" aria-label="Be part of the British Airways Virtual community" />
           </div>
         </section>
 
-        <section className="aya-section aya-how">
+        <section className="aya-section aya-how" id="how-it-works">
           <div className="aya-shell">
             <span className="aya-kicker">How it works</span>
             <h2>Get started in three simple steps.</h2>
