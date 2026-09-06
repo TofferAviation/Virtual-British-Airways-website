@@ -56,7 +56,7 @@ export default function OneworldPage() {
           </p>
           <img
             className="ow-hero-art-image"
-            src="/branding/oneworld-hero-wingfree.png"
+            src="/branding/oneworld-hero.png"
             alt=""
             aria-hidden="true"
           />
