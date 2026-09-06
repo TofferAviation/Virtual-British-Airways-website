@@ -36,29 +36,35 @@ export default function OneworldPage() {
       <SiteHeader />
 
       <main className="ow-page">
-        <div className="ow-breadcrumbs">
-          <Link href="/">Home</Link>
-          <span aria-hidden="true">›</span>
-          <span>Partners and alliances</span>
-          <span aria-hidden="true">›</span>
-          <strong>oneworld</strong>
+        <div className="ow-breadcrumb-band">
+          <div className="ow-breadcrumb-row">
+            <div className="ow-breadcrumbs">
+              <Link href="/">Home</Link>
+              <span aria-hidden="true">›</span>
+              <span>Partners and alliances</span>
+              <span aria-hidden="true">›</span>
+              <strong>oneworld</strong>
+            </div>
+            <img
+              className="ow-breadcrumb-logo"
+              src="/branding/ba-virtual-logo.svg"
+              alt="British Airways Virtual"
+            />
+          </div>
         </div>
 
-        <section className="ow-hero">
-          <div className="ow-hero-copy">
-            <span className="ow-kicker">Partners and alliances</span>
-            <h1>Welcome to oneworld</h1>
-            <p>
-              Explore the global alliance that inspires partner-airline operations in British Airways Virtual.
-              Use this page as your virtual reference for alliance carriers, shared destinations and future
-              cross-airline events.
-            </p>
-          </div>
-          <div className="ow-roundel" aria-label="oneworld virtual reference">
-            <span>one</span>
-            <span>world</span>
-            <small>VIRTUAL</small>
-          </div>
+        <section className="ow-hero-art" aria-labelledby="ow-hero-title">
+          <h1 className="ow-sr-only" id="ow-hero-title">Welcome to oneworld</h1>
+          <p className="ow-sr-only">
+            Explore the global alliance that inspires partner-airline operations in British Airways Virtual.
+            Access shared destinations, alliance benefits and a worldwide virtual community.
+          </p>
+          <img
+            className="ow-hero-art-image"
+            src="/branding/oneworld-hero.png"
+            alt=""
+            aria-hidden="true"
+          />
         </section>
 
         <nav className="ow-section-nav" aria-label="oneworld sections">
