@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { EventCategory, EventCategoryId, VirtualEvent } from "@/data/events";
 
 type EventsExperienceProps = {
@@ -14,6 +14,34 @@ type EventsExperienceProps = {
 type IconName = "calendar" | "group" | "plane" | "pin" | "star" | "globe" | "medal" | "coins" | "bars" | "clock";
 
 const storageKey = "bav_demo_event_registrations";
+const registrationChangeEvent = "bav:event-registrations-change";
+
+function subscribeToRegistrations(callback: () => void) {
+  const handleStorage = () => callback();
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(registrationChangeEvent, handleStorage);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(registrationChangeEvent, handleStorage);
+  };
+}
+
+function getRegistrationSnapshot() {
+  return window.localStorage.getItem(storageKey) ?? "[]";
+}
+
+function getServerRegistrationSnapshot() {
+  return "[]";
+}
+
+function parseJoinedSlugs(snapshot: string) {
+  try {
+    const parsed: unknown = JSON.parse(snapshot);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 function EventIcon({ name }: { name: IconName }) {
   if (name === "calendar") {
@@ -82,19 +110,8 @@ export function EventsExperience({ events, categories, initialMonth, isLoggedIn 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showMonthList, setShowMonthList] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<VirtualEvent | null>(null);
-  const [joinedSlugs, setJoinedSlugs] = useState<string[]>([]);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setJoinedSlugs(parsed.filter((value): value is string => typeof value === "string"));
-      }
-    } catch {
-      setJoinedSlugs([]);
-    }
-  }, []);
+  const joinedSnapshot = useSyncExternalStore(subscribeToRegistrations, getRegistrationSnapshot, getServerRegistrationSnapshot);
+  const joinedSlugs = useMemo(() => parseJoinedSlugs(joinedSnapshot), [joinedSnapshot]);
 
   useEffect(() => {
     if (!selectedEvent) return;
@@ -151,11 +168,9 @@ export function EventsExperience({ events, categories, initialMonth, isLoggedIn 
 
   function toggleRegistration(slug: string) {
     if (!isLoggedIn) return;
-    setJoinedSlugs((current) => {
-      const next = current.includes(slug) ? current.filter((item) => item !== slug) : [...current, slug];
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
-      return next;
-    });
+    const next = joinedSlugs.includes(slug) ? joinedSlugs.filter((item) => item !== slug) : [...joinedSlugs, slug];
+    window.localStorage.setItem(storageKey, JSON.stringify(next));
+    window.dispatchEvent(new Event(registrationChangeEvent));
   }
 
   function jumpToUpcoming(category: EventCategoryId | "all" = "all") {
