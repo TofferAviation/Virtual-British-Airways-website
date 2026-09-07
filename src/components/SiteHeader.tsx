@@ -25,6 +25,18 @@ function OneworldBadge() {
   );
 }
 
+function staffRoleLabel(roleId: string) {
+  const labels: Record<string, string> = {
+    admin: "Admin",
+    operations: "Operations",
+    events: "Events",
+    support: "Support",
+    "content-editor": "Content Editor",
+    moderator: "Moderator",
+  };
+  return labels[roleId] ?? roleId.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export async function SiteHeader() {
   const cookieStore = await cookies();
   const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
@@ -94,6 +106,7 @@ export async function SiteHeader() {
                 <Link href="/help">Operations manual</Link>
                 <Link href="/help">Support</Link>
                 <Link href={staffSession ? "/staff" : "/staff-login"}>Staff Centre</Link>
+                {staffSession ? <Link href="/staff/permissions">User permissions</Link> : null}
               </div>
             </div>
           </div>
@@ -119,7 +132,7 @@ export async function SiteHeader() {
               <UserIcon />
               <span>{staffSession.name}</span>
             </Link>
-            <Link className="header-admin-badge" href="/staff">Admin</Link>
+            <Link className="header-admin-badge" href="/staff/permissions">{staffRoleLabel(staffSession.roleId)}</Link>
             <Link className="header-logout-button" href="/api/staff/logout">Log out</Link>
             <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information">
               <OneworldBadge />
