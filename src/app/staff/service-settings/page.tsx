@@ -6,6 +6,7 @@ import { SERVICE_SOURCE_PERMISSION } from "@/lib/permissions";
 import { requireStaffSession } from "@/lib/staff-auth";
 import { getStaffState, hasPermission, isMasterAdminAccount } from "@/lib/staff-store";
 import { ServiceSettingsClient } from "./ServiceSettingsClient";
+import "./service-settings-scroll.css";
 
 export const dynamic = "force-dynamic";
 
