@@ -18,7 +18,10 @@ export function StatusSubscriptions() {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(storageKey);
-      if (stored) setPreferences({ ...defaults, ...(JSON.parse(stored) as Partial<Preferences>) });
+      if (stored) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPreferences({ ...defaults, ...(JSON.parse(stored) as Partial<Preferences>) });
+      }
     } catch {
       // Local preferences are optional; keep defaults if storage is unavailable.
     }
