@@ -1,0 +1,11 @@
+/* Staff Centre desktop scale adjustment.
+   Mirrors a 110% browser zoom while keeping the admin content inside the same page margins. */
+@media (min-width: 1101px) {
+  .staff-page {
+    zoom: 1.1;
+  }
+
+  .staff-page .staff-shell {
+    width: min(1072.727px, 83.636vw);
+  }
+}
