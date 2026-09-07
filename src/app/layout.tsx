@@ -22,6 +22,7 @@ import "./help-hero.css";
 import "./staff.css";
 import "./staff-header.css";
 import "./staff-zoom.css";
+import "./staff-permissions.css";
 
 export const metadata: Metadata = {
   title: {
