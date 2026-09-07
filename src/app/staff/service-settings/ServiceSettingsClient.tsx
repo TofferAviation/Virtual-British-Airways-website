@@ -72,6 +72,10 @@ function lineCount(value: string) {
   return Math.max(1, value.split("\n").length);
 }
 
+function utf8Size(value: string) {
+  return new TextEncoder().encode(value).length;
+}
+
 export function ServiceSettingsClient({ staffName, isMasterAdmin }: Props) {
   const [files, setFiles] = useState<SourceFile[]>([]);
   const [filter, setFilter] = useState("");
@@ -327,7 +331,7 @@ export function ServiceSettingsClient({ staffName, isMasterAdmin }: Props) {
 
       <footer className="service-statusbar">
         <span>✓ Protected workspace</span>
-        <span>{document ? `${document.language} · ${formatBytes(Buffer.byteLength(draft, "utf8"))}` : "No file selected"}</span>
+        <span>{document ? `${document.language} · ${formatBytes(utf8Size(draft))}` : "No file selected"}</span>
         <span>{dirty ? "● Unsaved changes" : "Saved"}</span>
         <span>{staffName}{isMasterAdmin ? " · Master Admin" : ""}</span>
         <span className="service-status-message">{message}</span>
