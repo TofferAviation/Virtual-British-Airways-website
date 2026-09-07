@@ -2,6 +2,9 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getTomorrowIsoDate } from "@/lib/serverDate";
+import { getFlightsForRoute } from "@/lib/route-store";
+
+export const dynamic = "force-dynamic";
 
 const airportNames: Record<string, string> = {
   LHR: "London Heathrow",
@@ -18,31 +21,16 @@ const airportNames: Record<string, string> = {
   SYD: "Sydney",
 };
 
-function createFlights(from: string, to: string) {
-  const longHaul = ["JFK", "LAX", "PDX", "DXB", "SIN", "HND", "CPT", "SYD"].includes(to);
-  return longHaul
-    ? [
-        { number: "BA117", departure: "08:20", arrival: "11:15", duration: "7h 55m", aircraft: "Boeing 777-200ER", slots: 10 },
-        { number: "BA175", departure: "09:45", arrival: "12:40", duration: "7h 55m", aircraft: "Boeing 777-300ER", slots: 4 },
-        { number: "BA183", departure: "19:05", arrival: "22:00", duration: "7h 55m", aircraft: "Airbus A350-1000", slots: 12 },
-      ]
-    : [
-        { number: "BA762", departure: "07:35", arrival: "10:45", duration: "2h 10m", aircraft: "Airbus A320neo", slots: 11 },
-        { number: "BA766", departure: "13:10", arrival: "16:20", duration: "2h 10m", aircraft: "Airbus A320", slots: 6 },
-        { number: "BA770", departure: "19:25", arrival: "22:35", duration: "2h 10m", aircraft: "Airbus A320neo", slots: 9 },
-      ];
-}
-
 export default async function BookPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const from = typeof params.from === "string" ? params.from : "LHR";
-  const to = typeof params.to === "string" ? params.to : "OSL";
+  const from = typeof params.from === "string" ? params.from.toUpperCase() : "LHR";
+  const to = typeof params.to === "string" ? params.to.toUpperCase() : "OSL";
   const date = typeof params.date === "string" ? params.date : getTomorrowIsoDate();
-  const flights = from === to ? [] : createFlights(from, to);
+  const flights = from === to ? [] : await getFlightsForRoute(from, to);
 
   return (
     <>
@@ -66,12 +54,12 @@ export default async function BookPage({
 
           <div className="booking-results-heading">
             <h2>Available virtual flights</h2>
-            <p>{flights.length} pilot assignments available for this mock production schedule.</p>
+            <p>{flights.length} pilot assignments available for this virtual schedule.</p>
           </div>
 
           <div className="flight-results">
             {flights.length ? flights.map((flight) => (
-              <article className="result-flight card" key={flight.number}>
+              <article className="result-flight card" key={`${flight.number}-${flight.departure}`}>
                 <div className="result-times">
                   <div><strong>{flight.departure}</strong><span>{from}</span></div>
                   <div className="result-line"><span>{flight.duration}</span><i /></div>
@@ -103,7 +91,7 @@ export default async function BookPage({
           </div>
 
           <div className="integration-note">
-            <strong>Production note:</strong> these results currently use mock schedule data. The page structure is ready for the real schedule database so only genuinely available pilot assignments are returned.
+            <strong>Schedule note:</strong> staff-created route overrides are used when available. Routes without an override continue to use the current development schedule until the shared vAMSYS schedule source is connected.
           </div>
         </div>
       </main>
