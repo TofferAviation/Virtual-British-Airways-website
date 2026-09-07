@@ -65,13 +65,20 @@ export default async function StaffPage() {
               </Link>
             </div>
           ) : null}
+          {canAccessServiceSettings ? (
+            <div className="staff-shell staff-permissions-launch-wrap">
+              <Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings">
+                <span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span>
+                <span>
+                  <strong>Service settings</strong>
+                  <small>Open the protected website source workspace for maintenance and direct code changes.</small>
+                </span>
+                <b aria-hidden="true">→</b>
+              </Link>
+            </div>
+          ) : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
-          <StaffCentre
-            initialEvents={events}
-            initialRoutes={routes}
-            staffName={session.name}
-            canAccessServiceSettings={canAccessServiceSettings}
-          />
+          <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
         </div>
       </main>
       <SiteFooter />
