@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { BrandLogo } from "@/components/BrandLogo";
+import { getStaffSession } from "@/lib/staff-auth";
 
 function SearchIcon() {
   return <span className="header-search-icon" aria-hidden="true" />;
@@ -27,6 +28,8 @@ function OneworldBadge() {
 export async function SiteHeader() {
   const cookieStore = await cookies();
   const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const staffSession = await getStaffSession();
+  const manageHref = staffSession ? "/staff" : isLoggedIn ? "/account" : "/login";
 
   return (
     <header className="site-header ba-reference-header">
@@ -90,13 +93,14 @@ export async function SiteHeader() {
                 <a href="https://vamsys.io" rel="noreferrer">vAMSYS</a>
                 <Link href="/help">Operations manual</Link>
                 <Link href="/help">Support</Link>
+                <Link href={staffSession ? "/staff" : "/staff-login"}>Staff Centre</Link>
               </div>
             </div>
           </div>
         </div>
 
         <Link href="/book">Book</Link>
-        <Link href={isLoggedIn ? "/account" : "/login"}>Manage</Link>
+        <Link href={manageHref}>Manage</Link>
         <Link href="/help">Help</Link>
         <Link className="header-search-link" href="/book">
           <SearchIcon />
@@ -109,7 +113,19 @@ export async function SiteHeader() {
       </Link>
 
       <div className="header-actions header-actions-right">
-        {isLoggedIn ? (
+        {staffSession ? (
+          <>
+            <Link className="header-user-link" href="/staff">
+              <UserIcon />
+              <span>{staffSession.name}</span>
+            </Link>
+            <Link className="header-admin-badge" href="/staff">Admin</Link>
+            <Link className="header-logout-button" href="/api/staff/logout">Log out</Link>
+            <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information">
+              <OneworldBadge />
+            </Link>
+          </>
+        ) : isLoggedIn ? (
           <>
             <Link className="header-user-link" href="/account">
               <UserIcon />
