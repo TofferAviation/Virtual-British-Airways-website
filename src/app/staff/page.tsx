@@ -5,7 +5,9 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getEvents } from "@/lib/event-store";
 import { getManagedRoutes } from "@/lib/route-store";
 import { requireStaffSession } from "@/lib/staff-auth";
+import { getStaffPreferences } from "@/lib/staff-preferences";
 import { getStaffState, hasPermission } from "@/lib/staff-store";
+import { StaffBackgroundControl } from "./StaffBackgroundControl";
 import { StaffCentre } from "./StaffCentre";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,8 @@ export default async function StaffPage() {
   const canViewEvents = Boolean(account && hasPermission(state, account, "events.view"));
   const canViewRoutes = Boolean(account && hasPermission(state, account, "routes.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
+  const preferences = await getStaffPreferences(session.userId);
+  const staffBackground = preferences.staffPageBackground;
   const [events, routes] = await Promise.all([
     canViewEvents ? getEvents() : Promise.resolve([]),
     canViewRoutes ? getManagedRoutes() : Promise.resolve([]),
@@ -30,7 +34,16 @@ export default async function StaffPage() {
   return (
     <>
       <SiteHeader />
-      <main className="staff-page">
+      <main
+        className="staff-page"
+        style={staffBackground ? {
+          backgroundImage: `linear-gradient(rgba(245,248,252,.58), rgba(245,248,252,.58)), url("${staffBackground}")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          backgroundAttachment: "fixed",
+        } : undefined}
+      >
         <div className="staff-breadcrumb-band">
           <div className="staff-shell staff-breadcrumbs">
             <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
@@ -49,6 +62,7 @@ export default async function StaffPage() {
             </Link>
           </div>
         ) : null}
+        <StaffBackgroundControl initialBackground={staffBackground} />
         <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
       </main>
       <SiteFooter />
