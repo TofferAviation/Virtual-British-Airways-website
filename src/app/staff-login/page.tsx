@@ -28,7 +28,7 @@ export default async function StaffLoginPage() {
           <span className="section-kicker">Staff access</span>
           <h1>Manage British Airways Virtual.</h1>
           <p>
-            Staff Centre access is restricted to authorised administrators. Use this area to manage events, route overrides and future operational tools for the virtual airline.
+            Staff Centre access is restricted to authorised team members. Your assigned role and individual permissions control exactly which operational tools you can use.
           </p>
           <div className="staff-login-security">
             <strong>Protected staff session</strong>
