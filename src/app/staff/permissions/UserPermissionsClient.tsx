@@ -193,6 +193,10 @@ export function UserPermissionsClient({
   const activeRoles = roles.filter((role) => users.some((user) => user.status === "active" && user.roleId === role.id)).length;
   const pendingInvitations = invitations.filter((invite) => invite.status === "pending").length;
 
+  function showMasterAdminMessage() {
+    setMessage("Master Admin has every permission permanently granted. These switches are locked ON so the recovery account can never be locked out.");
+  }
+
   function selectUser(user: StaffUser) {
     setSelectedId(user.id);
     setDraftRoleId(user.roleId);
@@ -201,7 +205,11 @@ export function UserPermissionsClient({
   }
 
   function togglePermission(permission: PermissionId) {
-    if (!selected || selected.isEnvironmentAdmin || !canManageUsers) return;
+    if (!selected || !canManageUsers) return;
+    if (selected.isEnvironmentAdmin) {
+      showMasterAdminMessage();
+      return;
+    }
     const desired = new Set(effectiveDraft);
     if (desired.has(permission)) {
       desired.delete(permission);
@@ -226,7 +234,11 @@ export function UserPermissionsClient({
   }
 
   function resetToRoleDefaults() {
-    if (!selected || selected.isEnvironmentAdmin || !canManageUsers) return;
+    if (!selected || !canManageUsers) return;
+    if (selected.isEnvironmentAdmin) {
+      showMasterAdminMessage();
+      return;
+    }
     setDraftOverrides({});
   }
 
@@ -248,7 +260,11 @@ export function UserPermissionsClient({
   }
 
   async function saveUserChanges() {
-    if (!selected || !canManageUsers || selected.isEnvironmentAdmin) return;
+    if (!selected || !canManageUsers) return;
+    if (selected.isEnvironmentAdmin) {
+      showMasterAdminMessage();
+      return;
+    }
     const added = allPermissions.filter((permission) => !savedEffective.has(permission) && effectiveDraft.has(permission));
     const removed = allPermissions.filter((permission) => savedEffective.has(permission) && !effectiveDraft.has(permission));
     const roleChanged = selected.roleId !== draftRoleId;
@@ -435,7 +451,7 @@ export function UserPermissionsClient({
                 <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Status</th><th>Last active</th><th>Actions</th></tr></thead>
                 <tbody>{filteredUsers.map((user) => <tr key={user.id} className={user.id === selectedId ? "selected" : ""}>
                   <td><span className="permissions-avatar">{initials(user.name)}</span><strong>{user.name}</strong></td>
-                  <td>{roleById(roles, user.roleId)?.name ?? user.roleId}</td>
+                  <td>{user.isEnvironmentAdmin ? "Master Admin" : (roleById(roles, user.roleId)?.name ?? user.roleId)}</td>
                   <td>{user.email}</td>
                   <td><span className={`permissions-status ${user.status}`}>{user.status === "active" ? "Active" : user.status === "invited" ? "Invited" : "Inactive"}</span></td>
                   <td>{formatDate(user.lastActiveAt)}</td>
@@ -448,39 +464,40 @@ export function UserPermissionsClient({
           <section className="permissions-panel permissions-editor">
             <div className="permissions-panel-head permissions-editor-head">
               <div><span className="permissions-kicker">Edit user permissions</span><p>Select a user to view and edit their permissions.</p></div>
-              <button className="permissions-link-button" onClick={resetToRoleDefaults} disabled={!selected || selected.isEnvironmentAdmin || !canManageUsers}>↻ Reset to role defaults</button>
+              <button className="permissions-link-button" onClick={resetToRoleDefaults} disabled={!selected || !canManageUsers}>↻ Reset to role defaults</button>
             </div>
             {selected ? <>
               <div className="permissions-user-summary">
                 <span className="permissions-avatar large">{initials(selected.name)}</span>
                 <div><h2>{selected.name}</h2><p>{selected.email} <span>·</span> Last active: {formatDate(selected.lastActiveAt, true)}</p></div>
                 <span className={`permissions-status ${selected.status}`}>{selected.status === "active" ? "Active" : selected.status === "invited" ? "Invited" : "Inactive"}</span>
-                <label><span>Role</span><select value={draftRoleId} onChange={(event) => changeRole(event.target.value as StaffRoleId)} disabled={!canManageUsers || selected.isEnvironmentAdmin}>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+                <label><span>Role</span><select value={draftRoleId} onChange={(event) => changeRole(event.target.value as StaffRoleId)} disabled={!canManageUsers || selected.isEnvironmentAdmin}>{roles.map((role) => <option key={role.id} value={role.id}>{selected.isEnvironmentAdmin && role.id === "admin" ? "Master Admin" : role.name}</option>)}</select></label>
               </div>
-              {selected.isEnvironmentAdmin ? <div className="permissions-admin-lock">The environment administrator is the recovery account and always keeps full Admin access.</div> : null}
+              {selected.isEnvironmentAdmin ? <div className="permissions-admin-lock"><strong>Master Admin — full access active.</strong> All {allPermissions.length} permissions below are permanently ON for this recovery account. Click any switch to confirm its status; it cannot be disabled or demoted.</div> : null}
               <div className="permissions-groups">
                 {permissionGroups.map((group) => <article className="permissions-group" key={group.id}>
                   <header><span>{group.icon}</span><strong>{group.label}</strong></header>
                   {group.permissions.map((permission) => {
-                    const granted = effectiveDraft.has(permission.id);
-                    const custom = Object.prototype.hasOwnProperty.call(draftOverrides, permission.id);
+                    const granted = selected.isEnvironmentAdmin ? true : effectiveDraft.has(permission.id);
+                    const custom = !selected.isEnvironmentAdmin && Object.prototype.hasOwnProperty.call(draftOverrides, permission.id);
                     return <div className="permissions-row" key={permission.id} title={permission.description}>
-                      <span>{permission.label}{custom ? <em>Custom</em> : null}{permission.highLevel ? <b title="High-level permission">!</b> : null}</span>
+                      <span>{permission.label}{selected.isEnvironmentAdmin ? <em>Master</em> : custom ? <em>Custom</em> : null}{permission.highLevel ? <b title="High-level permission">!</b> : null}</span>
                       <button
                         type="button"
-                        className={`permissions-switch ${granted ? "on" : ""}`}
+                        className={`permissions-switch ${granted ? "on" : ""} ${selected.isEnvironmentAdmin ? "master-locked" : ""}`}
                         role="switch"
                         aria-checked={granted}
-                        aria-label={`${permission.label}: ${granted ? "granted" : "denied"}`}
+                        aria-label={`${permission.label}: ${selected.isEnvironmentAdmin ? "permanently granted to Master Admin" : granted ? "granted" : "denied"}`}
                         onClick={() => togglePermission(permission.id)}
-                        disabled={!canManageUsers || selected.isEnvironmentAdmin}
+                        disabled={!canManageUsers}
+                        title={selected.isEnvironmentAdmin ? "Master Admin permission — permanently granted" : permission.description}
                       ><i /></button>
                     </div>;
                   })}
                 </article>)}
               </div>
               <div className="permissions-editor-actions">
-                <button className="permissions-primary" onClick={saveUserChanges} disabled={busy || !canManageUsers || selected.isEnvironmentAdmin}>Save changes</button>
+                <button className="permissions-primary" onClick={saveUserChanges} disabled={busy || !canManageUsers}>{selected.isEnvironmentAdmin ? "Full access active" : "Save changes"}</button>
                 <button className="permissions-secondary" onClick={resetDraft} disabled={busy}>Reset changes</button>
                 <button className="permissions-danger" onClick={removeStaffAccess} disabled={busy || !canManageUsers || selected.isEnvironmentAdmin || selected.id === currentUserId}>Remove staff access</button>
               </div>
