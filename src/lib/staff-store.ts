@@ -2,9 +2,9 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  allPermissions,
   defaultRoleTemplates,
   effectivePermissions,
+  masterPermissions,
   type PermissionId,
   type StaffRoleId,
   type StaffRoleTemplate,
@@ -163,7 +163,7 @@ export function getRole(state: StaffState, roleId: StaffRoleId) {
 }
 
 export function permissionsForUser(state: StaffState, user: StaffAccount) {
-  if (isMasterAdminAccount(user)) return new Set<PermissionId>(allPermissions);
+  if (isMasterAdminAccount(user)) return new Set<PermissionId>(masterPermissions);
   return effectivePermissions(getRole(state, user.roleId), user.overrides);
 }
 
