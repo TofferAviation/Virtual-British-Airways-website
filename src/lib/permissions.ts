@@ -26,7 +26,10 @@ export type PermissionId =
   | "settings.view"
   | "settings.edit"
   | "settings.roles"
-  | "settings.audit";
+  | "settings.audit"
+  | "service.source";
+
+export const SERVICE_SOURCE_PERMISSION: PermissionId = "service.source";
 
 export type StaffRoleId =
   | "admin"
@@ -57,6 +60,8 @@ export type PermissionGroup = {
   }>;
 };
 
+// Service Settings intentionally does not appear in these general permission groups.
+// Its source-code permission is delegated only from the Master Admin's Service Settings page.
 export const permissionGroups: PermissionGroup[] = [
   {
     id: "events",
@@ -138,6 +143,7 @@ export const permissionGroups: PermissionGroup[] = [
 ];
 
 export const allPermissions = permissionGroups.flatMap((group) => group.permissions.map((permission) => permission.id));
+export const masterPermissions: PermissionId[] = [...allPermissions, SERVICE_SOURCE_PERMISSION];
 
 export const permissionDependencies: Partial<Record<PermissionId, PermissionId[]>> = {
   "events.create": ["events.view"],
@@ -167,7 +173,7 @@ export const defaultRoleTemplates: StaffRoleTemplate[] = [
   {
     id: "admin",
     name: "Admin",
-    description: "Full access to all areas of the virtual airline.",
+    description: "Full operational access except protected Master Admin service-source access.",
     permissions: [...allPermissions],
     system: true,
   },
@@ -249,6 +255,7 @@ export function effectivePermissions(
 }
 
 export function permissionLabel(id: PermissionId) {
+  if (id === SERVICE_SOURCE_PERMISSION) return "Service Settings → Source code editor";
   for (const group of permissionGroups) {
     const permission = group.permissions.find((item) => item.id === id);
     if (permission) return `${group.label} → ${permission.label}`;
