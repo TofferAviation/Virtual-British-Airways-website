@@ -19,6 +19,7 @@ import "./events.css";
 import "./about-your-account.css";
 import "./help.css";
 import "./help-hero.css";
+import "./staff.css";
 
 export const metadata: Metadata = {
   title: {
