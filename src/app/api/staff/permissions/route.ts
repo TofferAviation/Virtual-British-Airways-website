@@ -96,10 +96,25 @@ export async function POST(request: NextRequest) {
 
     const beforeRole = user.roleId;
     const before = permissionsForUser(state, user);
+    const beforeSourceAccess = before.has(SERVICE_SOURCE_PERMISSION);
     const existingSourceOverride = user.overrides[SERVICE_SOURCE_PERMISSION];
+
     user.roleId = roleId;
     user.overrides = safeOverrides(body?.overrides);
-    if (typeof existingSourceOverride === "boolean") user.overrides[SERVICE_SOURCE_PERMISSION] = existingSourceOverride;
+
+    // The normal User Permissions page is never allowed to grant or remove source access.
+    // Preserve an explicit Master Admin override when one exists. If the role change itself
+    // would change effective source access, add an invisible override that keeps the previous
+    // effective state until the Master Admin changes it from Service Settings.
+    if (typeof existingSourceOverride === "boolean") {
+      user.overrides[SERVICE_SOURCE_PERMISSION] = existingSourceOverride;
+    } else {
+      const newRoleGrantsSource = Boolean(getRole(state, roleId)?.permissions.includes(SERVICE_SOURCE_PERMISSION));
+      if (newRoleGrantsSource !== beforeSourceAccess) {
+        user.overrides[SERVICE_SOURCE_PERMISSION] = beforeSourceAccess;
+      }
+    }
+
     const after = permissionsForUser(state, user);
 
     if (beforeRole !== roleId) {
@@ -109,7 +124,7 @@ export async function POST(request: NextRequest) {
         action: "permissions.role.changed",
         targetUserId: user.id,
         targetName: user.name,
-        details: `Changed role from ${getRole(state, beforeRole)?.name ?? beforeRole} to ${getRole(state, roleId)?.name ?? roleId}.`,
+        details: `Changed role from ${getRole(state, beforeRole)?.name ?? beforeRole} to ${getRole(state, roleId)?.name ?? roleId}. Protected Service Settings access was left unchanged.`,
       });
     }
 
@@ -210,7 +225,7 @@ export async function POST(request: NextRequest) {
         actorEmail: actor.email,
         actorName: actor.name,
         action: "role.created",
-        details: `Created role ${name} with ${permissions.length} permissions.`,
+        details: `Created role ${name} with ${permissions.length} standard permissions. Protected Service Settings access can only be granted by Master Admin from Service Settings.`,
       });
       await saveStaffState(state);
       return NextResponse.json({ role, audit: state.audit.slice(0, 30) }, { status: 201 });
