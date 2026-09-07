@@ -6,7 +6,8 @@ type Props = {
   initialBackground?: string;
 };
 
-const PAGE_OVERLAY = "linear-gradient(rgba(245,248,252,.58), rgba(245,248,252,.58))";
+const PAGE_OVERLAY = "linear-gradient(rgba(245,248,252,.42), rgba(245,248,252,.42))";
+const MAX_BACKGROUND_DATA_LENGTH = 22_000_000;
 
 function applyPageBackground(background?: string) {
   const page = document.querySelector<HTMLElement>(".staff-page");
@@ -22,14 +23,14 @@ function applyPageBackground(background?: string) {
   }
 
   page.style.backgroundImage = `${PAGE_OVERLAY}, url("${background}")`;
-  page.style.backgroundSize = "cover";
-  page.style.backgroundPosition = "center";
+  page.style.backgroundSize = "100% auto";
+  page.style.backgroundPosition = "top center";
   page.style.backgroundRepeat = "no-repeat";
   page.style.backgroundAttachment = "fixed";
 }
 
-function compressBackground(file: File) {
-  return new Promise<string>((resolve, reject) => {
+function readBackgroundAtOriginalQuality(file: File) {
+  return new Promise<{ dataUrl: string; width: number; height: number }>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read that image."));
     reader.onload = () => {
@@ -41,26 +42,11 @@ function compressBackground(file: File) {
       const image = new Image();
       image.onerror = () => reject(new Error("That image could not be opened."));
       image.onload = () => {
-        const maxWidth = 2200;
-        const maxHeight = 1400;
-        const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
-        const width = Math.max(1, Math.round(image.naturalWidth * scale));
-        const height = Math.max(1, Math.round(image.naturalHeight * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext("2d");
-        if (!context) {
-          reject(new Error("Your browser could not prepare that image."));
-          return;
-        }
-        context.drawImage(image, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/webp", 0.84);
-        if (!dataUrl.startsWith("data:image/")) {
-          reject(new Error("Your browser could not prepare that image."));
-          return;
-        }
-        resolve(dataUrl);
+        resolve({
+          dataUrl: reader.result as string,
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+        });
       };
       image.src = reader.result;
     };
@@ -99,15 +85,17 @@ export function StaffBackgroundControl({ initialBackground }: Props) {
     }
 
     setBusy(true);
-    setMessage("Preparing background…");
+    setMessage("Saving full-resolution background…");
     try {
-      const prepared = await compressBackground(file);
-      if (prepared.length > 3_000_000) throw new Error("That image is still too large after optimisation. Please choose a smaller image.");
-      const saved = await persistBackground(prepared);
+      const prepared = await readBackgroundAtOriginalQuality(file);
+      if (prepared.dataUrl.length > MAX_BACKGROUND_DATA_LENGTH) {
+        throw new Error("That image is too large to save at full quality. Please choose a smaller JPG, PNG or WebP image.");
+      }
+      const saved = await persistBackground(prepared.dataUrl);
       if (!saved) throw new Error("The background could not be saved.");
       applyPageBackground(saved);
       setHasBackground(true);
-      setMessage("Personal staff background saved.");
+      setMessage(`Saved at original ${prepared.width} × ${prepared.height} resolution.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save your staff background.");
     } finally {
@@ -191,7 +179,7 @@ export function StaffBackgroundControl({ initialBackground }: Props) {
             Reset
           </button>
         ) : null}
-        {message ? <span role="status" style={{ fontSize: 8, color: "#45617f", maxWidth: 230 }}>{message}</span> : null}
+        {message ? <span role="status" style={{ fontSize: 8, color: "#45617f", maxWidth: 260 }}>{message}</span> : null}
       </div>
     </div>
   );
