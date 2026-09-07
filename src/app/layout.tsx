@@ -23,6 +23,7 @@ import "./staff.css";
 import "./staff-header.css";
 import "./staff-zoom.css";
 import "./staff-permissions.css";
+import "./staff-access.css";
 
 export const metadata: Metadata = {
   title: {
