@@ -41,29 +41,30 @@ export default async function StaffPage() {
           backgroundSize: "100% auto",
           backgroundPosition: "top center",
           backgroundRepeat: "no-repeat",
-          backgroundAttachment: "fixed",
         } : undefined}
       >
-        <div className="staff-breadcrumb-band">
-          <div className="staff-shell staff-breadcrumbs">
-            <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
-            {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
+        <div className="staff-page-content">
+          <div className="staff-breadcrumb-band">
+            <div className="staff-shell staff-breadcrumbs">
+              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
+              {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
+            </div>
           </div>
+          {canViewPermissions ? (
+            <div className="staff-shell staff-permissions-launch-wrap">
+              <Link className="staff-permissions-launch" href="/staff/permissions">
+                <span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span>
+                <span>
+                  <strong>User permissions</strong>
+                  <small>Manage staff roles, individual permissions and access controls.</small>
+                </span>
+                <b aria-hidden="true">→</b>
+              </Link>
+            </div>
+          ) : null}
+          <StaffBackgroundControl initialBackground={staffBackground} />
+          <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
         </div>
-        {canViewPermissions ? (
-          <div className="staff-shell staff-permissions-launch-wrap">
-            <Link className="staff-permissions-launch" href="/staff/permissions">
-              <span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span>
-              <span>
-                <strong>User permissions</strong>
-                <small>Manage staff roles, individual permissions and access controls.</small>
-              </span>
-              <b aria-hidden="true">→</b>
-            </Link>
-          </div>
-        ) : null}
-        <StaffBackgroundControl initialBackground={staffBackground} />
-        <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
       </main>
       <SiteFooter />
     </>
