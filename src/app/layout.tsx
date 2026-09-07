@@ -21,6 +21,7 @@ import "./help.css";
 import "./help-hero.css";
 import "./staff.css";
 import "./staff-header.css";
+import "./staff-zoom.css";
 
 export const metadata: Metadata = {
   title: {
