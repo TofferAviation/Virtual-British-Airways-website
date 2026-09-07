@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStaffSession } from "@/lib/staff-auth";
 import { getStaffPreferences, setStaffPageBackground } from "@/lib/staff-preferences";
 
-const MAX_BACKGROUND_LENGTH = 3_000_000;
+const MAX_BACKGROUND_LENGTH = 22_000_000;
 const BACKGROUND_PATTERN = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 function jsonError(message: string, status = 400) {
@@ -30,7 +30,7 @@ export async function PUT(request: NextRequest) {
 
   if (typeof background === "string") {
     if (!background || background.length > MAX_BACKGROUND_LENGTH || !BACKGROUND_PATTERN.test(background)) {
-      return jsonError("Please use a JPG, PNG or WebP image small enough for the staff background.");
+      return jsonError("Please use a JPG, PNG or WebP image under 15 MB for the staff background.");
     }
   }
 
