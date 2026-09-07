@@ -37,9 +37,9 @@ export default async function StaffPage() {
       <main
         className="staff-page"
         style={staffBackground ? {
-          backgroundImage: `linear-gradient(rgba(245,248,252,.58), rgba(245,248,252,.58)), url("${staffBackground}")`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
+          backgroundImage: `linear-gradient(rgba(245,248,252,.42), rgba(245,248,252,.42)), url("${staffBackground}")`,
+          backgroundSize: "100% auto",
+          backgroundPosition: "top center",
           backgroundRepeat: "no-repeat",
           backgroundAttachment: "fixed",
         } : undefined}
