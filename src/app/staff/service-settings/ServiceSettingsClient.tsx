@@ -232,15 +232,19 @@ export function ServiceSettingsClient({ staffName, isMasterAdmin }: Props) {
     }
   }
 
-  useEffect(() => {
-    void loadFiles(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  function toggleAccessPanel() {
+    const nextOpen = !accessOpen;
+    setAccessOpen(nextOpen);
+    if (nextOpen && isMasterAdmin && !access) void loadAccess();
+  }
 
   useEffect(() => {
-    if (accessOpen && isMasterAdmin && !access) void loadAccess();
+    const timer = window.setTimeout(() => {
+      void loadFiles(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessOpen, isMasterAdmin]);
+  }, []);
 
   return (
     <section className="service-workspace" aria-label="Service Settings source workspace">
@@ -248,7 +252,7 @@ export function ServiceSettingsClient({ staffName, isMasterAdmin }: Props) {
         <div className="service-window-actions" aria-hidden="true"><i /><i /><i /></div>
         <div className="service-title">British Airways Virtual — Service Settings</div>
         <div className="service-title-actions">
-          {isMasterAdmin ? <button onClick={() => setAccessOpen((value) => !value)} className={accessOpen ? "active" : ""}>Access control</button> : null}
+          {isMasterAdmin ? <button onClick={toggleAccessPanel} className={accessOpen ? "active" : ""}>Access control</button> : null}
           <a href="/staff">Staff centre</a>
         </div>
       </div>
@@ -257,7 +261,7 @@ export function ServiceSettingsClient({ staffName, isMasterAdmin }: Props) {
         <aside className="service-activity" aria-label="Workspace tools">
           <button className="active" title="Explorer">▱</button>
           <button onClick={() => setFilter("")} title="Search">⌕</button>
-          {isMasterAdmin ? <button className={accessOpen ? "active" : ""} onClick={() => setAccessOpen((value) => !value)} title="Access control">♜</button> : null}
+          {isMasterAdmin ? <button className={accessOpen ? "active" : ""} onClick={toggleAccessPanel} title="Access control">♜</button> : null}
           <span />
           <button onClick={() => void loadFiles()} title="Refresh source files">↻</button>
         </aside>
