@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type ServiceSourceFile = {
@@ -203,9 +203,9 @@ export async function writeServiceSourceFile(input: {
   await mkdir(path.dirname(backupPath), { recursive: true });
   await writeFile(backupPath, current.content, "utf8");
 
-  const temporary = `${absolute}.bav-service-tmp`;
-  await writeFile(temporary, input.content, "utf8");
-  await rename(temporary, absolute);
+  // Direct writes are used here because this project is primarily developed on Windows.
+  // A backup is already safely stored before the file is changed.
+  await writeFile(absolute, input.content, "utf8");
 
   return readServiceSourceFile(relativePath);
 }
