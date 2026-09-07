@@ -21,6 +21,7 @@ export default async function StaffPage() {
   const account = state.users.find((user) => user.id === session.userId);
   const canViewEvents = Boolean(account && hasPermission(state, account, "events.view"));
   const canViewRoutes = Boolean(account && hasPermission(state, account, "routes.view"));
+  const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
   const [events, routes] = await Promise.all([
     canViewEvents ? getEvents() : Promise.resolve([]),
     canViewRoutes ? getManagedRoutes() : Promise.resolve([]),
@@ -33,9 +34,21 @@ export default async function StaffPage() {
         <div className="staff-breadcrumb-band">
           <div className="staff-shell staff-breadcrumbs">
             <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
-            {account && hasPermission(state, account, "users.view") ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
+            {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
           </div>
         </div>
+        {canViewPermissions ? (
+          <div className="staff-shell staff-permissions-launch-wrap">
+            <Link className="staff-permissions-launch" href="/staff/permissions">
+              <span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span>
+              <span>
+                <strong>User permissions</strong>
+                <small>Manage staff roles, individual permissions and access controls.</small>
+              </span>
+              <b aria-hidden="true">→</b>
+            </Link>
+          </div>
+        ) : null}
         <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
       </main>
       <SiteFooter />
