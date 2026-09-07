@@ -26,7 +26,7 @@ function applyPageBackground(background?: string) {
   page.style.backgroundSize = "100% auto";
   page.style.backgroundPosition = "top center";
   page.style.backgroundRepeat = "no-repeat";
-  page.style.backgroundAttachment = "fixed";
+  page.style.removeProperty("background-attachment");
 }
 
 function readBackgroundAtOriginalQuality(file: File) {
