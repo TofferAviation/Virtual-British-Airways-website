@@ -67,6 +67,18 @@ export default async function StaffPage() {
               </Link>
             </div>
           ) : null}
+          {canViewServiceStatus ? (
+            <div className="staff-shell staff-permissions-launch-wrap">
+              <Link className="staff-permissions-launch" href="/staff/service-status">
+                <span className="staff-permissions-launch-icon" aria-hidden="true">◔</span>
+                <span>
+                  <strong>Service status manager</strong>
+                  <small>Manage system health, public incidents, maintenance and uptime information.</small>
+                </span>
+                <b aria-hidden="true">→</b>
+              </Link>
+            </div>
+          ) : null}
           {canAccessServiceSettings ? (
             <div className="staff-shell staff-permissions-launch-wrap">
               <Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings">
@@ -80,12 +92,7 @@ export default async function StaffPage() {
             </div>
           ) : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
-          <StaffCentre
-            initialEvents={events}
-            initialRoutes={routes}
-            staffName={session.name}
-            canViewServiceStatus={canViewServiceStatus}
-          />
+          <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
         </div>
       </main>
       <SiteFooter />
