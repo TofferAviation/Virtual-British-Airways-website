@@ -23,6 +23,8 @@ export type PermissionId =
   | "users.edit"
   | "users.roles"
   | "users.suspend"
+  | "status.view"
+  | "status.edit"
   | "settings.view"
   | "settings.edit"
   | "settings.roles"
@@ -130,6 +132,15 @@ export const permissionGroups: PermissionGroup[] = [
     ],
   },
   {
+    id: "service-status",
+    label: "Service Status",
+    icon: "◔",
+    permissions: [
+      { id: "status.view", label: "View status manager", description: "Open the staff Service Status Manager and inspect operational data." },
+      { id: "status.edit", label: "Publish status updates", description: "Change component health, publish incidents and schedule maintenance.", highLevel: true },
+    ],
+  },
+  {
     id: "settings",
     label: "System Settings",
     icon: "⚙",
@@ -164,6 +175,7 @@ export const permissionDependencies: Partial<Record<PermissionId, PermissionId[]
   "users.edit": ["users.view"],
   "users.roles": ["users.view"],
   "users.suspend": ["users.view"],
+  "status.edit": ["status.view"],
   "settings.edit": ["settings.view"],
   "settings.roles": ["settings.view", "users.view", "users.roles"],
   "settings.audit": ["settings.view"],
@@ -188,6 +200,7 @@ export const defaultRoleTemplates: StaffRoleTemplate[] = [
       "routes.edit",
       "content.view",
       "users.view",
+      "status.view",
     ],
     system: true,
   },
@@ -202,7 +215,7 @@ export const defaultRoleTemplates: StaffRoleTemplate[] = [
     id: "support",
     name: "Support",
     description: "Manage the support inbox and user queries.",
-    permissions: ["support.view", "support.reply", "support.assign", "support.close", "users.view"],
+    permissions: ["support.view", "support.reply", "support.assign", "support.close", "users.view", "status.view"],
     system: true,
   },
   {
