@@ -28,12 +28,6 @@ type Props = {
   canEdit: boolean;
 };
 
-function localDateTime(value?: string) {
-  const date = value ? new Date(value) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const pad = (number: number) => String(number).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -50,13 +44,13 @@ export function ServiceStatusManager({ initialState, canEdit }: Props) {
   const [maintenanceTitle, setMaintenanceTitle] = useState("");
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [maintenanceComponents, setMaintenanceComponents] = useState<string[]>([]);
-  const [maintenanceStart, setMaintenanceStart] = useState(localDateTime());
-  const [maintenanceEnd, setMaintenanceEnd] = useState(localDateTime(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()));
+  const [maintenanceStart, setMaintenanceStart] = useState("");
+  const [maintenanceEnd, setMaintenanceEnd] = useState("");
 
   const activeIncidents = useMemo(() => state.incidents.filter((incident) => incident.stage !== "resolved"), [state.incidents]);
 
   async function action(payload: Record<string, unknown>) {
-    if (!canEdit) return;
+    if (!canEdit) return false;
     setBusy(true);
     setMessage("");
     try {
@@ -69,8 +63,10 @@ export function ServiceStatusManager({ initialState, canEdit }: Props) {
       if (!response.ok || !body.state) throw new Error(body.error || "Could not update Service Status.");
       setState(body.state);
       setMessage("Service Status updated and published to the public page.");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not update Service Status.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -81,24 +77,38 @@ export function ServiceStatusManager({ initialState, canEdit }: Props) {
   }
 
   async function publishIncident() {
-    await action({ action: "incident-create", title: incidentTitle, message: incidentMessage, componentIds: incidentComponents });
+    const saved = await action({ action: "incident-create", title: incidentTitle, message: incidentMessage, componentIds: incidentComponents });
+    if (!saved) return;
     setIncidentTitle("");
     setIncidentMessage("");
     setIncidentComponents([]);
   }
 
   async function scheduleMaintenance() {
-    await action({
+    if (!maintenanceStart || !maintenanceEnd) {
+      setMessage("Choose both a maintenance start and end time.");
+      return;
+    }
+    const start = new Date(maintenanceStart);
+    const end = new Date(maintenanceEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      setMessage("Maintenance end time must be after the start time.");
+      return;
+    }
+    const saved = await action({
       action: "maintenance-create",
       title: maintenanceTitle,
       message: maintenanceMessage,
       componentIds: maintenanceComponents,
-      startAt: new Date(maintenanceStart).toISOString(),
-      endAt: new Date(maintenanceEnd).toISOString(),
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
     });
+    if (!saved) return;
     setMaintenanceTitle("");
     setMaintenanceMessage("");
     setMaintenanceComponents([]);
+    setMaintenanceStart("");
+    setMaintenanceEnd("");
   }
 
   return (
