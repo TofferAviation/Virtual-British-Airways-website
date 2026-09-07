@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { EventCategoryId, VirtualEvent } from "@/data/events";
 import { createEvent, deleteEvent, getEvents, slugifyEventTitle, updateEvent } from "@/lib/event-store";
+import type { PermissionId } from "@/lib/permissions";
 import { getStaffSession } from "@/lib/staff-auth";
+import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
 
 const categories: EventCategoryId[] = ["community", "long-haul", "challenge"];
 
@@ -73,50 +75,80 @@ function normalizeEvent(input: unknown, existingId?: string): VirtualEvent {
   };
 }
 
-async function authorize() {
+async function authorize(permission: PermissionId) {
   const session = await getStaffSession();
-  return session ? null : NextResponse.json({ error: "Staff authentication required." }, { status: 401 });
+  if (!session) return { denied: NextResponse.json({ error: "Staff authentication required." }, { status: 401 }) };
+  const state = await getStaffState();
+  const actor = state.users.find((user) => user.id === session.userId && user.status === "active");
+  if (!actor || !hasPermission(state, actor, permission)) {
+    return { denied: NextResponse.json({ error: `Permission required: ${permission}.` }, { status: 403 }) };
+  }
+  return { session, state, actor };
 }
 
 export async function GET() {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("events.view");
+  if ("denied" in auth) return auth.denied;
   return NextResponse.json({ events: await getEvents() });
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("events.create");
+  if ("denied" in auth) return auth.denied;
   try {
     const body = (await request.json()) as { event?: unknown };
     const event = normalizeEvent(body.event);
-    return NextResponse.json({ event: await createEvent(event) }, { status: 201 });
+    const created = await createEvent(event);
+    addAudit(auth.state, {
+      actorEmail: auth.actor.email,
+      actorName: auth.actor.name,
+      action: "event.created",
+      details: `Created event “${created.title}” for ${created.date}.`,
+    });
+    await saveStaffState(auth.state);
+    return NextResponse.json({ event: created }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create event." }, { status: 400 });
   }
 }
 
 export async function PUT(request: NextRequest) {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("events.edit");
+  if ("denied" in auth) return auth.denied;
   try {
     const body = (await request.json()) as { id?: string; event?: unknown };
     const id = text(body.id);
     if (!id) throw new Error("Event id is required.");
     const event = normalizeEvent(body.event, id);
-    return NextResponse.json({ event: await updateEvent(id, event) });
+    const updated = await updateEvent(id, event);
+    addAudit(auth.state, {
+      actorEmail: auth.actor.email,
+      actorName: auth.actor.name,
+      action: "event.updated",
+      details: `Updated event “${updated.title}”${updated.published ? " and left it published" : " as a draft"}.`,
+    });
+    await saveStaffState(auth.state);
+    return NextResponse.json({ event: updated });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update event." }, { status: 400 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("events.delete");
+  if ("denied" in auth) return auth.denied;
   try {
     const id = request.nextUrl.searchParams.get("id")?.trim();
     if (!id) throw new Error("Event id is required.");
+    const existing = (await getEvents()).find((event) => event.id === id);
     await deleteEvent(id);
+    addAudit(auth.state, {
+      actorEmail: auth.actor.email,
+      actorName: auth.actor.name,
+      action: "event.deleted",
+      details: `Deleted event “${existing?.title ?? id}”.`,
+    });
+    await saveStaffState(auth.state);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not delete event." }, { status: 400 });
