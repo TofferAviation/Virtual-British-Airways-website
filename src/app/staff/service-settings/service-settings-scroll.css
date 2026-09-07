@@ -1,0 +1,169 @@
+/* Service Settings viewport + internal scrolling fixes.
+   The public site uses a 1.25 CSS zoom on desktop, so the workspace dimensions
+   compensate for that while keeping the rest of the website at its normal zoom. */
+
+@media (min-width: 701px) {
+  .service-settings-page {
+    min-height: 0;
+    padding: 14px;
+    overflow: visible;
+  }
+
+  .service-workspace {
+    width: min(1232px, 76.8vw);
+    height: calc(80dvh - 120px);
+    min-height: 420px;
+    max-height: 900px;
+  }
+}
+
+.service-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.service-activity {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.service-explorer {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.service-file-tree {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.service-editor-area {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.service-tabs {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.service-breadcrumbs {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+.service-code-shell {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.service-line-numbers {
+  min-height: 0;
+}
+
+.service-code-editor {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: scroll;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.service-code-editor.wrap {
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
+.service-access-panel {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Let the access drawer itself own vertical scrolling instead of creating
+   competing nested scroll regions. */
+.service-access-list,
+.service-user-access-list {
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+/* VS-style visible scrollbars so it is obvious that each pane can scroll. */
+.service-file-tree,
+.service-tabs,
+.service-breadcrumbs,
+.service-code-editor,
+.service-access-panel {
+  scrollbar-color: #5b5b5b #1e1e1e;
+  scrollbar-width: thin;
+}
+
+.service-file-tree::-webkit-scrollbar,
+.service-tabs::-webkit-scrollbar,
+.service-breadcrumbs::-webkit-scrollbar,
+.service-code-editor::-webkit-scrollbar,
+.service-access-panel::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.service-file-tree::-webkit-scrollbar-track,
+.service-tabs::-webkit-scrollbar-track,
+.service-breadcrumbs::-webkit-scrollbar-track,
+.service-code-editor::-webkit-scrollbar-track,
+.service-access-panel::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.service-file-tree::-webkit-scrollbar-thumb,
+.service-tabs::-webkit-scrollbar-thumb,
+.service-breadcrumbs::-webkit-scrollbar-thumb,
+.service-code-editor::-webkit-scrollbar-thumb,
+.service-access-panel::-webkit-scrollbar-thumb {
+  background: #555;
+  border: 2px solid #1e1e1e;
+}
+
+.service-file-tree::-webkit-scrollbar-thumb:hover,
+.service-tabs::-webkit-scrollbar-thumb:hover,
+.service-breadcrumbs::-webkit-scrollbar-thumb:hover,
+.service-code-editor::-webkit-scrollbar-thumb:hover,
+.service-access-panel::-webkit-scrollbar-thumb:hover {
+  background: #707070;
+}
+
+@media (max-width: 700px) {
+  .service-settings-page {
+    min-height: 0;
+    height: calc(100dvh - 72px);
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .service-workspace {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .service-access-panel {
+    max-height: 100%;
+  }
+}
