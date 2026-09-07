@@ -3,6 +3,7 @@ import {
   allPermissions,
   expandPermissionDependencies,
   permissionLabel,
+  SERVICE_SOURCE_PERMISSION,
   type PermissionId,
   type StaffRoleId,
 } from "@/lib/permissions";
@@ -95,8 +96,10 @@ export async function POST(request: NextRequest) {
 
     const beforeRole = user.roleId;
     const before = permissionsForUser(state, user);
+    const existingSourceOverride = user.overrides[SERVICE_SOURCE_PERMISSION];
     user.roleId = roleId;
     user.overrides = safeOverrides(body?.overrides);
+    if (typeof existingSourceOverride === "boolean") user.overrides[SERVICE_SOURCE_PERMISSION] = existingSourceOverride;
     const after = permissionsForUser(state, user);
 
     if (beforeRole !== roleId) {
@@ -216,15 +219,16 @@ export async function POST(request: NextRequest) {
     const roleId = typeof body?.roleId === "string" ? body.roleId : "";
     const role = state.roles.find((item) => item.id === roleId);
     if (!role) return jsonError("Role not found.", 404);
-    if (role.id === "admin") return jsonError("The Admin role always keeps full access.", 409);
+    if (role.id === "admin") return jsonError("The Admin role always keeps full standard access.", 409);
+    const sourceWasGranted = role.permissions.includes(SERVICE_SOURCE_PERMISSION);
     role.name = name;
     role.description = description;
-    role.permissions = permissions;
+    role.permissions = sourceWasGranted ? [...permissions, SERVICE_SOURCE_PERMISSION] : permissions;
     addAudit(state, {
       actorEmail: actor.email,
       actorName: actor.name,
       action: "role.updated",
-      details: `Updated role ${name}; it now grants ${permissions.length} permissions.`,
+      details: `Updated role ${name}; standard permissions changed while protected Service Settings access was preserved.`,
     });
     await saveStaffState(state);
     return NextResponse.json({ role, audit: state.audit.slice(0, 30) });
