@@ -19,6 +19,7 @@ export type StaffSession = {
   email: string;
   name: string;
   roleId: StaffRoleId;
+  isMasterAdmin: boolean;
   exp: number;
 };
 
@@ -82,6 +83,7 @@ export function createStaffSessionToken(account: StaffAccount): string {
     email: account.email.trim().toLowerCase(),
     name: account.name,
     roleId: account.roleId,
+    isMasterAdmin: Boolean(account.isEnvironmentAdmin),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
   const payload = encode(JSON.stringify(session));
@@ -118,6 +120,7 @@ export async function getStaffSession() {
     email: account.email,
     name: account.name,
     roleId: account.roleId,
+    isMasterAdmin: Boolean(account.isEnvironmentAdmin),
   } satisfies StaffSession;
 }
 
