@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getEvents } from "@/lib/event-store";
+import { SERVICE_SOURCE_PERMISSION } from "@/lib/permissions";
 import { getManagedRoutes } from "@/lib/route-store";
 import { requireStaffSession } from "@/lib/staff-auth";
 import { getStaffPreferences } from "@/lib/staff-preferences";
@@ -24,6 +25,7 @@ export default async function StaffPage() {
   const canViewEvents = Boolean(account && hasPermission(state, account, "events.view"));
   const canViewRoutes = Boolean(account && hasPermission(state, account, "routes.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
+  const canAccessServiceSettings = Boolean(account && hasPermission(state, account, SERVICE_SOURCE_PERMISSION));
   const preferences = await getStaffPreferences(session.userId);
   const staffBackground = preferences.staffPageBackground;
   const [events, routes] = await Promise.all([
@@ -48,6 +50,7 @@ export default async function StaffPage() {
             <div className="staff-shell staff-breadcrumbs">
               <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
               {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
+              {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
           {canViewPermissions ? (
@@ -63,7 +66,12 @@ export default async function StaffPage() {
             </div>
           ) : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
-          <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
+          <StaffCentre
+            initialEvents={events}
+            initialRoutes={routes}
+            staffName={session.name}
+            canAccessServiceSettings={canAccessServiceSettings}
+          />
         </div>
       </main>
       <SiteFooter />
