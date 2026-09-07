@@ -2,6 +2,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  allPermissions,
   defaultRoleTemplates,
   effectivePermissions,
   type PermissionId,
@@ -76,6 +77,15 @@ function envAdmin(): StaffAccount | null {
     isEnvironmentAdmin: true,
     createdAt: nowIso(),
   };
+}
+
+export function isMasterAdminAccount(user: StaffAccount) {
+  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase();
+  return Boolean(
+    user.isEnvironmentAdmin ||
+      user.id === "env-admin" ||
+      (configuredEmail && user.email.trim().toLowerCase() === configuredEmail),
+  );
 }
 
 function normalizeState(input?: Partial<StaffState>): StaffState {
@@ -153,12 +163,14 @@ export function getRole(state: StaffState, roleId: StaffRoleId) {
 }
 
 export function permissionsForUser(state: StaffState, user: StaffAccount) {
-  if (user.isEnvironmentAdmin) return new Set<PermissionId>(defaultRoleTemplates[0].permissions);
+  if (isMasterAdminAccount(user)) return new Set<PermissionId>(allPermissions);
   return effectivePermissions(getRole(state, user.roleId), user.overrides);
 }
 
 export function hasPermission(state: StaffState, user: StaffAccount, permission: PermissionId) {
-  return user.status === "active" && permissionsForUser(state, user).has(permission);
+  if (user.status !== "active") return false;
+  if (isMasterAdminAccount(user)) return true;
+  return permissionsForUser(state, user).has(permission);
 }
 
 export async function findStaffUserByEmail(email: string) {
