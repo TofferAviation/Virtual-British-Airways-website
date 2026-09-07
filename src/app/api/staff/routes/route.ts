@@ -6,7 +6,9 @@ import {
   updateManagedRoute,
   type ManagedRoute,
 } from "@/lib/route-store";
+import type { PermissionId } from "@/lib/permissions";
 import { getStaffSession } from "@/lib/staff-auth";
+import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
 
 function text(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
@@ -50,50 +52,80 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   };
 }
 
-async function authorize() {
+async function authorize(permission: PermissionId) {
   const session = await getStaffSession();
-  return session ? null : NextResponse.json({ error: "Staff authentication required." }, { status: 401 });
+  if (!session) return { denied: NextResponse.json({ error: "Staff authentication required." }, { status: 401 }) };
+  const state = await getStaffState();
+  const actor = state.users.find((user) => user.id === session.userId && user.status === "active");
+  if (!actor || !hasPermission(state, actor, permission)) {
+    return { denied: NextResponse.json({ error: `Permission required: ${permission}.` }, { status: 403 }) };
+  }
+  return { session, state, actor };
 }
 
 export async function GET() {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("routes.view");
+  if ("denied" in auth) return auth.denied;
   return NextResponse.json({ routes: await getManagedRoutes() });
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("routes.create");
+  if ("denied" in auth) return auth.denied;
   try {
     const body = (await request.json()) as { route?: unknown };
     const route = normalizeRoute(body.route);
-    return NextResponse.json({ route: await createManagedRoute(route) }, { status: 201 });
+    const created = await createManagedRoute(route);
+    addAudit(auth.state, {
+      actorEmail: auth.actor.email,
+      actorName: auth.actor.name,
+      action: "route.created",
+      details: `Created route ${created.flightNumber} ${created.from}–${created.to}.`,
+    });
+    await saveStaffState(auth.state);
+    return NextResponse.json({ route: created }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create route." }, { status: 400 });
   }
 }
 
 export async function PUT(request: NextRequest) {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("routes.edit");
+  if ("denied" in auth) return auth.denied;
   try {
     const body = (await request.json()) as { id?: string; route?: unknown };
     const id = text(body.id);
     if (!id) throw new Error("Route id is required.");
     const route = normalizeRoute(body.route, id);
-    return NextResponse.json({ route: await updateManagedRoute(id, route) });
+    const updated = await updateManagedRoute(id, route);
+    addAudit(auth.state, {
+      actorEmail: auth.actor.email,
+      actorName: auth.actor.name,
+      action: "route.updated",
+      details: `Updated route ${updated.flightNumber} ${updated.from}–${updated.to}.`,
+    });
+    await saveStaffState(auth.state);
+    return NextResponse.json({ route: updated });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update route." }, { status: 400 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await authorize();
-  if (denied) return denied;
+  const auth = await authorize("routes.delete");
+  if ("denied" in auth) return auth.denied;
   try {
     const id = request.nextUrl.searchParams.get("id")?.trim();
     if (!id) throw new Error("Route id is required.");
+    const existing = (await getManagedRoutes()).find((route) => route.id === id);
     await deleteManagedRoute(id);
+    addAudit(auth.state, {
+      actorEmail: auth.actor.email,
+      actorName: auth.actor.name,
+      action: "route.deleted",
+      details: `Deleted route ${existing ? `${existing.flightNumber} ${existing.from}–${existing.to}` : id}.`,
+    });
+    await saveStaffState(auth.state);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not delete route." }, { status: 400 });
