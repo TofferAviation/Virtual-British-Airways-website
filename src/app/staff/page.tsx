@@ -25,6 +25,7 @@ export default async function StaffPage() {
   const canViewEvents = Boolean(account && hasPermission(state, account, "events.view"));
   const canViewRoutes = Boolean(account && hasPermission(state, account, "routes.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
+  const canViewServiceStatus = Boolean(account && hasPermission(state, account, "status.view"));
   const canAccessServiceSettings = Boolean(account && hasPermission(state, account, SERVICE_SOURCE_PERMISSION));
   const preferences = await getStaffPreferences(session.userId);
   const staffBackground = preferences.staffPageBackground;
@@ -50,6 +51,7 @@ export default async function StaffPage() {
             <div className="staff-shell staff-breadcrumbs">
               <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
               {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
+              {canViewServiceStatus ? <><span>·</span><Link href="/staff/service-status">Service status</Link></> : null}
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
@@ -78,7 +80,12 @@ export default async function StaffPage() {
             </div>
           ) : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
-          <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
+          <StaffCentre
+            initialEvents={events}
+            initialRoutes={routes}
+            staffName={session.name}
+            canViewServiceStatus={canViewServiceStatus}
+          />
         </div>
       </main>
       <SiteFooter />
