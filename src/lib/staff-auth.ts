@@ -1,16 +1,24 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { PermissionId, StaffRoleId } from "@/lib/permissions";
+import {
+  findStaffUserByEmail,
+  getStaffState,
+  hasPermission,
+  markStaffActive,
+  verifyPassword,
+  type StaffAccount,
+} from "@/lib/staff-store";
 
 export const STAFF_COOKIE_NAME = "bav_staff_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
-type StaffRole = "admin";
-
 export type StaffSession = {
+  userId: string;
   email: string;
   name: string;
-  role: StaffRole;
+  roleId: StaffRoleId;
   exp: number;
 };
 
@@ -49,27 +57,38 @@ export function isStaffAuthConfigured() {
   );
 }
 
-export function validateStaffCredentials(email: string, password: string) {
-  const configuredEmail = process.env.BAV_STAFF_EMAIL ?? "";
+export async function validateStaffCredentials(email: string, password: string): Promise<StaffAccount | null> {
+  if (!isStaffAuthConfigured()) return null;
+  const normalizedEmail = email.trim().toLowerCase();
+  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
   const configuredPassword = process.env.BAV_STAFF_PASSWORD ?? "";
 
-  if (!isStaffAuthConfigured()) return false;
+  const account = await findStaffUserByEmail(normalizedEmail);
+  if (!account || account.status !== "active") return null;
 
-  return safeEqual(email.trim().toLowerCase(), configuredEmail.trim().toLowerCase()) && safeEqual(password, configuredPassword);
+  if (account.isEnvironmentAdmin || normalizedEmail === configuredEmail) {
+    if (!safeEqual(normalizedEmail, configuredEmail) || !safeEqual(password, configuredPassword)) return null;
+  } else if (!verifyPassword(password, account.passwordHash)) {
+    return null;
+  }
+
+  await markStaffActive(account.id);
+  return account;
 }
 
-export function createStaffSessionToken(email: string): string {
+export function createStaffSessionToken(account: StaffAccount): string {
   const session: StaffSession = {
-    email: email.trim().toLowerCase(),
-    name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || "Administrator",
-    role: "admin",
+    userId: account.id,
+    email: account.email.trim().toLowerCase(),
+    name: account.name,
+    roleId: account.roleId,
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
   const payload = encode(JSON.stringify(session));
   return `${payload}.${sign(payload)}`;
 }
 
-export function verifyStaffSessionToken(token?: string | null): StaffSession | null {
+function verifySignedSessionToken(token?: string | null): StaffSession | null {
   if (!token || !isStaffAuthConfigured()) return null;
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
@@ -77,7 +96,7 @@ export function verifyStaffSessionToken(token?: string | null): StaffSession | n
   try {
     if (!safeEqual(signature, sign(payload))) return null;
     const session = JSON.parse(decode(payload)) as StaffSession;
-    if (session.role !== "admin" || !session.email || !session.exp) return null;
+    if (!session.userId || !session.email || !session.exp) return null;
     if (session.exp <= Math.floor(Date.now() / 1000)) return null;
     return session;
   } catch {
@@ -87,7 +106,35 @@ export function verifyStaffSessionToken(token?: string | null): StaffSession | n
 
 export async function getStaffSession() {
   const cookieStore = await cookies();
-  return verifyStaffSessionToken(cookieStore.get(STAFF_COOKIE_NAME)?.value);
+  const rawSession = verifySignedSessionToken(cookieStore.get(STAFF_COOKIE_NAME)?.value);
+  if (!rawSession) return null;
+
+  const state = await getStaffState();
+  const account = state.users.find((user) => user.id === rawSession.userId && user.status === "active");
+  if (!account) return null;
+
+  return {
+    ...rawSession,
+    email: account.email,
+    name: account.name,
+    roleId: account.roleId,
+  } satisfies StaffSession;
+}
+
+export async function staffHasPermission(permission: PermissionId) {
+  const session = await getStaffSession();
+  if (!session) return false;
+  const state = await getStaffState();
+  const user = state.users.find((item) => item.id === session.userId);
+  return Boolean(user && hasPermission(state, user, permission));
+}
+
+export async function requireStaffPermission(permission: PermissionId) {
+  const session = await requireStaffSession();
+  const state = await getStaffState();
+  const user = state.users.find((item) => item.id === session.userId);
+  if (!user || !hasPermission(state, user, permission)) redirect("/staff?denied=permissions");
+  return session;
 }
 
 export async function requireStaffSession() {
