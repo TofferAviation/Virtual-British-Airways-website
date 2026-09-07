@@ -19,11 +19,16 @@ export async function POST(request: NextRequest) {
   const email = body?.email?.trim() ?? "";
   const password = body?.password ?? "";
 
-  if (!email || !password || !validateStaffCredentials(email, password)) {
+  if (!email || !password) {
     return NextResponse.json({ error: "Invalid staff email or password." }, { status: 401 });
   }
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(email), staffSessionCookieOptions);
+  const account = await validateStaffCredentials(email, password);
+  if (!account) {
+    return NextResponse.json({ error: "Invalid staff email or password." }, { status: 401 });
+  }
+
+  const response = NextResponse.json({ ok: true, role: account.roleId });
+  response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), staffSessionCookieOptions);
   return response;
 }
