@@ -1,0 +1,219 @@
+html{color-scheme:light}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --ink:#e8eef7;
+  --muted:#a7b5c7;
+  --line:#2b3d53;
+  --soft:#0a1320;
+  --soft-blue:#10233a;
+  --white:#111c2a;
+  --shadow:0 10px 30px rgba(0,0,0,.3);
+}
+
+body,
+.page-shell,
+.page-heading,
+.card,
+.flight-search,
+.feature-grid,
+.feature-card,
+.cta-panel,
+.site-mega-menu,
+.site-mega-inner,
+.staff-page,
+.permissions-page,
+.staff-panel,
+.permissions-panel{
+  transition:background-color .18s ease,color .18s ease,border-color .18s ease;
+}
+
+.theme-toggle{
+  height:38px;
+  min-width:76px;
+  padding:0 11px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  border:1px solid rgba(255,255,255,.68);
+  border-radius:8px;
+  background:rgba(255,255,255,.04);
+  color:#fff;
+  font:inherit;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background .18s ease,border-color .18s ease;
+}
+.theme-toggle:hover,
+.theme-toggle:focus-visible{background:rgba(255,255,255,.11);border-color:#fff;outline:none}
+.theme-toggle-icon{font-size:16px;line-height:1}
+
+html[data-theme="dark"] body{background:#08111f;color:#e8eef7}
+html[data-theme="dark"] .page-shell,
+html[data-theme="dark"] .staff-page,
+html[data-theme="dark"] .permissions-page{background:#08111f!important;color:#e8eef7!important}
+
+html[data-theme="dark"] .page-heading,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .flight-search,
+html[data-theme="dark"] .search-tab,
+html[data-theme="dark"] .feature-grid,
+html[data-theme="dark"] .feature-card,
+html[data-theme="dark"] .cta-panel,
+html[data-theme="dark"] .site-mega-menu,
+html[data-theme="dark"] .site-mega-inner,
+html[data-theme="dark"] .site-mega-column,
+html[data-theme="dark"] .staff-breadcrumb-band,
+html[data-theme="dark"] .staff-overview-card,
+html[data-theme="dark"] .staff-overview-grid button,
+html[data-theme="dark"] .staff-quick-grid button,
+html[data-theme="dark"] .staff-quick-grid a,
+html[data-theme="dark"] .staff-panel,
+html[data-theme="dark"] .staff-tool-list button,
+html[data-theme="dark"] .staff-tool-list a,
+html[data-theme="dark"] .staff-mini-routes button,
+html[data-theme="dark"] .staff-admin-strip,
+html[data-theme="dark"] .staff-admin-actions button,
+html[data-theme="dark"] .staff-admin-actions a,
+html[data-theme="dark"] .staff-modal,
+html[data-theme="dark"] .staff-secondary-button,
+html[data-theme="dark"] .staff-edit-button,
+html[data-theme="dark"] .permissions-breadcrumb-band,
+html[data-theme="dark"] .permissions-overview,
+html[data-theme="dark"] .permissions-overview-grid button,
+html[data-theme="dark"] .permissions-panel,
+html[data-theme="dark"] .permissions-user-summary,
+html[data-theme="dark"] .permissions-group,
+html[data-theme="dark"] .permissions-role-list button,
+html[data-theme="dark"] .permissions-role-cards button,
+html[data-theme="dark"] .permissions-modal,
+html[data-theme="dark"] .permissions-secondary,
+html[data-theme="dark"] .permissions-edit,
+html[data-theme="dark"] .staff-login-card{
+  background:#111c2a!important;
+  color:#e8eef7!important;
+  border-color:#2c3f56!important;
+}
+
+html[data-theme="dark"] .staff-hero{
+  background-image:linear-gradient(90deg,rgba(12,26,44,.97) 0%,rgba(12,26,44,.88) 46%,rgba(12,26,44,.35) 74%),url('/branding/help-hero.png')!important;
+  border-color:#2c3f56!important;
+}
+html[data-theme="dark"] .permissions-hero{background:#0d1b2c!important;border-color:#2c3f56!important}
+html[data-theme="dark"] .permissions-hero-inner{
+  background-image:linear-gradient(90deg,rgba(12,26,44,.98) 0%,rgba(12,26,44,.9) 44%,rgba(12,26,44,.34) 74%),url('/branding/help-hero.png')!important;
+}
+
+html[data-theme="dark"] .page-heading h1,
+html[data-theme="dark"] .section-title,
+html[data-theme="dark"] .feature-card h3,
+html[data-theme="dark"] .cta-panel h3,
+html[data-theme="dark"] .staff-hero-copy h1,
+html[data-theme="dark"] .staff-overview-heading h2,
+html[data-theme="dark"] .staff-panel-heading h2,
+html[data-theme="dark"] .staff-admin-strip h2,
+html[data-theme="dark"] .staff-modal-heading h2,
+html[data-theme="dark"] .permissions-hero-copy h1,
+html[data-theme="dark"] .permissions-overview-head h2,
+html[data-theme="dark"] .permissions-user-summary h2,
+html[data-theme="dark"] .permissions-modal>header h2,
+html[data-theme="dark"] .staff-login-card h2{color:#f2f6fb!important}
+
+html[data-theme="dark"] .page-heading p,
+html[data-theme="dark"] .lead-copy,
+html[data-theme="dark"] .feature-card p,
+html[data-theme="dark"] .cta-panel p,
+html[data-theme="dark"] .field label,
+html[data-theme="dark"] .search-helper,
+html[data-theme="dark"] .staff-breadcrumbs,
+html[data-theme="dark"] .staff-hero-copy p,
+html[data-theme="dark"] .staff-overview-heading span,
+html[data-theme="dark"] .staff-overview-grid small,
+html[data-theme="dark"] .staff-quick-section>p,
+html[data-theme="dark"] .staff-quick-grid small,
+html[data-theme="dark"] .staff-panel-heading p,
+html[data-theme="dark"] .staff-table th,
+html[data-theme="dark"] .staff-table td,
+html[data-theme="dark"] .staff-tool-list small,
+html[data-theme="dark"] .staff-mini-routes span,
+html[data-theme="dark"] .staff-mini-routes small,
+html[data-theme="dark"] .staff-content-list small,
+html[data-theme="dark"] .staff-admin-strip p,
+html[data-theme="dark"] .staff-admin-actions small,
+html[data-theme="dark"] .staff-modal-lead,
+html[data-theme="dark"] .permissions-breadcrumbs,
+html[data-theme="dark"] .permissions-hero-copy p,
+html[data-theme="dark"] .permissions-overview-head span,
+html[data-theme="dark"] .permissions-overview-grid small,
+html[data-theme="dark"] .permissions-panel-head p,
+html[data-theme="dark"] .permissions-filters label>span,
+html[data-theme="dark"] .permissions-table th,
+html[data-theme="dark"] .permissions-table td,
+html[data-theme="dark"] .permissions-user-summary p,
+html[data-theme="dark"] .permissions-user-summary label>span,
+html[data-theme="dark"] .permissions-row>span,
+html[data-theme="dark"] .permissions-role-list small,
+html[data-theme="dark"] .permissions-role-cards small,
+html[data-theme="dark"] .permissions-audit-list time,
+html[data-theme="dark"] .permissions-audit-list span,
+html[data-theme="dark"] .permissions-audit-list em,
+html[data-theme="dark"] .permissions-no-access,
+html[data-theme="dark"] .permissions-how p,
+html[data-theme="dark"] .staff-login-form label span,
+html[data-theme="dark"] .staff-login-footnote{color:#a9b8ca!important}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .field input,
+html[data-theme="dark"] .field select,
+html[data-theme="dark"] .staff-form-grid input,
+html[data-theme="dark"] .staff-form-grid select,
+html[data-theme="dark"] .staff-form-grid textarea,
+html[data-theme="dark"] .permissions-filters input,
+html[data-theme="dark"] .permissions-filters select,
+html[data-theme="dark"] .permissions-user-summary select,
+html[data-theme="dark"] .permissions-modal-form input,
+html[data-theme="dark"] .permissions-modal-form select,
+html[data-theme="dark"] .permissions-modal-form textarea,
+html[data-theme="dark"] .staff-login-form input{
+  background:#0c1725!important;
+  color:#edf3fa!important;
+  border-color:#41536a!important;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{color:#8292a6}
+
+html[data-theme="dark"] .feature-card:hover,
+html[data-theme="dark"] .staff-overview-grid button:hover,
+html[data-theme="dark"] .staff-quick-grid button:hover,
+html[data-theme="dark"] .staff-quick-grid a:hover,
+html[data-theme="dark"] .staff-tool-list button:hover,
+html[data-theme="dark"] .staff-tool-list a:hover,
+html[data-theme="dark"] .permissions-overview-grid button:hover,
+html[data-theme="dark"] .permissions-role-list button:hover,
+html[data-theme="dark"] .permissions-role-cards button:hover{background:#162438!important}
+
+html[data-theme="dark"] .permissions-table tbody tr.selected{background:#142640!important}
+html[data-theme="dark"] .staff-message,
+html[data-theme="dark"] .staff-route-summary,
+html[data-theme="dark"] .permissions-message,
+html[data-theme="dark"] .permissions-how,
+html[data-theme="dark"] .permissions-invite-result{background:#102944!important;color:#dce9f7!important}
+html[data-theme="dark"] .permissions-admin-lock,
+html[data-theme="dark"] .staff-runtime-note{background:#2a2416!important;color:#ead9a3!important}
+html[data-theme="dark"] .staff-login-error{background:#32141b!important;color:#ffb6c2!important}
+html[data-theme="dark"] .staff-login-config-note{background:#2d2614!important;color:#f1db98!important}
+
+html[data-theme="dark"] .staff-table th,
+html[data-theme="dark"] .staff-table td,
+html[data-theme="dark"] .staff-content-list a,
+html[data-theme="dark"] .permissions-table th,
+html[data-theme="dark"] .permissions-table td,
+html[data-theme="dark"] .permissions-audit-list>div,
+html[data-theme="dark"] .permissions-invitation-list>div{border-color:#26394f!important}
+
+@media(max-width:1180px){.theme-toggle-label{display:none}.theme-toggle{min-width:40px;width:40px;padding:0}}
+@media(max-width:1040px){.theme-toggle{display:inline-flex!important}}
