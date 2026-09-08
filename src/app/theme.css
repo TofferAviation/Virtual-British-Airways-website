@@ -49,6 +49,11 @@ body,
 .theme-toggle:hover,
 .theme-toggle:focus-visible{background:rgba(255,255,255,.11);border-color:#fff;outline:none}
 .theme-toggle-icon{font-size:16px;line-height:1}
+.theme-toggle-sun,.theme-toggle-dark-label{display:none}
+html[data-theme="dark"] .theme-toggle-moon,
+html[data-theme="dark"] .theme-toggle-light-label{display:none}
+html[data-theme="dark"] .theme-toggle-sun,
+html[data-theme="dark"] .theme-toggle-dark-label{display:inline}
 
 html[data-theme="dark"] body{background:#08111f;color:#e8eef7}
 html[data-theme="dark"] .page-shell,
@@ -215,5 +220,5 @@ html[data-theme="dark"] .permissions-table td,
 html[data-theme="dark"] .permissions-audit-list>div,
 html[data-theme="dark"] .permissions-invitation-list>div{border-color:#26394f!important}
 
-@media(max-width:1180px){.theme-toggle-label{display:none}.theme-toggle{min-width:40px;width:40px;padding:0}}
+@media(max-width:1180px){.theme-toggle-label{display:none!important}.theme-toggle{min-width:40px;width:40px;padding:0}}
 @media(max-width:1040px){.theme-toggle{display:inline-flex!important}}
