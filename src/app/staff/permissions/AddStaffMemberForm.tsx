@@ -44,6 +44,10 @@ export function AddStaffMemberForm({ roles, canManageUsers }: Props) {
       setPassword("");
       setStatus("active");
       setRoleId(defaultRole?.id ?? "support");
+
+      window.setTimeout(() => {
+        window.location.assign("/staff/permissions");
+      }, 650);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not create staff account.");
     } finally {
