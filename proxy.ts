@@ -8,6 +8,11 @@ import {
 const ACCESS_PAGE = "/preview-access";
 const ACCESS_API = "/api/preview-access";
 
+function isLocalDevelopmentHost(hostname: string) {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
 function isPublicPreviewPath(pathname: string) {
   if (pathname === ACCESS_PAGE || pathname.startsWith(`${ACCESS_PAGE}/`)) return true;
   if (pathname === ACCESS_API || pathname.startsWith(`${ACCESS_API}/`)) return true;
@@ -18,6 +23,11 @@ function isPublicPreviewPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   if (!previewProtectionEnabled()) return NextResponse.next();
+
+  // The preview password exists to protect externally shared development URLs.
+  // Keep localhost completely outside the preview gate so pilot/staff auth and
+  // normal local development continue to behave exactly as they did before.
+  if (isLocalDevelopmentHost(request.nextUrl.hostname)) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
   if (isPublicPreviewPath(pathname)) return NextResponse.next();
