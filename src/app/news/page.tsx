@@ -6,6 +6,7 @@ import { newsCategoryLabels, type NewsArticle } from "@/data/news";
 import { getNewsPageSettings, type NewsMainSection, type NewsSidebarSection } from "@/lib/news-page-store";
 import { getNewsArticles } from "@/lib/news-store";
 import { getServiceStatusState, incidentStageLabel } from "@/lib/service-status-store";
+import { NewsHeroBanner } from "./NewsHeroBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -155,30 +156,17 @@ export default async function NewsPage() {
           <div className="news-shell news-breadcrumbs"><Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><strong>News & announcements</strong></div>
         </div>
 
-        {settings.heroMode === "image" ? (
-          <section className="news-hero news-hero-image-mode">
-            <img className="news-hero-banner-image" src={settings.heroImage} alt="News & announcements" style={{ objectPosition: settings.heroImagePosition }} />
-          </section>
-        ) : (
-          <section className="news-hero">
-            <div className="news-shell news-hero-inner">
-              <div className="news-hero-copy">
-                <span className="news-kicker">{settings.heroKicker}</span>
-                <h1>{settings.heroTitle}</h1>
-                <i />
-                <p>{settings.heroDescription}</p>
-              </div>
-              <div className="news-hero-latest">
-                <strong>{settings.heroSideTitle}</strong>
-                <span>{settings.heroSideText}</span>
-                <i />
-                <small>{settings.heroTagline}</small>
-              </div>
-              <div className="news-hero-network" aria-hidden="true"><span /><span /><span /><span /><span /><span /></div>
-              <div className="news-hero-tag" aria-hidden="true">People<br />Routes<br />Community<br />Opportunity</div>
-            </div>
-          </section>
-        )}
+        <NewsHeroBanner
+          mode={settings.heroMode}
+          image={settings.heroImage}
+          imagePosition={settings.heroImagePosition}
+          kicker={settings.heroKicker}
+          title={settings.heroTitle}
+          description={settings.heroDescription}
+          sideTitle={settings.heroSideTitle}
+          sideText={settings.heroSideText}
+          tagline={settings.heroTagline}
+        />
 
         <nav className="news-section-nav" aria-label="News sections">
           <div className="news-shell"><a className="active" href="#overview">{settings.navLabels.overview}</a><a href="#latest">{settings.navLabels.latest}</a><a href="#announcements">{settings.navLabels.announcements}</a><a href="#operations">{settings.navLabels.operations}</a><a href="#community">{settings.navLabels.community}</a></div>
