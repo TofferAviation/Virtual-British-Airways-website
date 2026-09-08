@@ -25,5 +25,18 @@ The project now includes:
 - Phoenix integration boundary
 - Health API endpoint
 
+## Temporary private development preview
+
+The development site can be protected with a simple temporary password gate while it is shared through a preview tunnel.
+
+Add these values to `.env.local`:
+
+```env
+BAV_PREVIEW_PROTECTION=true
+BAV_PREVIEW_PASSWORD=replace-with-a-private-test-password
+```
+
+Restart the Next.js server after changing environment values. When the website is ready for unrestricted access, set `BAV_PREVIEW_PROTECTION=false` or remove both preview variables. This gate is separate from pilot and Staff Centre authentication.
+
 ## Local setup on Windows
 not available
