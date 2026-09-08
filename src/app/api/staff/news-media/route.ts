@@ -39,11 +39,20 @@ export async function POST(request: NextRequest) {
     const extension = allowedTypes.get(upload.type)!;
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `${safeBaseName(upload.name)}-${stamp}${extension}`;
-    const directory = path.join(process.cwd(), "public", "uploads", "news");
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, filename), Buffer.from(await upload.arrayBuffer()));
+    const bytes = Buffer.from(await upload.arrayBuffer());
 
-    const url = `/uploads/news/${filename}`;
+    const persistentDirectory = path.join(process.cwd(), ".bav-data", "news-media");
+    const publicDirectory = path.join(process.cwd(), "public", "uploads", "news");
+    await Promise.all([
+      mkdir(persistentDirectory, { recursive: true }),
+      mkdir(publicDirectory, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(path.join(persistentDirectory, filename), bytes),
+      writeFile(path.join(publicDirectory, filename), bytes),
+    ]);
+
+    const url = `/api/news-media?file=${encodeURIComponent(filename)}`;
     addAudit(state, {
       actorEmail: actor.email,
       actorName: actor.name,
