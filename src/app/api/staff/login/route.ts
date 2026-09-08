@@ -6,6 +6,7 @@ import {
   staffSessionCookieOptions,
   validateStaffCredentials,
 } from "@/lib/staff-auth";
+import { requestUsesHttps } from "@/lib/request-context";
 
 export async function POST(request: NextRequest) {
   if (!isStaffAuthConfigured()) {
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
   }
 
   const response = NextResponse.json({ ok: true, role: account.roleId });
-  response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), staffSessionCookieOptions);
+  response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
+    ...staffSessionCookieOptions,
+    secure: requestUsesHttps(request),
+  });
   return response;
 }
