@@ -164,6 +164,51 @@
   opacity: .55;
 }
 
+:global(html[data-theme="dark"]) .panel {
+  background: #111c2a;
+  border-color: #2c3f56;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .24);
+}
+
+:global(html[data-theme="dark"]) .headingRow {
+  border-color: #2c3f56;
+}
+
+:global(html[data-theme="dark"]) .headingRow h2,
+:global(html[data-theme="dark"]) .headingRow code,
+:global(html[data-theme="dark"]) .grid label > span,
+:global(html[data-theme="dark"]) .permissionNote strong {
+  color: #edf3fa;
+}
+
+:global(html[data-theme="dark"]) .headingRow p,
+:global(html[data-theme="dark"]) .grid small,
+:global(html[data-theme="dark"]) .permissionNote {
+  color: #a9b8ca;
+}
+
+:global(html[data-theme="dark"]) .grid input,
+:global(html[data-theme="dark"]) .grid select,
+:global(html[data-theme="dark"]) .secondary {
+  background: #0c1725;
+  color: #edf3fa;
+  border-color: #41536a;
+}
+
+:global(html[data-theme="dark"]) .permissionNote {
+  background: #102944;
+}
+
+:global(html[data-theme="dark"]) .success {
+  background: #102a20;
+  color: #9ce0bd;
+}
+
+:global(html[data-theme="dark"]) .error {
+  background: #32141b;
+  color: #ffb6c2;
+}
+
 @media (max-width: 760px) {
   .panel {
     width: min(100% - 24px, 1180px);
