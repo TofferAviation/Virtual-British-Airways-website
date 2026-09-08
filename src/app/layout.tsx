@@ -29,6 +29,7 @@ import "./service-status.css";
 import "./news.css";
 import "./news-admin.css";
 import "./news-builder.css";
+import "./theme.css";
 
 export const metadata: Metadata = {
   title: {
@@ -39,9 +40,22 @@ export const metadata: Metadata = {
     "British Airways Virtual — immersive flight-simulation operations, schedules, pilot statistics and community tools.",
 };
 
+const themeBootScript = `
+(function () {
+  try {
+    var savedTheme = window.localStorage.getItem("bav-theme");
+    document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
+  } catch (error) {
+    document.documentElement.dataset.theme = "light";
+  }
+})();`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );
