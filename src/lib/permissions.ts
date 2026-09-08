@@ -3,6 +3,11 @@ export type PermissionId =
   | "events.create"
   | "events.edit"
   | "events.delete"
+  | "news.view"
+  | "news.create"
+  | "news.edit"
+  | "news.publish"
+  | "news.delete"
   | "routes.view"
   | "routes.create"
   | "routes.edit"
@@ -74,6 +79,18 @@ export const permissionGroups: PermissionGroup[] = [
       { id: "events.create", label: "Create events", description: "Create new virtual-airline events." },
       { id: "events.edit", label: "Edit events", description: "Change event details, routes, rewards and status." },
       { id: "events.delete", label: "Delete events", description: "Remove or cancel events.", highLevel: true },
+    ],
+  },
+  {
+    id: "news",
+    label: "News & Announcements",
+    icon: "⚑",
+    permissions: [
+      { id: "news.view", label: "View newsroom", description: "Open the staff News & Announcements manager." },
+      { id: "news.create", label: "Create news", description: "Create new newsroom stories and announcements." },
+      { id: "news.edit", label: "Edit news", description: "Edit newsroom stories, images and article content." },
+      { id: "news.publish", label: "Publish news", description: "Publish newsroom content to the public What's New page.", highLevel: true },
+      { id: "news.delete", label: "Delete news", description: "Permanently remove newsroom stories.", highLevel: true },
     ],
   },
   {
@@ -160,6 +177,10 @@ export const permissionDependencies: Partial<Record<PermissionId, PermissionId[]
   "events.create": ["events.view"],
   "events.edit": ["events.view"],
   "events.delete": ["events.view", "events.edit"],
+  "news.create": ["news.view"],
+  "news.edit": ["news.view"],
+  "news.publish": ["news.view", "news.edit"],
+  "news.delete": ["news.view", "news.edit"],
   "routes.create": ["routes.view"],
   "routes.edit": ["routes.view"],
   "routes.delete": ["routes.view", "routes.edit"],
@@ -195,6 +216,7 @@ export const defaultRoleTemplates: StaffRoleTemplate[] = [
     description: "Manage routes, schedules and operational tools.",
     permissions: [
       "events.view",
+      "news.view",
       "routes.view",
       "routes.create",
       "routes.edit",
@@ -222,7 +244,7 @@ export const defaultRoleTemplates: StaffRoleTemplate[] = [
     id: "content-editor",
     name: "Content Editor",
     description: "Edit website content, pages and media.",
-    permissions: ["content.view", "content.edit", "content.publish"],
+    permissions: ["news.view", "news.create", "news.edit", "news.publish", "content.view", "content.edit", "content.publish"],
     system: true,
   },
   {
