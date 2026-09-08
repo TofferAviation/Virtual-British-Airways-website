@@ -24,6 +24,7 @@ export default async function StaffPage() {
   const account = state.users.find((user) => user.id === session.userId);
   const canViewEvents = Boolean(account && hasPermission(state, account, "events.view"));
   const canViewRoutes = Boolean(account && hasPermission(state, account, "routes.view"));
+  const canViewNews = Boolean(account && hasPermission(state, account, "news.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
   const canViewServiceStatus = Boolean(account && hasPermission(state, account, "status.view"));
   const canAccessServiceSettings = Boolean(account && hasPermission(state, account, SERVICE_SOURCE_PERMISSION));
@@ -50,11 +51,24 @@ export default async function StaffPage() {
           <div className="staff-breadcrumb-band">
             <div className="staff-shell staff-breadcrumbs">
               <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
+              {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
               {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
               {canViewServiceStatus ? <><span>·</span><Link href="/staff/service-status">Service status</Link></> : null}
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
+          {canViewNews ? (
+            <div className="staff-shell staff-permissions-launch-wrap">
+              <Link className="staff-permissions-launch" href="/staff/news">
+                <span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span>
+                <span>
+                  <strong>News & announcements</strong>
+                  <small>Create, edit and publish the stories shown on the public What&apos;s New page.</small>
+                </span>
+                <b aria-hidden="true">→</b>
+              </Link>
+            </div>
+          ) : null}
           {canViewPermissions ? (
             <div className="staff-shell staff-permissions-launch-wrap">
               <Link className="staff-permissions-launch" href="/staff/permissions">
