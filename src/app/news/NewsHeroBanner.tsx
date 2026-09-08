@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Props = {
   mode: "image" | "editable";
@@ -15,21 +15,19 @@ type Props = {
 };
 
 export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, description, sideTitle, sideText, tagline }: Props) {
-  const [imageFailed, setImageFailed] = useState(false);
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [image]);
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const imageFailed = failedImage === image;
 
   if (mode === "image" && image && !imageFailed) {
     return (
       <section className="news-hero news-hero-image-mode">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           className="news-hero-banner-image"
           src={image}
           alt="News & announcements"
           style={{ objectPosition: imagePosition }}
-          onError={() => setImageFailed(true)}
+          onError={() => setFailedImage(image)}
         />
       </section>
     );
