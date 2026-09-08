@@ -4,14 +4,10 @@ import {
   getPreviewAccessToken,
   previewProtectionEnabled,
 } from "./src/lib/preview-access";
+import { isDirectLocalRequest, relativeRedirect } from "./src/lib/request-context";
 
 const ACCESS_PAGE = "/preview-access";
 const ACCESS_API = "/api/preview-access";
-
-function isLocalDevelopmentHost(hostname: string) {
-  const normalized = hostname.toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
-}
 
 function isPublicPreviewPath(pathname: string) {
   if (pathname === ACCESS_PAGE || pathname.startsWith(`${ACCESS_PAGE}/`)) return true;
@@ -24,10 +20,10 @@ function isPublicPreviewPath(pathname: string) {
 export async function proxy(request: NextRequest) {
   if (!previewProtectionEnabled()) return NextResponse.next();
 
-  // The preview password exists to protect externally shared development URLs.
-  // Keep localhost completely outside the preview gate so pilot/staff auth and
-  // normal local development continue to behave exactly as they did before.
-  if (isLocalDevelopmentHost(request.nextUrl.hostname)) return NextResponse.next();
+  // Only direct local browsing bypasses the preview gate. Requests that arrive
+  // through Cloudflare are still treated as external even though the origin is
+  // localhost:3000 behind the tunnel.
+  if (isDirectLocalRequest(request)) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
   if (isPublicPreviewPath(pathname)) return NextResponse.next();
@@ -39,12 +35,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const destination = request.nextUrl.clone();
-  destination.pathname = ACCESS_PAGE;
-  destination.search = "";
-  destination.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const params = new URLSearchParams({
+    next: `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  });
 
-  return NextResponse.redirect(destination);
+  // Keep the redirect origin-relative so a Cloudflare request can never leak
+  // the internal localhost origin back to the browser.
+  return relativeRedirect(`${ACCESS_PAGE}?${params.toString()}`, 307);
 }
 
 export const config = {
