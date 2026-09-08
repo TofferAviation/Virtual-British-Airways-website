@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import {
   PREVIEW_ACCESS_COOKIE,
   getPreviewAccessToken,
   getPreviewPassword,
   previewProtectionEnabled,
 } from "@/lib/preview-access";
+import { relativeRedirect, requestUsesHttps } from "@/lib/request-context";
 
 function safeNextPath(value: FormDataEntryValue | null) {
   const next = typeof value === "string" ? value : "/";
@@ -12,21 +13,14 @@ function safeNextPath(value: FormDataEntryValue | null) {
   return next;
 }
 
-function accessPageUrl(request: NextRequest, error: "invalid" | "config", nextPath: string) {
-  const url = request.nextUrl.clone();
-  url.pathname = "/preview-access";
-  url.search = "";
-  url.searchParams.set("error", error);
-  url.searchParams.set("next", nextPath);
-  return url;
+function accessPageLocation(error: "invalid" | "config", nextPath: string) {
+  const params = new URLSearchParams({ error, next: nextPath });
+  return `/preview-access?${params.toString()}`;
 }
 
 export async function POST(request: NextRequest) {
   if (!previewProtectionEnabled()) {
-    const home = request.nextUrl.clone();
-    home.pathname = "/";
-    home.search = "";
-    return NextResponse.redirect(home, 303);
+    return relativeRedirect("/", 303);
   }
 
   const formData = await request.formData();
@@ -35,23 +29,19 @@ export async function POST(request: NextRequest) {
   const configuredPassword = getPreviewPassword();
 
   if (!configuredPassword) {
-    return NextResponse.redirect(accessPageUrl(request, "config", nextPath), 303);
+    return relativeRedirect(accessPageLocation("config", nextPath), 303);
   }
 
   if (suppliedPassword !== configuredPassword) {
-    return NextResponse.redirect(accessPageUrl(request, "invalid", nextPath), 303);
+    return relativeRedirect(accessPageLocation("invalid", nextPath), 303);
   }
 
   const token = await getPreviewAccessToken(configuredPassword);
-  const destination = request.nextUrl.clone();
-  destination.pathname = nextPath.split("?", 1)[0] || "/";
-  destination.search = nextPath.includes("?") ? `?${nextPath.split("?").slice(1).join("?")}` : "";
-
-  const response = NextResponse.redirect(destination, 303);
+  const response = relativeRedirect(nextPath, 303);
   response.cookies.set(PREVIEW_ACCESS_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: requestUsesHttps(request),
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
