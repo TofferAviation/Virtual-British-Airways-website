@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+const DEFAULT_NEWS_HERO = "/branding/news-announcements-hero.png";
+
 type Props = {
   mode: "image" | "editable";
   image: string;
@@ -15,26 +17,37 @@ type Props = {
 };
 
 export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, description, sideTitle, sideText, tagline }: Props) {
-  const [failedImage, setFailedImage] = useState<string | null>(null);
-  const imageFailed = failedImage === image;
+  const [failedImages, setFailedImages] = useState<string[]>([]);
 
-  if (mode === "image" && image && !imageFailed) {
+  const preferredImage = image || DEFAULT_NEWS_HERO;
+  const activeImage = !failedImages.includes(preferredImage)
+    ? preferredImage
+    : preferredImage !== DEFAULT_NEWS_HERO && !failedImages.includes(DEFAULT_NEWS_HERO)
+      ? DEFAULT_NEWS_HERO
+      : "";
+
+  const effectivePosition = activeImage === DEFAULT_NEWS_HERO && imagePosition === "center center"
+    ? "center 55%"
+    : imagePosition || "center 55%";
+
+  if (mode === "image" && activeImage) {
     return (
-      <section className="news-hero news-hero-image-mode">
+      <section className="news-hero news-hero-image-mode" aria-label="News & announcements">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           className="news-hero-banner-image"
-          src={image}
-          alt="News & announcements"
-          style={{ objectPosition: imagePosition }}
-          onError={() => setFailedImage(image)}
+          src={activeImage}
+          alt=""
+          aria-hidden="true"
+          style={{ objectPosition: effectivePosition }}
+          onError={() => setFailedImages((current) => current.includes(activeImage) ? current : [...current, activeImage])}
         />
       </section>
     );
   }
 
   return (
-    <section className={`news-hero${mode === "image" && imageFailed ? " news-hero-fallback" : ""}`}>
+    <section className={`news-hero${mode === "image" ? " news-hero-fallback" : ""}`}>
       <div className="news-shell news-hero-inner">
         <div className="news-hero-copy">
           <span className="news-kicker">{kicker}</span>
