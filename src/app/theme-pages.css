@@ -1,0 +1,410 @@
+/* Repository-wide dark mode coverage.
+   This file is loaded after all page-specific styles so light mode remains
+   untouched while dark mode consistently covers public, pilot and staff pages. */
+
+html[data-theme="dark"]{
+  --bav-dark-bg:#08111f;
+  --bav-dark-surface:#111c2a;
+  --bav-dark-surface-2:#0d1826;
+  --bav-dark-surface-3:#162438;
+  --bav-dark-line:#2c3f56;
+  --bav-dark-text:#e8eef7;
+  --bav-dark-heading:#f4f7fb;
+  --bav-dark-muted:#a7b5c7;
+  --bav-dark-link:#71b8ff;
+}
+
+/* Page roots */
+html[data-theme="dark"] body,
+html[data-theme="dark"] main,
+html[data-theme="dark"] .page-shell,
+html[data-theme="dark"] .login-page,
+html[data-theme="dark"] .account-page,
+html[data-theme="dark"] .account-v2-page,
+html[data-theme="dark"] .account-v2-main,
+html[data-theme="dark"] .discover-page,
+html[data-theme="dark"] .ow-page,
+html[data-theme="dark"] .fleet-showcase-page,
+html[data-theme="dark"] .about-va-page,
+html[data-theme="dark"] .vap-page,
+html[data-theme="dark"] .tp-page,
+html[data-theme="dark"] .aya-page,
+html[data-theme="dark"] .events-layout,
+html[data-theme="dark"] .events-page,
+html[data-theme="dark"] .hc-page,
+html[data-theme="dark"] .status-page,
+html[data-theme="dark"] .status-admin-page,
+html[data-theme="dark"] .news-page,
+html[data-theme="dark"] .news-article-page,
+html[data-theme="dark"] .staff-page,
+html[data-theme="dark"] .permissions-page{
+  background-color:var(--bav-dark-bg)!important;
+  color:var(--bav-dark-text)!important;
+}
+
+/* Common surface names used throughout the project. Background-color is used
+   instead of background so image/hero artwork is preserved. */
+html[data-theme="dark"] :where(
+  .card,
+  [class$="-card"],
+  [class*="-card "],
+  [class$="-panel"],
+  [class*="-panel "],
+  [class$="-modal"],
+  [class*="-modal "],
+  [class$="-table"],
+  [class*="-table "],
+  [class$="-box"],
+  [class*="-box "]
+){
+  background-color:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+  color:var(--bav-dark-text);
+}
+
+html[data-theme="dark"] :where(
+  [class$="-tabs"],
+  [class*="-tabs "],
+  [class$="-section-nav"],
+  [class*="-section-nav "],
+  [class$="-breadcrumb-band"],
+  [class*="-breadcrumb-band "],
+  [class$="-breadcrumb-row"],
+  [class*="-breadcrumb-row "]
+){
+  background-color:var(--bav-dark-surface-2)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+
+/* Typography */
+html[data-theme="dark"] main :where(h1,h2,h3,h4),
+html[data-theme="dark"] .login-page :where(h1,h2,h3,h4),
+html[data-theme="dark"] .account-v2-page :where(h1,h2,h3,h4){color:var(--bav-dark-heading)!important}
+
+html[data-theme="dark"] main :where(p,small,time),
+html[data-theme="dark"] .login-page :where(p,small,time),
+html[data-theme="dark"] .account-v2-page :where(p,small,time){color:var(--bav-dark-muted)}
+
+html[data-theme="dark"] main a:not(.button):not([class*="primary"]),
+html[data-theme="dark"] .login-page a:not(.button),
+html[data-theme="dark"] .account-v2-page a:not(.button){color:var(--bav-dark-link)}
+
+html[data-theme="dark"] :where(input,select,textarea){
+  background-color:#0b1624!important;
+  border-color:#41536a!important;
+  color:#edf3fa!important;
+}
+html[data-theme="dark"] :where(input,textarea)::placeholder{color:#8192a8!important}
+html[data-theme="dark"] option{background:#0b1624;color:#edf3fa}
+
+/* Preserve white text on photographic/brand heroes. */
+html[data-theme="dark"] :where(
+  .home-hero,
+  .account-hero,
+  .account-v2-hero,
+  .events-featured,
+  .news-promo-card,
+  .about-va-cta,
+  .ow-cta,
+  .staff-login-page
+) :where(h1,h2,h3,h4,p,small,strong,span){color:#fff!important}
+
+/* Home / booking / generic pages */
+html[data-theme="dark"] .content-section{color:var(--bav-dark-text)}
+html[data-theme="dark"] .flight-search,
+html[data-theme="dark"] .search-tab,
+html[data-theme="dark"] .booking-steps,
+html[data-theme="dark"] .booking-step,
+html[data-theme="dark"] .result-flight,
+html[data-theme="dark"] .empty-state,
+html[data-theme="dark"] .network-toolbar,
+html[data-theme="dark"] .country-card,
+html[data-theme="dark"] .fleet-card,
+html[data-theme="dark"] .help-card,
+html[data-theme="dark"] .support-cta{
+  background-color:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+html[data-theme="dark"] .integration-note{background:#102944!important;color:#cfe1f3!important;border-color:#3e82c7!important}
+html[data-theme="dark"] .country-airports a,
+html[data-theme="dark"] .flight-history-head,
+html[data-theme="dark"] .flight-history-row,
+html[data-theme="dark"] .profile-list div{border-color:#26394f!important}
+
+/* Pilot login / account */
+html[data-theme="dark"] .login-main{background-color:var(--bav-dark-bg)!important}
+html[data-theme="dark"] .login-copy-block h1,
+html[data-theme="dark"] .login-copy-block h2{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .login-copy-block ul,
+html[data-theme="dark"] .login-security-copy{color:var(--bav-dark-muted)!important}
+html[data-theme="dark"] .account-tabs,
+html[data-theme="dark"] .account-stat-grid,
+html[data-theme="dark"] .account-panel{
+  background:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+html[data-theme="dark"] .account-stat-grid strong,
+html[data-theme="dark"] .account-panel h2,
+html[data-theme="dark"] .assignment-route,
+html[data-theme="dark"] .huge-points,
+html[data-theme="dark"] .flight-history-row strong,
+html[data-theme="dark"] .profile-list strong{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .tier-progress{background:#26384c!important}
+
+/* Compact pilot account */
+html[data-theme="dark"] .account-v2-tabs,
+html[data-theme="dark"] .account-v2-points article,
+html[data-theme="dark"] .account-v2-stat,
+html[data-theme="dark"] .account-v2-card{
+  background:var(--bav-dark-surface)!important;
+  color:var(--bav-dark-text)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+html[data-theme="dark"] .account-v2-main h2,
+html[data-theme="dark"] .account-v2-stat-value,
+html[data-theme="dark"] .account-v2-card h3,
+html[data-theme="dark"] .account-v2-flight-row strong,
+html[data-theme="dark"] .account-v2-assignment>strong{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .account-v2-flight-row{color:#c8d5e4!important;border-color:#26394f!important}
+html[data-theme="dark"] .account-v2-tier-box{border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .account-v2-progress{background:#26384c!important}
+
+/* Discover */
+html[data-theme="dark"] .discover-top,
+html[data-theme="dark"] .discover-section.alt,
+html[data-theme="dark"] .discover-operation,
+html[data-theme="dark"] .discover-more,
+html[data-theme="dark"] .discover-note,
+html[data-theme="dark"] .discover-why{background:var(--bav-dark-bg)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .discover-destination-card,
+html[data-theme="dark"] .discover-benefit,
+html[data-theme="dark"] .discover-operation-card,
+html[data-theme="dark"] .discover-country-card{
+  background:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+  color:var(--bav-dark-text)!important;
+}
+html[data-theme="dark"] .discover-top h1,
+html[data-theme="dark"] .discover-heading-row h2,
+html[data-theme="dark"] .discover-section>div>h2,
+html[data-theme="dark"] .discover-card-copy h3,
+html[data-theme="dark"] .discover-more h2{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .discover-card-copy p,
+html[data-theme="dark"] .discover-benefit p,
+html[data-theme="dark"] .discover-operation-card p,
+html[data-theme="dark"] .discover-note p{color:var(--bav-dark-muted)!important}
+
+/* oneWorld */
+html[data-theme="dark"] .ow-breadcrumb-band,
+html[data-theme="dark"] .ow-breadcrumbs,
+html[data-theme="dark"] .ow-section-nav,
+html[data-theme="dark"] .ow-content,
+html[data-theme="dark"] .ow-benefits,
+html[data-theme="dark"] .ow-benefits .ow-content,
+html[data-theme="dark"] .ow-members{background:var(--bav-dark-bg)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .ow-notice,
+html[data-theme="dark"] .ow-benefit-grid article,
+html[data-theme="dark"] .ow-member-card{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .ow-member-logo{background:#fff!important}
+html[data-theme="dark"] .ow-content h2,
+html[data-theme="dark"] .ow-benefits h2,
+html[data-theme="dark"] .ow-member-card h3{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .ow-intro-grid>div>p,
+html[data-theme="dark"] .ow-notice p,
+html[data-theme="dark"] .ow-benefit-grid p,
+html[data-theme="dark"] .ow-members-lead,
+html[data-theme="dark"] .ow-member-card p{color:var(--bav-dark-muted)!important}
+
+/* Fleet */
+html[data-theme="dark"] .fleet-showcase-page{background:var(--bav-dark-bg)!important}
+html[data-theme="dark"] .fleet-showcase-page :where([class*="fleet-"][class*="card"],[class*="fleet-"][class*="panel"]){
+  background-color:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+
+/* About the VA */
+html[data-theme="dark"] .about-va-breadcrumbs,
+html[data-theme="dark"] .about-va-section-nav,
+html[data-theme="dark"] .about-va-section-nav a,
+html[data-theme="dark"] .about-va-content{background:var(--bav-dark-bg)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .about-va-features,
+html[data-theme="dark"] .about-va-future{background:#0d1826!important}
+html[data-theme="dark"] .about-va-notice,
+html[data-theme="dark"] .about-va-feature-grid article,
+html[data-theme="dark"] .about-va-future-grid article{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .about-va-roadmap-list,
+html[data-theme="dark"] .about-va-roadmap-list article,
+html[data-theme="dark"] .about-va-future-grid{border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .about-va-status-planned,
+html[data-theme="dark"] .about-va-status-later{background:#26384c!important;color:#cfe0f3!important}
+
+/* VA Points / Tier Points */
+html[data-theme="dark"] .vap-breadcrumbs,
+html[data-theme="dark"] .vap-section-nav{background:var(--bav-dark-bg)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .vap-hero,
+html[data-theme="dark"] .tp-page .vap-hero{background:linear-gradient(103deg,#0b1726 0%,#10233a 54%,#13304c 100%)!important}
+html[data-theme="dark"] .vap-earn-status,
+html[data-theme="dark"] .tp-page .vap-earn-status{background:linear-gradient(100deg,#0b1726,#10233a 58%,#132a43)!important}
+html[data-theme="dark"] .vap-points-table,
+html[data-theme="dark"] .vap-status-card,
+html[data-theme="dark"] .vap-reward-grid article{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .vap-points-table>div,
+html[data-theme="dark"] .vap-status-row,
+html[data-theme="dark"] .vap-steps article{border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .vap-current-box{background:#102944!important}
+html[data-theme="dark"] .vap-progress{background:#26384c!important}
+html[data-theme="dark"] .vap-badge-outer{fill:rgba(12,28,46,.68)!important;stroke:#39536f!important}
+html[data-theme="dark"] .vap-badge-inner{fill:rgba(17,34,53,.92)!important;stroke:#45617f!important}
+html[data-theme="dark"] .vap-badge-text,
+html[data-theme="dark"] .vap-plane,
+html[data-theme="dark"] .vap-hero-tag{fill:#edf4fb!important}
+
+/* About your account */
+html[data-theme="dark"] .aya-breadcrumb-band,
+html[data-theme="dark"] .aya-banner-hero,
+html[data-theme="dark"] .aya-how,
+html[data-theme="dark"] .aya-reasons{background:var(--bav-dark-bg)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .aya-essentials{background:linear-gradient(90deg,#0b1726,#10233a 54%,#0d1d30)!important}
+html[data-theme="dark"] .aya-essential-card{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .aya-disclaimer{background:linear-gradient(90deg,#102944,#11273e)!important;color:var(--bav-dark-text)!important}
+html[data-theme="dark"] .aya-step:not(:last-child):after,
+html[data-theme="dark"] .aya-reason:not(:last-child):after{background:var(--bav-dark-line)!important}
+html[data-theme="dark"] .aya-step h3,
+html[data-theme="dark"] .aya-essential-card h3,
+html[data-theme="dark"] .aya-reason h3{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .aya-step p,
+html[data-theme="dark"] .aya-essential-card p,
+html[data-theme="dark"] .aya-reason p,
+html[data-theme="dark"] .aya-disclaimer p{color:var(--bav-dark-muted)!important}
+
+/* Events */
+html[data-theme="dark"] .events-breadcrumb-row,
+html[data-theme="dark"] .events-categories-section,
+html[data-theme="dark"] .events-upcoming-section,
+html[data-theme="dark"] .events-rewards-section{background:var(--bav-dark-bg)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .events-hero-band,
+html[data-theme="dark"] .events-highlights-band{background:#0d1b2c!important}
+html[data-theme="dark"] .events-calendar-card,
+html[data-theme="dark"] .events-category-card,
+html[data-theme="dark"] .events-highlight-card,
+html[data-theme="dark"] .events-upcoming-card,
+html[data-theme="dark"] .events-reward-card{background-color:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important;color:var(--bav-dark-text)!important}
+html[data-theme="dark"] .events-calendar-header button:hover,
+html[data-theme="dark"] .events-calendar-days button:hover,
+html[data-theme="dark"] .events-category-card:hover,
+html[data-theme="dark"] .events-category-card.active{background:#162438!important}
+html[data-theme="dark"] .events-month-summary,
+html[data-theme="dark"] .events-selected-date,
+html[data-theme="dark"] .events-summary-stat,
+html[data-theme="dark"] .events-month-list{border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .events-circle-icon,
+html[data-theme="dark"] .events-category-icon{background:#102944!important;color:#71b8ff!important}
+
+/* Help centre */
+html[data-theme="dark"] .hc-hero{
+  background:linear-gradient(90deg,rgba(8,17,31,.98) 0%,rgba(8,17,31,.94) 42%,rgba(8,17,31,.55) 72%,rgba(8,17,31,.2) 100%),radial-gradient(circle at 78% 34%,rgba(39,72,108,.65),transparent 21%),linear-gradient(160deg,#10233a,#132b44 58%,#2b2630 100%)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+html[data-theme="dark"] .hc-hero:after{opacity:.35}
+html[data-theme="dark"] .hc-search,
+html[data-theme="dark"] .hc-quick-card,
+html[data-theme="dark"] .hc-topic-card,
+html[data-theme="dark"] .hc-panel,
+html[data-theme="dark"] .hc-return{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .hc-quick-card:hover,
+html[data-theme="dark"] .hc-topic-card:hover{background:#162438!important;border-color:#45617f!important}
+html[data-theme="dark"] .hc-popular button,
+html[data-theme="dark"] .hc-icon{background:#102944!important;color:#71b8ff!important}
+html[data-theme="dark"] .hc-faq-list details,
+html[data-theme="dark"] .hc-steps article:not(:last-child):after,
+html[data-theme="dark"] .hc-support-options>div{border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .hc-faq-list summary{color:#dce8f6!important}
+
+/* Service status — public and staff */
+html[data-theme="dark"] .status-hero{background:linear-gradient(105deg,#0b1726 0%,#10233a 48%,#15334f 100%)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .status-overall{background:#10261f!important;border-color:#28553f!important}
+html[data-theme="dark"] .status-overall.status-degraded{background:#2a2416!important;border-color:#5d4c22!important}
+html[data-theme="dark"] .status-overall.status-partial_outage,
+html[data-theme="dark"] .status-overall.status-major_outage{background:#321820!important;border-color:#67313c!important}
+html[data-theme="dark"] .status-overall.status-maintenance{background:#102944!important;border-color:#35587b!important}
+html[data-theme="dark"] .status-core-card,
+html[data-theme="dark"] .status-panel,
+html[data-theme="dark"] .status-side-card,
+html[data-theme="dark"] .status-uptime-panel,
+html[data-theme="dark"] .status-admin-panel,
+html[data-theme="dark"] .status-admin-list article,
+html[data-theme="dark"] .status-admin-component{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .status-table th{background:#0d1826!important;color:#a9b8ca!important}
+html[data-theme="dark"] .status-table td,
+html[data-theme="dark"] .status-incident,
+html[data-theme="dark"] .status-maintenance-card article,
+html[data-theme="dark"] .status-uptime-item{border-color:#26394f!important}
+html[data-theme="dark"] .status-incident details div{background:#0d1826!important}
+html[data-theme="dark"] .status-admin-hero{background:linear-gradient(100deg,#10233a,#15334f)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .status-admin-button.secondary{background:var(--bav-dark-surface)!important;color:#71b8ff!important;border-color:#45617f!important}
+
+/* Newsroom / article pages */
+html[data-theme="dark"] .news-breadcrumb-band,
+html[data-theme="dark"] .news-section-nav{background:var(--bav-dark-surface-2)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .news-hero{background:linear-gradient(90deg,#0b1726 0%,#10233a 47%,#15334f 100%)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .news-hero::after{background:linear-gradient(90deg,rgba(8,17,31,.98) 0%,rgba(8,17,31,.9) 38%,rgba(8,17,31,.35) 64%,rgba(8,17,31,.12) 100%),url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=2200&q=88') right 58%/58% auto no-repeat!important;opacity:.95!important}
+html[data-theme="dark"] .news-featured-card,
+html[data-theme="dark"] .news-secondary-card,
+html[data-theme="dark"] .news-latest-panel,
+html[data-theme="dark"] .news-side-card,
+html[data-theme="dark"] .news-empty,
+html[data-theme="dark"] .news-article-body{background:var(--bav-dark-surface)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .news-latest-grid article,
+html[data-theme="dark"] .news-side-heading,
+html[data-theme="dark"] .news-announcement-list article,
+html[data-theme="dark"] .news-quick-links>a{border-color:#26394f!important}
+
+/* Staff source editor / newsroom builder / access pages use several independent
+   class namespaces. These catch the remaining white administrative surfaces. */
+html[data-theme="dark"] :where(
+  [class^="service-settings-"],
+  [class*=" service-settings-"],
+  [class^="news-admin-"],
+  [class*=" news-admin-"],
+  [class^="news-builder-"],
+  [class*=" news-builder-"],
+  [class^="staff-access-"],
+  [class*=" staff-access-"]
+):where([class*="page"],[class*="panel"],[class*="card"],[class*="modal"],[class*="toolbar"],[class*="sidebar"],[class*="editor"],[class*="form"],[class*="list"]){
+  background-color:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+  color:var(--bav-dark-text)!important;
+}
+html[data-theme="dark"] :where(
+  [class^="service-settings-"],
+  [class*=" service-settings-"],
+  [class^="news-admin-"],
+  [class*=" news-admin-"],
+  [class^="news-builder-"],
+  [class*=" news-builder-"],
+  [class^="staff-access-"],
+  [class*=" staff-access-"]
+) :where(h1,h2,h3,h4){color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] :where(
+  [class^="service-settings-"],
+  [class*=" service-settings-"],
+  [class^="news-admin-"],
+  [class*=" news-admin-"],
+  [class^="news-builder-"],
+  [class*=" news-builder-"],
+  [class^="staff-access-"],
+  [class*=" staff-access-"]
+) :where(p,small,label){color:var(--bav-dark-muted)}
+
+/* Tables, dividers and hover states shared by pages not otherwise named above. */
+html[data-theme="dark"] table{color:var(--bav-dark-text)}
+html[data-theme="dark"] th{color:#b8c6d7}
+html[data-theme="dark"] td{border-color:#26394f}
+html[data-theme="dark"] hr{border-color:var(--bav-dark-line)}
+html[data-theme="dark"] :where(.button-outline,.button-light){background:#111c2a!important;color:#8fc7ff!important;border-color:#45617f!important}
+html[data-theme="dark"] :where(.button-outline,.button-light):hover{background:#162438!important}
+
+/* Keep image-only banner canvases neutral instead of tinting their artwork. */
+html[data-theme="dark"] .about-va-banner,
+html[data-theme="dark"] .aya-banner-frame,
+html[data-theme="dark"] .ow-hero-art{background-color:#0d1826!important}
