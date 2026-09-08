@@ -33,15 +33,17 @@ export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, desc
   if (mode === "image" && activeImage) {
     return (
       <section className="news-hero news-hero-image-mode" aria-label="News & announcements">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          className="news-hero-banner-image"
-          src={activeImage}
-          alt=""
-          aria-hidden="true"
-          style={{ objectPosition: effectivePosition }}
-          onError={() => setFailedImages((current) => current.includes(activeImage) ? current : [...current, activeImage])}
-        />
+        <div className="news-shell news-hero-image-shell">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="news-hero-banner-image"
+            src={activeImage}
+            alt=""
+            aria-hidden="true"
+            style={{ objectPosition: effectivePosition }}
+            onError={() => setFailedImages((current) => current.includes(activeImage) ? current : [...current, activeImage])}
+          />
+        </div>
       </section>
     );
   }
