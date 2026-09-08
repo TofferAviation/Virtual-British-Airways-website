@@ -28,6 +28,7 @@ import "./service-settings.css";
 import "./service-status.css";
 import "./news.css";
 import "./news-admin.css";
+import "./news-builder.css";
 
 export const metadata: Metadata = {
   title: {
