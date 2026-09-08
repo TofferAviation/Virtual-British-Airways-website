@@ -43,7 +43,7 @@ export type NewsPageSettings = {
 export const defaultNewsPageSettings: NewsPageSettings = {
   heroMode: "image",
   heroImage: "/branding/news-announcements-hero.png",
-  heroImagePosition: "center center",
+  heroImagePosition: "center 55%",
   heroKicker: "Newsroom",
   heroTitle: "News & announcements",
   heroDescription: "The latest virtual airline updates, service announcements, event news, route releases and community information from British Airways Virtual.",
@@ -117,12 +117,18 @@ export function normalizeNewsPageSettings(input?: Partial<NewsPageSettings>): Ne
       }))
     : defaultNewsPageSettings.quickLinks;
 
+  const normalizedHeroImage = normalizeNewsMediaUrl(raw.heroImage, defaultNewsPageSettings.heroImage);
+  const rawHeroPosition = typeof raw.heroImagePosition === "string" && raw.heroImagePosition.trim() ? raw.heroImagePosition.trim() : "";
+  const heroImagePosition = normalizedHeroImage === defaultNewsPageSettings.heroImage && (!rawHeroPosition || rawHeroPosition === "center center")
+    ? defaultNewsPageSettings.heroImagePosition
+    : rawHeroPosition || defaultNewsPageSettings.heroImagePosition;
+
   return {
     ...defaultNewsPageSettings,
     ...raw,
     heroMode: raw.heroMode === "editable" ? "editable" : "image",
-    heroImage: normalizeNewsMediaUrl(raw.heroImage, defaultNewsPageSettings.heroImage),
-    heroImagePosition: typeof raw.heroImagePosition === "string" && raw.heroImagePosition.trim() ? raw.heroImagePosition.trim() : "center center",
+    heroImage: normalizedHeroImage,
+    heroImagePosition,
     mainSections,
     sidebarSections,
     visibility: { ...defaultNewsPageSettings.visibility, ...(raw.visibility ?? {}) },
