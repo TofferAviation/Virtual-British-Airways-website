@@ -93,6 +93,16 @@ function uniqueOrder<T extends string>(value: unknown, allowed: readonly T[], fa
   return result.length ? [...new Set(result)] : [...fallback];
 }
 
+function normalizeNewsMediaUrl(value: unknown, fallback: string) {
+  const url = typeof value === "string" && value.trim() ? value.trim() : fallback;
+  const legacyPrefix = "/uploads/news/";
+  if (url.startsWith(legacyPrefix)) {
+    const filename = url.slice(legacyPrefix.length).split(/[?#]/, 1)[0];
+    return filename ? `/api/news-media?file=${encodeURIComponent(filename)}` : fallback;
+  }
+  return url;
+}
+
 export function normalizeNewsPageSettings(input?: Partial<NewsPageSettings>): NewsPageSettings {
   const raw = input ?? {};
   const mainSections = uniqueOrder(raw.mainSections, ["featured", "secondary", "latest"] as const, defaultNewsPageSettings.mainSections);
@@ -111,13 +121,14 @@ export function normalizeNewsPageSettings(input?: Partial<NewsPageSettings>): Ne
     ...defaultNewsPageSettings,
     ...raw,
     heroMode: raw.heroMode === "editable" ? "editable" : "image",
-    heroImage: typeof raw.heroImage === "string" && raw.heroImage.trim() ? raw.heroImage.trim() : defaultNewsPageSettings.heroImage,
+    heroImage: normalizeNewsMediaUrl(raw.heroImage, defaultNewsPageSettings.heroImage),
     heroImagePosition: typeof raw.heroImagePosition === "string" && raw.heroImagePosition.trim() ? raw.heroImagePosition.trim() : "center center",
     mainSections,
     sidebarSections,
     visibility: { ...defaultNewsPageSettings.visibility, ...(raw.visibility ?? {}) },
     navLabels: { ...defaultNewsPageSettings.navLabels, ...(raw.navLabels ?? {}) },
     quickLinks,
+    promoImage: normalizeNewsMediaUrl(raw.promoImage, defaultNewsPageSettings.promoImage),
   };
 }
 
