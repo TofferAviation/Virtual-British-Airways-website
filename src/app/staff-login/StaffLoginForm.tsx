@@ -1,10 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 
 export function StaffLoginForm({ configured }: { configured: boolean }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -18,6 +16,8 @@ export function StaffLoginForm({ configured }: { configured: boolean }) {
       const response = await fetch("/api/staff/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({ email, password }),
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -25,8 +25,12 @@ export function StaffLoginForm({ configured }: { configured: boolean }) {
         setError(body.error || "Could not sign in.");
         return;
       }
-      router.replace("/staff");
-      router.refresh();
+
+      // Staff authentication changes an HttpOnly cookie. Use a full document
+      // navigation instead of the App Router cache so the very next /staff
+      // request is guaranteed to include the newly issued staff session.
+      window.location.replace("/staff");
+      return;
     } catch {
       setError("Could not reach the staff login service.");
     } finally {
