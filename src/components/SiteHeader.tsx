@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { BrandLogo } from "@/components/BrandLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getStaffSession } from "@/lib/staff-auth";
 
 function SearchIcon() {
@@ -126,6 +127,7 @@ export async function SiteHeader() {
       </Link>
 
       <div className="header-actions header-actions-right">
+        <ThemeToggle />
         {staffSession ? (
           <>
             <Link className="header-user-link" href="/staff">
