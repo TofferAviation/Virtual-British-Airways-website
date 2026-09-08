@@ -26,6 +26,8 @@ import "./staff-permissions.css";
 import "./staff-access.css";
 import "./service-settings.css";
 import "./service-status.css";
+import "./news.css";
+import "./news-admin.css";
 
 export const metadata: Metadata = {
   title: {
