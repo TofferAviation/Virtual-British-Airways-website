@@ -59,7 +59,7 @@ export async function SiteHeader() {
                 <Link href="/fleet">Our fleet</Link>
                 <Link href="/destinations">Our network</Link>
                 <Link href="/oneworld">Partners and alliances</Link>
-                <Link href="/help">What&apos;s new</Link>
+                <Link href="/news">What&apos;s new</Link>
                 <Link href="/help">Operations information</Link>
               </div>
 
@@ -96,7 +96,7 @@ export async function SiteHeader() {
                 <Link href="/events">Events</Link>
                 <Link href="/help">Tours</Link>
                 <Link href="/help">Discord</Link>
-                <Link href="/help">News</Link>
+                <Link href="/news">News</Link>
               </div>
 
               <div className="site-mega-column">
