@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { requireStaffPermission } from "@/lib/staff-auth";
 import { getStaffState, permissionsForUser } from "@/lib/staff-store";
+import { AddStaffMemberForm } from "./AddStaffMemberForm";
 import { UserPermissionsClient } from "./UserPermissionsClient";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export default async function StaffPermissionsPage() {
     return invitation;
   });
   const currentPermissions = [...permissionsForUser(state, currentUser)];
+  const canManageUsers = currentPermissions.includes("users.roles");
 
   return (
     <>
@@ -36,6 +38,7 @@ export default async function StaffPermissionsPage() {
             <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><Link href="/staff">Manage</Link><span>›</span><strong>User permissions</strong>
           </div>
         </div>
+        <AddStaffMemberForm roles={state.roles} canManageUsers={canManageUsers} />
         <UserPermissionsClient
           initialUsers={safeUsers}
           initialRoles={state.roles}
