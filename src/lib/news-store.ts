@@ -5,8 +5,21 @@ import { seedNewsArticles, type NewsArticle } from "@/data/news";
 const dataDir = path.join(process.cwd(), ".bav-data");
 const newsFile = path.join(dataDir, "news.json");
 
+function normalizeNewsMediaUrl(value: string) {
+  const legacyPrefix = "/uploads/news/";
+  if (value.startsWith(legacyPrefix)) {
+    const filename = value.slice(legacyPrefix.length).split(/[?#]/, 1)[0];
+    return filename ? `/api/news-media?file=${encodeURIComponent(filename)}` : value;
+  }
+  return value;
+}
+
+function normalizeArticle(article: NewsArticle): NewsArticle {
+  return { ...article, image: normalizeNewsMediaUrl(article.image || "") };
+}
+
 function sortNews(items: NewsArticle[]) {
-  return [...items].sort((a, b) => `${b.date}${b.id}`.localeCompare(`${a.date}${a.id}`));
+  return [...items].map(normalizeArticle).sort((a, b) => `${b.date}${b.id}`.localeCompare(`${a.date}${a.id}`));
 }
 
 async function ensureDataDir() {
@@ -36,9 +49,10 @@ export async function createNewsArticle(article: NewsArticle) {
   if (items.some((item) => item.id === article.id || item.slug === article.slug)) {
     throw new Error("A news article with this id or URL slug already exists.");
   }
-  items.push(article);
+  const normalized = normalizeArticle(article);
+  items.push(normalized);
   await saveNewsArticles(items);
-  return article;
+  return normalized;
 }
 
 export async function updateNewsArticle(id: string, article: NewsArticle) {
@@ -48,7 +62,7 @@ export async function updateNewsArticle(id: string, article: NewsArticle) {
   if (items.some((item) => item.id !== id && item.slug === article.slug)) {
     throw new Error("Another news article already uses that URL slug.");
   }
-  items[index] = { ...article, id };
+  items[index] = normalizeArticle({ ...article, id });
   await saveNewsArticles(items);
   return items[index];
 }
