@@ -30,6 +30,7 @@ import "./news.css";
 import "./news-admin.css";
 import "./news-builder.css";
 import "./theme.css";
+import "./theme-pages.css";
 
 export const metadata: Metadata = {
   title: {
