@@ -1,12 +1,13 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { automaticPilotRank, isPilotRank, type PilotRank } from "@/lib/pilot-ranks";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 1;
+  version: 2;
   nextPilotNumber: number;
   pilots: PilotAccount[];
 };
@@ -20,7 +21,8 @@ export type PilotAccount = {
   status: "active" | "suspended";
   createdAt: string;
   lastLoginAt: string | null;
-  rank: string;
+  rank: PilotRank;
+  rankOverride: PilotRank | null;
   hub: string;
   tier: string;
   points: number;
@@ -38,22 +40,52 @@ export type PilotAccount = {
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash">;
 
 function emptyState(): PilotState {
-  return { version: 1, nextPilotNumber: 1, pilots: [] };
+  return { version: 2, nextPilotNumber: 1, pilots: [] };
 }
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
 }
 
+function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "pilotNumber" | "email" | "name" | "passwordHash">): PilotAccount {
+  const hours = Number.isFinite(raw.hours) ? Math.max(0, Number(raw.hours)) : 0;
+  const rankOverride = isPilotRank(raw.rankOverride) ? raw.rankOverride : null;
+  const rank = rankOverride ?? automaticPilotRank(hours);
+  return {
+    id: raw.id,
+    pilotNumber: raw.pilotNumber,
+    email: raw.email,
+    name: raw.name,
+    passwordHash: raw.passwordHash,
+    status: raw.status === "suspended" ? "suspended" : "active",
+    createdAt: raw.createdAt ?? new Date().toISOString(),
+    lastLoginAt: raw.lastLoginAt ?? null,
+    rank,
+    rankOverride,
+    hub: raw.hub ?? "London Heathrow",
+    tier: raw.tier ?? "Blue",
+    points: Number(raw.points) || 0,
+    tierPoints: Number(raw.tierPoints) || 0,
+    lifetimeTierPoints: Number(raw.lifetimeTierPoints) || 0,
+    flights: Number(raw.flights) || 0,
+    hours,
+    distanceNm: Number(raw.distanceNm) || 0,
+    averageLanding: raw.averageLanding ?? null,
+    bestLanding: raw.bestLanding ?? null,
+    onTime: Number.isFinite(raw.onTime) ? Number(raw.onTime) : 100,
+    streak: Number(raw.streak) || 0,
+  };
+}
+
 async function readState(): Promise<PilotState> {
   await ensureDataDir();
   try {
     const raw = await fs.readFile(PILOT_FILE, "utf8");
-    const parsed = JSON.parse(raw) as PilotState;
+    const parsed = JSON.parse(raw) as { nextPilotNumber?: number; pilots?: PilotAccount[] };
     return {
-      version: 1,
+      version: 2,
       nextPilotNumber: Math.max(1, Number(parsed.nextPilotNumber) || 1),
-      pilots: Array.isArray(parsed.pilots) ? parsed.pilots : [],
+      pilots: Array.isArray(parsed.pilots) ? parsed.pilots.map((pilot) => normalizePilot(pilot)) : [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -105,7 +137,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const now = new Date().toISOString();
   const account: PilotAccount = {
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
-    createdAt: now, lastLoginAt: now, rank: "Cadet", hub: "London Heathrow", tier: "Blue",
+    createdAt: now, lastLoginAt: now, rank: "Second Officer", rankOverride: null, hub: "London Heathrow", tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
   };
@@ -172,11 +204,14 @@ export async function setPilotStatus(id: string, status: PilotAccount["status"])
   return toPublicPilot(account);
 }
 
-export async function updatePilotAdminFields(id: string, input: { rank?: string; hub?: string; tier?: string }) {
+export async function updatePilotAdminFields(id: string, input: { rankOverride?: PilotRank | null; hub?: string; tier?: string }) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === id);
   if (!account) throw new Error("Pilot account not found.");
-  if (input.rank) account.rank = input.rank.trim().slice(0, 40);
+  if (input.rankOverride !== undefined) {
+    account.rankOverride = input.rankOverride;
+    account.rank = input.rankOverride ?? automaticPilotRank(account.hours);
+  }
   if (input.hub) account.hub = input.hub.trim().slice(0, 60);
   if (input.tier) account.tier = input.tier.trim().slice(0, 30);
   await writeState(state);
@@ -199,9 +234,7 @@ export async function applyApprovedPirepStats(pilotId: string, input: { blockMin
     account.averageLanding = account.averageLanding == null ? input.landingFpm : Math.round((account.averageLanding * previousFlights + input.landingFpm) / Math.max(1, account.flights));
     account.bestLanding = account.bestLanding == null ? input.landingFpm : Math.max(account.bestLanding, input.landingFpm);
   }
-  if (account.flights >= 100) account.rank = "Captain";
-  else if (account.flights >= 25) account.rank = "First Officer";
-  else if (account.flights >= 5) account.rank = "Second Officer";
+  account.rank = account.rankOverride ?? automaticPilotRank(account.hours);
   if (account.tierPoints >= 3500) account.tier = "Gold";
   else if (account.tierPoints >= 1500) account.tier = "Silver";
   else if (account.tierPoints >= 500) account.tier = "Bronze";
