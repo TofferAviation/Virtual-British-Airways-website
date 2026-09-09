@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { listAllPireps } from "@/lib/pilot-operations-store";
+import { nextPilotRank } from "@/lib/pilot-ranks";
 import { listPilots } from "@/lib/pilot-store";
 import { requireStaffPermission } from "@/lib/staff-auth";
 import { getStaffState, hasPermission } from "@/lib/staff-store";
@@ -37,9 +38,15 @@ export default async function StaffPilotsPage({ searchParams }: { searchParams: 
         <div className={styles.shell}>
           <nav className={styles.breadcrumbs}><Link href="/staff">Staff Centre</Link><span>›</span><strong>Pilot Management</strong></nav>
           <header className={styles.hero}>
-            <div><span className={styles.eyebrow}>BAV OPERATIONS</span><h1>Pilot Management</h1><p>Search, review and manage native British Airways Virtual pilot accounts.</p></div>
+            <div><span className={styles.eyebrow}>BAV OPERATIONS</span><h1>Pilot Management</h1><p>Pilot rank is normally driven by accepted BAV career hours. Admins can apply a manual override when operationally necessary.</p></div>
             <div className={styles.summary}><article><span>TOTAL PILOTS</span><strong>{pilots.length}</strong></article><article><span>ACTIVE</span><strong>{pilots.filter((pilot) => pilot.status === "active").length}</strong></article><article><span>SUSPENDED</span><strong>{pilots.filter((pilot) => pilot.status === "suspended").length}</strong></article></div>
           </header>
+
+          <div className={styles.rankPolicy}>
+            <strong>BAV flight-deck progression</strong>
+            <span>Second Officer · 0 h</span><span>First Officer · 250 h</span><span>Senior First Officer · 1,500 h</span><span>Captain · 3,000 h</span>
+            <small>Rank titles follow British Airways flight-deck ranks; the hour thresholds are BAV progression rules.</small>
+          </div>
 
           <form className={styles.filters} method="get">
             <input name="q" defaultValue={params.q ?? ""} placeholder="Search pilot name, ID, email, rank or hub" />
@@ -50,15 +57,18 @@ export default async function StaffPilotsPage({ searchParams }: { searchParams: 
 
           <section className={styles.tableWrap}>
             <div className={styles.tableHead}><span>Pilot</span><span>Career</span><span>Activity</span><span>Account</span><span>Actions</span></div>
-            {filtered.length ? filtered.map((pilot) => (
-              <article className={styles.row} key={pilot.id}>
-                <div className={styles.identity}><strong>{pilot.name}</strong><span>{pilot.pilotNumber} · {pilot.email}</span><small>{pilot.hub}</small></div>
-                <div><strong>{pilot.rank}</strong><span>{pilot.flights} flights · {pilot.hours.toFixed(1)} h</span><small>{pilot.points.toLocaleString()} VA Points · {pilot.tierPoints.toLocaleString()} Tier Points</small></div>
-                <div><strong>{pendingPirepCount(pilot.id)} PIREPs awaiting action</strong><span>{openTicketCount(pilot.id)} open support tickets</span><small>{pilot.lastLoginAt ? `Last sign in ${new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Never signed in"}</small></div>
-                <div><span className={`${styles.status} ${pilot.status === "active" ? styles.active : styles.suspended}`}>{pilot.status}</span><small>Joined {new Date(pilot.createdAt).toLocaleDateString("en-GB", { dateStyle: "medium" })}</small><small>{pilot.tier} member</small></div>
-                <PilotActions pilotId={pilot.id} status={pilot.status} canEdit={canEdit} canSuspend={canSuspend} />
-              </article>
-            )) : <div className={styles.empty}>No pilots match your search.</div>}
+            {filtered.length ? filtered.map((pilot) => {
+              const nextRank = nextPilotRank(pilot.hours);
+              return (
+                <article className={styles.row} key={pilot.id}>
+                  <div className={styles.identity}><strong>{pilot.name}</strong><span>{pilot.pilotNumber} · {pilot.email}</span><small>{pilot.hub}</small></div>
+                  <div><strong>{pilot.rank}</strong><span>{pilot.rankOverride ? "Manual rank override" : "Automatic by flight hours"}</span><small>{pilot.flights} flights · {pilot.hours.toFixed(1)} h{nextRank && !pilot.rankOverride ? ` · ${Math.max(0, nextRank.minimumHours - pilot.hours).toFixed(1)} h to ${nextRank.rank}` : ""}</small><small>{pilot.points.toLocaleString()} VA Points · {pilot.tierPoints.toLocaleString()} Tier Points</small></div>
+                  <div><strong>{pendingPirepCount(pilot.id)} PIREPs awaiting action</strong><span>{openTicketCount(pilot.id)} open support tickets</span><small>{pilot.lastLoginAt ? `Last sign in ${new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Never signed in"}</small></div>
+                  <div><span className={`${styles.status} ${pilot.status === "active" ? styles.active : styles.suspended}`}>{pilot.status}</span><small>Joined {new Date(pilot.createdAt).toLocaleDateString("en-GB", { dateStyle: "medium" })}</small><small>{pilot.tier} member</small></div>
+                  <PilotActions pilotId={pilot.id} status={pilot.status} canEdit={canEdit} canSuspend={canSuspend} rankOverride={pilot.rankOverride} hours={pilot.hours} />
+                </article>
+              );
+            }) : <div className={styles.empty}>No pilots match your search.</div>}
           </section>
         </div>
       </main>
