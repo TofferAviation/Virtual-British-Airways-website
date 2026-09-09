@@ -1,0 +1,26 @@
+name: BAV ACARS CI
+
+on:
+  push:
+    paths:
+      - "clients/bav-acars/**"
+      - ".github/workflows/acars-ci.yml"
+  pull_request:
+    paths:
+      - "clients/bav-acars/**"
+      - ".github/workflows/acars-ci.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore
+        run: dotnet restore clients/bav-acars/BavAcars.Client.csproj
+      - name: Build
+        run: dotnet build clients/bav-acars/BavAcars.Client.csproj -c Release --no-restore
+      - name: Publish Windows x64
+        run: dotnet publish clients/bav-acars/BavAcars.Client.csproj -c Release -r win-x64 --self-contained false --no-restore

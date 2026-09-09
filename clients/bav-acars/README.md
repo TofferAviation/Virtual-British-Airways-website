@@ -1,38 +1,48 @@
-# FreeFlight BAV ACARS v0.1
+# FreeFlight BAV ACARS v1.0
 
-This is the first BAV-only ACARS client scaffold. It exists to exercise the real BAV backend now, before the simulator adapters are connected.
+Windows desktop ACARS client for British Airways Virtual. This app is BAV-only and talks directly to the website's `/api/acars/v1` endpoints.
 
-Supported adapter targets:
-- X-Plane 12
-- Microsoft Flight Simulator 2020
-- Microsoft Flight Simulator 2024
+## What v1.0 does
 
-The backend contract is intentionally simulator-agnostic. Each simulator adapter will normalize its native SDK/datarefs/SimConnect values into the same telemetry payload.
+- Native graphical Windows client (WPF / .NET 8)
+- Signs in with the pilot's BAV website account
+- Pulls the pilot's current BAV flight assignment
+- Detects X-Plane 12, MSFS 2020 and MSFS 2024 processes
+- Starts and ends real BAV ACARS sessions through the website API
+- Streams telemetry to Staff Live Operations
+- Maintains a local reconnect queue if the website is temporarily unavailable
+- Automatically creates the ACARS PIREP when the session is ended
+- Opens BAV PIREPs, assignments, fleet and support pages from the app
 
-## Run the test client
+## Simulator telemetry status
 
-1. Start the BAV website locally.
-2. Log in on the website and book a flight.
-3. From the repository root run:
+The desktop application and website session pipeline are functional in v1.0. The simulator adapter boundary is also in place for X-Plane 12, MSFS 2020 and MSFS 2024.
+
+The first v1.0 build uses the **development telemetry bridge** after simulator/process detection so the complete website -> ACARS -> Live Operations -> automatic PIREP workflow can be tested immediately. Native X-Plane datarefs/UDP and Microsoft SimConnect telemetry adapters are the next implementation layer and can replace the bridge without changing the BAV API or desktop UI.
+
+The app explicitly shows which telemetry source is active so development telemetry cannot be mistaken for simulator telemetry.
+
+## Run on Windows
 
 ```powershell
+Set-Location "D:\Virtual British Airways files"
 dotnet run --project clients/bav-acars/BavAcars.Client.csproj
 ```
 
-4. Enter the BAV site URL, pilot email and password.
-5. Pick X-Plane 12, MSFS 2020 or MSFS 2024.
-6. The v0.1 test client starts a real ACARS session and sends synthetic telemetry every five seconds.
-7. Staff can watch the session at `/staff/live-operations`.
-8. Press Enter in the client to end the flight. The backend automatically creates a pending ACARS PIREP for staff review.
+Book a flight on the website before pressing **Start flight** in ACARS.
 
-## Next adapter milestone
+## Build a Windows executable
 
-Replace the synthetic telemetry loop with three adapters behind one interface:
+```powershell
+dotnet publish clients/bav-acars/BavAcars.Client.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+```
 
-- `XPlane12Adapter`: X-Plane SDK/plugin or local bridge/datarefs.
-- `Msfs2020Adapter`: SimConnect.
-- `Msfs2024Adapter`: SimConnect/2024-supported SDK path.
+Published output will be under:
 
-The adapters should only gather simulator data. Authentication, assignment retrieval, telemetry transport, reconnect queueing, session lifecycle and PIREP submission stay shared.
+```text
+clients\bav-acars\bin\Release\net8.0-windows\win-x64\publish\
+```
 
-This client is exclusively for British Airways Virtual and is not a multi-VA platform.
+## Local data
+
+The app stores only non-secret connection preferences (website URL and pilot email) in `%APPDATA%\FreeFlight\BavAcars`. Passwords are never persisted. Unsent telemetry is journaled under `%LOCALAPPDATA%\FreeFlight\BavAcars` so a short website/network interruption does not lose the current flight's queued packets.
