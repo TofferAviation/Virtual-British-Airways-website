@@ -33,6 +33,7 @@ import "./theme.css";
 import "./theme-pages.css";
 import "./tickets.css";
 import "./operations.css";
+import "./pilot-auth.css";
 
 export const metadata: Metadata = {
   title: {
