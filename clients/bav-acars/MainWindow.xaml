@@ -29,7 +29,6 @@
             <RowDefinition Height="34" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
         <Border Grid.Row="0" Background="{StaticResource HeaderBrush}" BorderBrush="#1C4A72" BorderThickness="0,0,0,1">
             <Grid Margin="18,0">
                 <Grid.ColumnDefinitions>
@@ -37,7 +36,6 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="390" />
                 </Grid.ColumnDefinitions>
-
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="✈" FontSize="27" Margin="0,0,12,0" />
                     <StackPanel VerticalAlignment="Center">
@@ -48,7 +46,6 @@
                         <TextBlock Text="Connect  ·  Fly  ·  Report  ·  British Airways Virtual" Style="{StaticResource TinyMuted}" Margin="0,2,0,0" />
                     </StackPanel>
                 </StackPanel>
-
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="BRITISH AIRWAYS" FontFamily="Georgia" FontSize="21" FontWeight="Bold" />
                     <Canvas Width="62" Height="18" Margin="8,0,8,0" VerticalAlignment="Center">
@@ -57,7 +54,6 @@
                     </Canvas>
                     <TextBlock Text="Virtual" FontSize="23" FontWeight="Light" />
                 </StackPanel>
-
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Ellipse Width="11" Height="11" Fill="{StaticResource GreenBrush}" Margin="0,0,8,0" />
                     <TextBlock Text="Connected" VerticalAlignment="Center" Margin="0,0,20,0" />
@@ -73,14 +69,11 @@
             </Grid>
         </Border>
 
-        <!-- Body -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="218" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-
-            <!-- Sidebar -->
             <Border Background="#071A30" BorderBrush="#173D61" BorderThickness="0,0,1,0">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Margin="0,10,0,0">
@@ -92,7 +85,6 @@
                         <Button Style="{StaticResource NavButton}" Tag="/support/tickets" Click="WebsiteNav_Click">◉   Support</Button>
                         <Button Style="{StaticResource NavButton}" Click="Settings_Click">⚙   Settings</Button>
                     </StackPanel>
-
                     <Grid DockPanel.Dock="Bottom" Height="300">
                         <Grid.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -106,16 +98,15 @@
                             <Path Fill="#D81F3C" Data="M 35,205 C 76,184 115,184 170,210 L 200,224 L 200,233 L 40,220 Z" />
                         </Canvas>
                         <StackPanel VerticalAlignment="Bottom" Margin="28,0,20,28">
-                            <TextBlock Text="A GLOBAL" FontSize="12" FontWeight="SemiBold" LetterSpacing="2" />
-                            <TextBlock Text="COMMUNITY" FontSize="12" FontWeight="SemiBold" LetterSpacing="2" />
-                            <TextBlock Text="A BRITISH SPIRIT" FontSize="12" FontWeight="SemiBold" LetterSpacing="2" />
+                            <TextBlock Text="A GLOBAL" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Text="COMMUNITY" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Text="A BRITISH SPIRIT" FontSize="12" FontWeight="SemiBold" />
                             <Border Background="#E62544" Height="4" Width="70" HorizontalAlignment="Left" Margin="0,13,0,0" />
                         </StackPanel>
                     </Grid>
                 </DockPanel>
             </Border>
 
-            <!-- Main dashboard -->
             <Grid Grid.Column="1" Margin="14">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="300" />
@@ -124,81 +115,37 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Assignment + simulator -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1.82*" />
                         <ColumnDefinition Width="1.05*" />
                     </Grid.ColumnDefinitions>
-
                     <Border Style="{StaticResource Card}" Margin="0,0,7,7">
                         <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="WelcomeText" Text="Welcome back, Pilot" FontSize="27" FontWeight="Light" />
-                            </StackPanel>
-
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal"><TextBlock x:Name="WelcomeText" Text="Welcome back, Pilot" FontSize="27" FontWeight="Light" /></StackPanel>
                             <Border Grid.Row="1" Margin="0,10,0,0" CornerRadius="7" BorderBrush="#234F75" BorderThickness="1">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Color="#102D4D" Offset="0" />
-                                        <GradientStop Color="#0C2540" Offset="0.58" />
-                                        <GradientStop Color="#173D5E" Offset="1" />
+                                        <GradientStop Color="#102D4D" Offset="0" /><GradientStop Color="#0C2540" Offset="0.58" /><GradientStop Color="#173D5E" Offset="1" />
                                     </LinearGradientBrush>
                                 </Border.Background>
                                 <Grid Margin="16,12">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="1.28*" />
-                                        <ColumnDefinition Width="1*" />
-                                    </Grid.ColumnDefinitions>
-
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.28*" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock x:Name="AssignmentFlightText" Text="NO FLIGHT" FontSize="30" FontWeight="Bold" />
-                                        <Border Background="#0B5F9D" BorderBrush="#0B91E8" BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="12,2,0,0">
-                                            <TextBlock Text="SCHEDULED" Foreground="#72CFFF" FontSize="11" FontWeight="SemiBold" />
-                                        </Border>
+                                        <Border Background="#0B5F9D" BorderBrush="#0B91E8" BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="12,2,0,0"><TextBlock Text="SCHEDULED" Foreground="#72CFFF" FontSize="11" FontWeight="SemiBold" /></Border>
                                     </StackPanel>
-
                                     <TextBlock Grid.Column="1" Text="✈" FontSize="58" Foreground="#DDEAF6" Opacity="0.9" HorizontalAlignment="Right" Margin="0,-5,20,0" />
-
-                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,8,0,0">
-                                        <TextBlock x:Name="RouteText" Text="Book a flight on the BAV website" FontSize="20" FontWeight="SemiBold" />
-                                    </StackPanel>
-
+                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,8,0,0"><TextBlock x:Name="RouteText" Text="Book a flight on the BAV website" FontSize="20" FontWeight="SemiBold" /></StackPanel>
                                     <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,14,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="1.25*" />
-                                            <ColumnDefinition Width="1.2*" />
-                                            <ColumnDefinition Width="1.2*" />
-                                            <ColumnDefinition Width="1*" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="Aircraft" Style="{StaticResource MetricLabel}" />
-                                            <TextBlock x:Name="AircraftText" Text="Aircraft —" Margin="0,4,0,0" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                                            <TextBlock Text="Schedule" Style="{StaticResource MetricLabel}" />
-                                            <TextBlock x:Name="ScheduleText" Text="No active schedule" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Margin="14,0,0,0">
-                                            <TextBlock Text="Assignment" Style="{StaticResource MetricLabel}" />
-                                            <TextBlock Text="Synced from BAV website" Margin="0,4,0,0" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="3" Margin="14,0,0,0">
-                                            <TextBlock Text="PIREP" Style="{StaticResource MetricLabel}" />
-                                            <TextBlock Text="Automatic" Margin="0,4,0,0" />
-                                        </StackPanel>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="1.25*" /><ColumnDefinition Width="1.2*" /><ColumnDefinition Width="1.2*" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="Aircraft" Style="{StaticResource MetricLabel}" /><TextBlock x:Name="AircraftText" Text="Aircraft —" Margin="0,4,0,0" /></StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="14,0,0,0"><TextBlock Text="Schedule" Style="{StaticResource MetricLabel}" /><TextBlock x:Name="ScheduleText" Text="No active schedule" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                        <StackPanel Grid.Column="2" Margin="14,0,0,0"><TextBlock Text="Assignment" Style="{StaticResource MetricLabel}" /><TextBlock Text="Synced from BAV website" Margin="0,4,0,0" /></StackPanel>
+                                        <StackPanel Grid.Column="3" Margin="14,0,0,0"><TextBlock Text="PIREP" Style="{StaticResource MetricLabel}" /><TextBlock Text="Automatic" Margin="0,4,0,0" /></StackPanel>
                                     </Grid>
-
                                     <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,14,0,0">
                                         <Button Style="{StaticResource SecondaryButton}" Click="RefreshAssignment_Click" Width="225" Margin="0,0,12,0">▣  Load assignment</Button>
                                         <Button x:Name="StartFlightButton" Style="{StaticResource DangerButton}" Click="StartFlight_Click" IsEnabled="False" Width="225">▶  Start flight</Button>
@@ -210,42 +157,22 @@
 
                     <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,7">
                         <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="92" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="92" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                             <DockPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🎮" FontSize="18" Margin="0,0,8,0" />
-                                    <TextBlock Text="Simulator detection" FontSize="17" FontWeight="SemiBold" />
-                                </StackPanel>
-                                <Border DockPanel.Dock="Right" Background="#0D593B" CornerRadius="14" Padding="12,4">
-                                    <StackPanel Orientation="Horizontal"><Ellipse Width="9" Height="9" Fill="{StaticResource GreenBrush}" Margin="0,0,7,0" /><TextBlock x:Name="SimulatorStatusText" Text="Scanning" Foreground="{StaticResource GreenBrush}" FontSize="11" /></StackPanel>
-                                </Border>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="🎮" FontSize="18" Margin="0,0,8,0" /><TextBlock Text="Simulator detection" FontSize="17" FontWeight="SemiBold" /></StackPanel>
+                                <Border DockPanel.Dock="Right" Background="#0D593B" CornerRadius="14" Padding="12,4"><StackPanel Orientation="Horizontal"><Ellipse Width="9" Height="9" Fill="{StaticResource GreenBrush}" Margin="0,0,7,0" /><TextBlock x:Name="SimulatorStatusText" Text="Scanning" Foreground="{StaticResource GreenBrush}" FontSize="11" /></StackPanel></Border>
                             </DockPanel>
-
                             <Grid Grid.Row="1" Margin="0,11,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                                <Border Background="#0A1C31" BorderBrush="#214A70" BorderThickness="1" CornerRadius="6" Margin="0,0,5,0" Padding="10">
-                                    <StackPanel><TextBlock Text="X" FontSize="28" FontWeight="Bold" Foreground="#7290AE" /><TextBlock Text="X-Plane 12" FontSize="11" /><TextBlock Text="●  Not detected" Style="{StaticResource TinyMuted}" Margin="0,8,0,0" /></StackPanel>
-                                </Border>
-                                <Border Grid.Column="1" Background="#0C3155" BorderBrush="#16A0FF" BorderThickness="1" CornerRadius="6" Margin="3,0" Padding="10">
-                                    <StackPanel><TextBlock Text="MSFS" FontSize="18" FontWeight="Bold" Foreground="#D8E9FA" /><TextBlock Text="Microsoft Flight Simulator 2024" FontSize="10" TextWrapping="Wrap"/><TextBlock Text="●  Detected" Foreground="{StaticResource GreenBrush}" FontSize="10" Margin="0,7,0,0" /></StackPanel>
-                                </Border>
-                                <Border Grid.Column="2" Background="#0A1C31" BorderBrush="#214A70" BorderThickness="1" CornerRadius="6" Margin="5,0,0,0" Padding="10">
-                                    <StackPanel><TextBlock Text="MSFS" FontSize="18" FontWeight="Bold" Foreground="#7290AE" /><TextBlock Text="Microsoft Flight Simulator 2020" FontSize="10" TextWrapping="Wrap"/><TextBlock Text="●  Not detected" Style="{StaticResource TinyMuted}" Margin="0,7,0,0" /></StackPanel>
-                                </Border>
+                                <Border Background="#0A1C31" BorderBrush="#214A70" BorderThickness="1" CornerRadius="6" Margin="0,0,5,0" Padding="10"><StackPanel><TextBlock Text="X" FontSize="28" FontWeight="Bold" Foreground="#7290AE" /><TextBlock Text="X-Plane 12" FontSize="11" /><TextBlock Text="●  Not detected" Style="{StaticResource TinyMuted}" Margin="0,8,0,0" /></StackPanel></Border>
+                                <Border Grid.Column="1" Background="#0C3155" BorderBrush="#16A0FF" BorderThickness="1" CornerRadius="6" Margin="3,0" Padding="10"><StackPanel><TextBlock Text="MSFS" FontSize="18" FontWeight="Bold" Foreground="#D8E9FA" /><TextBlock Text="Microsoft Flight Simulator 2024" FontSize="10" TextWrapping="Wrap"/><TextBlock Text="●  Detected" Foreground="{StaticResource GreenBrush}" FontSize="10" Margin="0,7,0,0" /></StackPanel></Border>
+                                <Border Grid.Column="2" Background="#0A1C31" BorderBrush="#214A70" BorderThickness="1" CornerRadius="6" Margin="5,0,0,0" Padding="10"><StackPanel><TextBlock Text="MSFS" FontSize="18" FontWeight="Bold" Foreground="#7290AE" /><TextBlock Text="Microsoft Flight Simulator 2020" FontSize="10" TextWrapping="Wrap"/><TextBlock Text="●  Not detected" Style="{StaticResource TinyMuted}" Margin="0,7,0,0" /></StackPanel></Border>
                             </Grid>
-
                             <Border Grid.Row="2" Background="#102C4B" BorderBrush="#214F78" BorderThickness="1" CornerRadius="7" Margin="0,10,0,0" Padding="12">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="⊞" FontSize="25" Foreground="#39A9FF" />
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock x:Name="DetectedSimulatorText" Text="No simulator detected" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock x:Name="NativeTelemetryText" Text="Waiting for simulator" Style="{StaticResource TinyMuted}" Margin="0,6,0,0" TextWrapping="Wrap" />
-                                    </StackPanel>
+                                    <StackPanel Grid.Column="1"><TextBlock x:Name="DetectedSimulatorText" Text="No simulator detected" FontSize="14" FontWeight="SemiBold" /><TextBlock x:Name="NativeTelemetryText" Text="Waiting for simulator" Style="{StaticResource TinyMuted}" Margin="0,6,0,0" TextWrapping="Wrap" /></StackPanel>
                                     <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Click="DetectSimulator_Click" Padding="12,7" Margin="10,0,0,0">Scan</Button>
                                 </Grid>
                             </Border>
@@ -254,7 +181,6 @@
                     </Border>
                 </Grid>
 
-                <!-- Metrics -->
                 <UniformGrid Grid.Row="1" Columns="7" Margin="0,0,0,7">
                     <Border Style="{StaticResource Card}" Margin="0,0,4,0"><StackPanel><TextBlock Text="▲  Altitude" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="AltitudeText" Style="{StaticResource MetricValue}" Text="—"/><TextBlock x:Name="AltitudeSubText" Style="{StaticResource TinyMuted}" /></StackPanel></Border>
                     <Border Style="{StaticResource Card}" Margin="3,0"><StackPanel><TextBlock Text="◔  Ground Speed" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="GroundSpeedText" Style="{StaticResource MetricValue}" Text="—"/><TextBlock Text="M 0.84" Style="{StaticResource TinyMuted}"/></StackPanel></Border>
@@ -265,16 +191,10 @@
                     <Border Style="{StaticResource Card}" Margin="4,0,0,0"><StackPanel><TextBlock Text="✈  Flight Phase" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="FlightPhaseText" Style="{StaticResource MetricValue}" Text="STANDBY"/><TextBlock Text="Live phase" Style="{StaticResource TinyMuted}"/></StackPanel></Border>
                 </UniformGrid>
 
-                <!-- Route -->
                 <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,7">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="145"/><ColumnDefinition Width="*"/><ColumnDefinition Width="145"/><ColumnDefinition Width="145"/></Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="⌖  Flight Phase / Live Tracking" FontSize="15" FontWeight="SemiBold" />
-                            <Border Background="#0B5B38" BorderBrush="#13B665" BorderThickness="1" CornerRadius="18" Padding="18,7" HorizontalAlignment="Left" Margin="0,16,0,0">
-                                <TextBlock Text="CRUISE" FontSize="16" FontWeight="SemiBold" />
-                            </Border>
-                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center"><TextBlock Text="⌖  Flight Phase / Live Tracking" FontSize="15" FontWeight="SemiBold" /><Border Background="#0B5B38" BorderBrush="#13B665" BorderThickness="1" CornerRadius="18" Padding="18,7" HorizontalAlignment="Left" Margin="0,16,0,0"><TextBlock Text="CRUISE" FontSize="16" FontWeight="SemiBold" /></Border></StackPanel>
                         <Grid Grid.Column="1" Margin="10,0,20,0">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <Grid Grid.Row="1" VerticalAlignment="Center">
@@ -290,7 +210,6 @@
                     </Grid>
                 </Border>
 
-                <!-- Event log + ACARS -->
                 <Grid Grid.Row="3">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource Card}" Margin="0,0,7,0">
@@ -298,28 +217,15 @@
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                             <DockPanel><TextBlock Text="▤  Event Log" FontSize="16" FontWeight="SemiBold"/><TextBlock DockPanel.Dock="Right" Text="View all" Foreground="#66C6FF" FontSize="11"/></DockPanel>
                             <ListBox x:Name="EventList" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="0,10,0,0" ScrollViewer.VerticalScrollBarVisibility="Hidden">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,3">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="72"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                            <Ellipse Width="9" Height="9" Fill="{StaticResource GreenBrush}" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Time, StringFormat={}{0:HH:mm}}" Foreground="#C9D7E5"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding Event}" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="3" Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
+                                <ListBox.ItemTemplate><DataTemplate><Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="72"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse Width="9" Height="9" Fill="{StaticResource GreenBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="{Binding Time, StringFormat={}{0:HH:mm}}" Foreground="#C9D7E5"/><TextBlock Grid.Column="2" Text="{Binding Event}" FontWeight="SemiBold"/><TextBlock Grid.Column="3" Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"/></Grid></DataTemplate></ListBox.ItemTemplate>
                             </ListBox>
                         </Grid>
                     </Border>
-
                     <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0">
                         <Grid>
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <DockPanel><TextBlock Text="♨  ACARS Session" FontSize="16" FontWeight="SemiBold"/><TextBlock x:Name="LastUpdateText" DockPanel.Dock="Right" Text="Not started" Style="{StaticResource TinyMuted}"/></DockPanel>
-                            <Border Grid.Row="1" Background="{StaticResource SuccessPanelBrush}" BorderBrush="#18865A" BorderThickness="1" CornerRadius="7" Padding="13" Margin="0,12,0,10">
-                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions><Ellipse Width="17" Height="17" Fill="{StaticResource GreenBrush}"/><StackPanel Grid.Column="1"><TextBlock x:Name="AcarsStatusText" Text="Standby" FontSize="17" FontWeight="SemiBold"/><TextBlock x:Name="TelemetrySourceText" Text="Website connected telemetry pipeline" Foreground="#BFEBD2" FontSize="10" Margin="0,2,0,0"/></StackPanel><StackPanel Grid.Column="2" HorizontalAlignment="Right"><TextBlock Text="Queued telemetry" Style="{StaticResource TinyMuted}"/><TextBlock x:Name="QueueText" Text="0" FontSize="20" HorizontalAlignment="Right"/></StackPanel></Grid>
-                            </Border>
+                            <Border Grid.Row="1" Background="{StaticResource SuccessPanelBrush}" BorderBrush="#18865A" BorderThickness="1" CornerRadius="7" Padding="13" Margin="0,12,0,10"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions><Ellipse Width="17" Height="17" Fill="{StaticResource GreenBrush}"/><StackPanel Grid.Column="1"><TextBlock x:Name="AcarsStatusText" Text="Standby" FontSize="17" FontWeight="SemiBold"/><TextBlock x:Name="TelemetrySourceText" Text="Website connected telemetry pipeline" Foreground="#BFEBD2" FontSize="10" Margin="0,2,0,0"/></StackPanel><StackPanel Grid.Column="2" HorizontalAlignment="Right"><TextBlock Text="Queued telemetry" Style="{StaticResource TinyMuted}"/><TextBlock x:Name="QueueText" Text="0" FontSize="20" HorizontalAlignment="Right"/></StackPanel></Grid></Border>
                             <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="PACKETS SENT" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="PacketsText" Text="0" FontSize="18"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="SESSION" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="SessionIdText" Text="—" FontSize="13"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="PIREP" Style="{StaticResource MetricLabel}"/><TextBlock Text="Automatic" FontSize="13"/></StackPanel></Grid>
                             <Grid Grid.Row="3" Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Button x:Name="PauseButton" Style="{StaticResource SecondaryButton}" Click="Pause_Click" IsEnabled="False" Margin="0,0,6,0">Ⅱ  Pause tracking</Button><Button x:Name="EndFlightButton" Grid.Column="1" Style="{StaticResource DangerButton}" Click="EndFlight_Click" IsEnabled="False" Margin="6,0,0,0">■  End flight</Button></Grid>
                         </Grid>
@@ -328,23 +234,10 @@
             </Grid>
         </Grid>
 
-        <!-- Footer -->
-        <Border Grid.Row="2" Background="#061323" BorderBrush="#173B5C" BorderThickness="0,1,0,0">
-            <DockPanel Margin="18,0">
-                <TextBlock x:Name="FooterStatusText" Text="●  ACARS ready" Foreground="{StaticResource GreenBrush}" VerticalAlignment="Center" FontSize="11" />
-                <TextBlock DockPanel.Dock="Right" Text="British Airways Virtual   |   FreeFlight Systems   |   automatic PIREPs" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="10" />
-            </DockPanel>
-        </Border>
+        <Border Grid.Row="2" Background="#061323" BorderBrush="#173B5C" BorderThickness="0,1,0,0"><DockPanel Margin="18,0"><TextBlock x:Name="FooterStatusText" Text="●  ACARS ready" Foreground="{StaticResource GreenBrush}" VerticalAlignment="Center" FontSize="11" /><TextBlock DockPanel.Dock="Right" Text="British Airways Virtual   |   FreeFlight Systems   |   automatic PIREPs" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="10" /></DockPanel></Border>
 
-        <!-- Hidden functional website state used by code-behind -->
-        <StackPanel Visibility="Collapsed">
-            <TextBlock x:Name="WebsiteStatusText" Text="Offline" />
-            <TextBlock x:Name="WebsiteSyncText" Text="Sign in to connect" />
-            <TextBlock x:Name="AssignmentSyncText" Text="Waiting" />
-            <TextBlock x:Name="PirepStatusText" Text="Ready after flight completion" />
-        </StackPanel>
+        <StackPanel Visibility="Collapsed"><TextBlock x:Name="WebsiteStatusText" Text="Offline" /><TextBlock x:Name="WebsiteSyncText" Text="Sign in to connect" /><TextBlock x:Name="AssignmentSyncText" Text="Waiting" /><TextBlock x:Name="PirepStatusText" Text="Ready after flight completion" /></StackPanel>
 
-        <!-- Login/settings overlay -->
         <Grid x:Name="LoginOverlay" Grid.RowSpan="3" Background="#CC031020">
             <Border Width="560" Padding="28" CornerRadius="10" Background="#0D223A" BorderBrush="#2B5B82" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
