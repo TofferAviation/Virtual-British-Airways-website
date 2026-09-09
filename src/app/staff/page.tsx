@@ -25,6 +25,7 @@ export default async function StaffPage() {
   const canViewEvents = Boolean(account && hasPermission(state, account, "events.view"));
   const canViewRoutes = Boolean(account && hasPermission(state, account, "routes.view"));
   const canViewNews = Boolean(account && hasPermission(state, account, "news.view"));
+  const canViewSupport = Boolean(account && hasPermission(state, account, "support.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
   const canViewServiceStatus = Boolean(account && hasPermission(state, account, "status.view"));
   const canAccessServiceSettings = Boolean(account && hasPermission(state, account, SERVICE_SOURCE_PERMISSION));
@@ -52,11 +53,24 @@ export default async function StaffPage() {
             <div className="staff-shell staff-breadcrumbs">
               <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
               {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
+              {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}
               {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
               {canViewServiceStatus ? <><span>·</span><Link href="/staff/service-status">Service status</Link></> : null}
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
+          {canViewSupport ? (
+            <div className="staff-shell staff-permissions-launch-wrap">
+              <Link className="staff-permissions-launch" href="/staff/tickets">
+                <span className="staff-permissions-launch-icon" aria-hidden="true">✉</span>
+                <span>
+                  <strong>Ticket Centre</strong>
+                  <small>Review pilot support requests, reply, assign ownership and manage ticket status.</small>
+                </span>
+                <b aria-hidden="true">→</b>
+              </Link>
+            </div>
+          ) : null}
           {canViewNews ? (
             <div className="staff-shell staff-permissions-launch-wrap">
               <Link className="staff-permissions-launch" href="/staff/news">
