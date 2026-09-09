@@ -32,7 +32,7 @@ import "./news-builder.css";
 import "./theme.css";
 import "./theme-pages.css";
 import "./tickets.css";
-import "./pilot-auth.css";
+import "./operations.css";
 
 export const metadata: Metadata = {
   title: {

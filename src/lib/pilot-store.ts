@@ -94,42 +94,21 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   const password = input.password;
-
   if (name.length < 2) throw new Error("Please enter your full name.");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Please enter a valid email address.");
   if (password.length < 8) throw new Error("Password must contain at least 8 characters.");
 
   const state = await readState();
-  if (state.pilots.some((pilot) => pilot.email === email)) {
-    throw new Error("An account already exists for that email address.");
-  }
+  if (state.pilots.some((pilot) => pilot.email === email)) throw new Error("An account already exists for that email address.");
 
   const pilotNumber = `BAWVA${String(state.nextPilotNumber).padStart(4, "0")}`;
   const now = new Date().toISOString();
   const account: PilotAccount = {
-    id: randomUUID(),
-    pilotNumber,
-    email,
-    name,
-    passwordHash: hashPilotPassword(password),
-    status: "active",
-    createdAt: now,
-    lastLoginAt: now,
-    rank: "Cadet",
-    hub: "London Heathrow",
-    tier: "Blue",
-    points: 0,
-    tierPoints: 0,
-    lifetimeTierPoints: 0,
-    flights: 0,
-    hours: 0,
-    distanceNm: 0,
-    averageLanding: null,
-    bestLanding: null,
-    onTime: 100,
-    streak: 0,
+    id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
+    createdAt: now, lastLoginAt: now, rank: "Cadet", hub: "London Heathrow", tier: "Blue",
+    points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
+    averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
   };
-
   state.nextPilotNumber += 1;
   state.pilots.push(account);
   await writeState(state);
@@ -146,12 +125,43 @@ export async function getPilotById(id: string) {
   return state.pilots.find((pilot) => pilot.id === id) ?? null;
 }
 
+export async function listPilots() {
+  const state = await readState();
+  return state.pilots.map(toPublicPilot).sort((a, b) => a.pilotNumber.localeCompare(b.pilotNumber));
+}
+
 export async function markPilotLogin(id: string) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === id);
   if (!account) return;
   account.lastLoginAt = new Date().toISOString();
   await writeState(state);
+}
+
+export async function applyApprovedPirepStats(pilotId: string, input: { blockMinutes: number; distanceNm: number; landingFpm: number | null; points: number; tierPoints: number }) {
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === pilotId);
+  if (!account) throw new Error("Pilot not found.");
+  const previousFlights = account.flights;
+  account.flights += 1;
+  account.hours = Math.round((account.hours + input.blockMinutes / 60) * 100) / 100;
+  account.distanceNm += Math.max(0, Math.round(input.distanceNm));
+  account.points += Math.max(0, input.points);
+  account.tierPoints += Math.max(0, input.tierPoints);
+  account.lifetimeTierPoints += Math.max(0, input.tierPoints);
+  account.streak += 1;
+  if (input.landingFpm != null) {
+    account.averageLanding = account.averageLanding == null ? input.landingFpm : Math.round((account.averageLanding * previousFlights + input.landingFpm) / Math.max(1, account.flights));
+    account.bestLanding = account.bestLanding == null ? input.landingFpm : Math.max(account.bestLanding, input.landingFpm);
+  }
+  if (account.flights >= 100) account.rank = "Captain";
+  else if (account.flights >= 25) account.rank = "First Officer";
+  else if (account.flights >= 5) account.rank = "Second Officer";
+  if (account.tierPoints >= 3500) account.tier = "Gold";
+  else if (account.tierPoints >= 1500) account.tier = "Silver";
+  else if (account.tierPoints >= 500) account.tier = "Bronze";
+  await writeState(state);
+  return account;
 }
 
 export function toPublicPilot(account: PilotAccount): PublicPilotAccount {

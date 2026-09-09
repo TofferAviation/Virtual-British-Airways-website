@@ -52,6 +52,7 @@ export default async function StaffPage() {
           <div className="staff-breadcrumb-band">
             <div className="staff-shell staff-breadcrumbs">
               <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
+              {canViewRoutes ? <><span>·</span><Link href="/staff/pireps">PIREP Centre</Link></> : null}
               {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
               {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}
               {canViewPermissions ? <><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
@@ -59,65 +60,32 @@ export default async function StaffPage() {
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
-          {canViewSupport ? (
+          {canViewRoutes ? (
             <div className="staff-shell staff-permissions-launch-wrap">
-              <Link className="staff-permissions-launch" href="/staff/tickets">
-                <span className="staff-permissions-launch-icon" aria-hidden="true">✉</span>
+              <Link className="staff-permissions-launch" href="/staff/pireps">
+                <span className="staff-permissions-launch-icon" aria-hidden="true">✈</span>
                 <span>
-                  <strong>Ticket Centre</strong>
-                  <small>Review pilot support requests, reply, assign ownership and manage ticket status.</small>
+                  <strong>PIREP Centre</strong>
+                  <small>Review pilot flight reports, request corrections, approve career credit and prepare for FreeFlight ACARS.</small>
                 </span>
                 <b aria-hidden="true">→</b>
               </Link>
             </div>
+          ) : null}
+          {canViewSupport ? (
+            <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/tickets"><span className="staff-permissions-launch-icon" aria-hidden="true">✉</span><span><strong>Ticket Centre</strong><small>Review pilot support requests, reply, assign ownership and manage ticket status.</small></span><b aria-hidden="true">→</b></Link></div>
           ) : null}
           {canViewNews ? (
-            <div className="staff-shell staff-permissions-launch-wrap">
-              <Link className="staff-permissions-launch" href="/staff/news">
-                <span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span>
-                <span>
-                  <strong>News & announcements</strong>
-                  <small>Create, edit and publish the stories shown on the public What&apos;s New page.</small>
-                </span>
-                <b aria-hidden="true">→</b>
-              </Link>
-            </div>
+            <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/news"><span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span><span><strong>News & announcements</strong><small>Create, edit and publish the stories shown on the public What&apos;s New page.</small></span><b aria-hidden="true">→</b></Link></div>
           ) : null}
           {canViewPermissions ? (
-            <div className="staff-shell staff-permissions-launch-wrap">
-              <Link className="staff-permissions-launch" href="/staff/permissions">
-                <span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span>
-                <span>
-                  <strong>User permissions</strong>
-                  <small>Manage staff roles, individual permissions and access controls.</small>
-                </span>
-                <b aria-hidden="true">→</b>
-              </Link>
-            </div>
+            <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/permissions"><span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span><span><strong>User permissions</strong><small>Manage staff roles, individual permissions and access controls.</small></span><b aria-hidden="true">→</b></Link></div>
           ) : null}
           {canViewServiceStatus ? (
-            <div className="staff-shell staff-permissions-launch-wrap">
-              <Link className="staff-permissions-launch" href="/staff/service-status">
-                <span className="staff-permissions-launch-icon" aria-hidden="true">◔</span>
-                <span>
-                  <strong>Service status manager</strong>
-                  <small>Manage system health, public incidents, maintenance and uptime information.</small>
-                </span>
-                <b aria-hidden="true">→</b>
-              </Link>
-            </div>
+            <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/service-status"><span className="staff-permissions-launch-icon" aria-hidden="true">◔</span><span><strong>Service status manager</strong><small>Manage system health, public incidents, maintenance and uptime information.</small></span><b aria-hidden="true">→</b></Link></div>
           ) : null}
           {canAccessServiceSettings ? (
-            <div className="staff-shell staff-permissions-launch-wrap">
-              <Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings">
-                <span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span>
-                <span>
-                  <strong>Service settings</strong>
-                  <small>Open the protected website source workspace for maintenance and direct code changes.</small>
-                </span>
-                <b aria-hidden="true">→</b>
-              </Link>
-            </div>
+            <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings"><span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span><span><strong>Service settings</strong><small>Open the protected website source workspace for maintenance and direct code changes.</small></span><b aria-hidden="true">→</b></Link></div>
           ) : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
           <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
