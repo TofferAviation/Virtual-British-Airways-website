@@ -11,14 +11,16 @@ export async function bookFlight(formData: FormData) {
   const to = String(formData.get("to") ?? "").toUpperCase();
   const date = String(formData.get("date") ?? "");
   const flightNumber = String(formData.get("flightNumber") ?? "");
-  if (!from || !to || !date || !flightNumber) redirect("/book");
+  const routeId = String(formData.get("routeId") ?? "");
+  if (!from || !to || !date || !flightNumber || !routeId) redirect("/book");
 
-  const flights = await getFlightsForRoute(from, to);
-  const flight = flights.find((item) => item.number === flightNumber);
-  if (!flight) redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=unavailable`);
+  const flights = await getFlightsForRoute(from, to, date);
+  const flight = flights.find((item) => item.routeId === routeId && item.number === flightNumber);
+  if (!flight || flight.slots <= 0) redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=unavailable`);
 
   await createPilotBooking({
     pilotId: session.pilotId,
+    routeId: flight.routeId,
     flightNumber: flight.number,
     from,
     to,
