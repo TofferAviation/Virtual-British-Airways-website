@@ -34,6 +34,10 @@ export default async function LoginPage() {
           </ul>
           <PilotLoginForm />
           <p className="login-security-copy">Pilot authentication is now handled by British Airways Virtual. Your BAV password is stored as a salted one-way hash and is separate from any third-party virtual-airline account.</p>
+          <div className="pilot-staff-login">
+            <span>British Airways Virtual staff?</span>
+            <Link href="/staff-login">Staff login <span aria-hidden="true">→</span></Link>
+          </div>
         </div>
 
         <div className="login-mosaic" aria-label="Virtual airline imagery"><div className="login-tile tile-crew" /><div className="login-tile tile-aircraft" /><div className="login-tile tile-cabin" /></div>
