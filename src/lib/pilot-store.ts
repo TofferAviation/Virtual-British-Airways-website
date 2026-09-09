@@ -138,6 +138,51 @@ export async function markPilotLogin(id: string) {
   await writeState(state);
 }
 
+export async function updatePilotProfile(id: string, input: { name: string; email: string }) {
+  const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
+  const email = normalizeEmail(input.email);
+  if (name.length < 2) throw new Error("Please enter your full name.");
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Please enter a valid email address.");
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  if (state.pilots.some((pilot) => pilot.id !== id && pilot.email === email)) throw new Error("That email address is already in use.");
+  account.name = name;
+  account.email = email;
+  await writeState(state);
+  return toPublicPilot(account);
+}
+
+export async function changePilotPassword(id: string, currentPassword: string, newPassword: string) {
+  if (newPassword.length < 8) throw new Error("New password must contain at least 8 characters.");
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  if (!verifyPilotPassword(currentPassword, account.passwordHash)) throw new Error("Your current password is incorrect.");
+  account.passwordHash = hashPilotPassword(newPassword);
+  await writeState(state);
+}
+
+export async function setPilotStatus(id: string, status: PilotAccount["status"]) {
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  account.status = status;
+  await writeState(state);
+  return toPublicPilot(account);
+}
+
+export async function updatePilotAdminFields(id: string, input: { rank?: string; hub?: string; tier?: string }) {
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  if (input.rank) account.rank = input.rank.trim().slice(0, 40);
+  if (input.hub) account.hub = input.hub.trim().slice(0, 60);
+  if (input.tier) account.tier = input.tier.trim().slice(0, 30);
+  await writeState(state);
+  return toPublicPilot(account);
+}
+
 export async function applyApprovedPirepStats(pilotId: string, input: { blockMinutes: number; distanceNm: number; landingFpm: number | null; points: number; tierPoints: number }) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === pilotId);
