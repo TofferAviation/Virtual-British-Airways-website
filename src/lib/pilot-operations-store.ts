@@ -10,6 +10,7 @@ const FILE = path.join(DATA_DIR, "pilot-operations.json");
 export type PilotBooking = {
   id: string;
   pilotId: string;
+  routeId: string | null;
   flightNumber: string;
   from: string;
   to: string;
@@ -52,10 +53,14 @@ export type PilotPirep = {
 };
 
 type OperationsState = {
-  version: 2;
+  version: 3;
   bookings: PilotBooking[];
   pireps: PilotPirep[];
 };
+
+function normalizeBooking(booking: PilotBooking): PilotBooking {
+  return { ...booking, routeId: booking.routeId ?? null };
+}
 
 function normalizePirep(pirep: Partial<PilotPirep> & Pick<PilotPirep, "id" | "pilotId" | "flightNumber" | "from" | "to" | "aircraft" | "startedAt" | "completedAt" | "blockMinutes" | "distanceNm">): PilotPirep {
   return {
@@ -83,13 +88,13 @@ async function readState(): Promise<OperationsState> {
     const raw = await fs.readFile(FILE, "utf8");
     const parsed = JSON.parse(raw) as { bookings?: PilotBooking[]; pireps?: PilotPirep[] };
     return {
-      version: 2,
-      bookings: Array.isArray(parsed.bookings) ? parsed.bookings : [],
+      version: 3,
+      bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
       pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const state: OperationsState = { version: 2, bookings: [], pireps: [] };
+    const state: OperationsState = { version: 3, bookings: [], pireps: [] };
     await fs.writeFile(FILE, `${JSON.stringify(state, null, 2)}\n`, "utf8");
     return state;
   }
@@ -119,6 +124,11 @@ export async function getActivePilotBooking(pilotId: string) {
 export async function listPilotBookings(pilotId: string) {
   const state = await readState();
   return state.bookings.filter((booking) => booking.pilotId === pilotId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function countActiveScheduleBookings(routeId: string, date: string) {
+  const state = await readState();
+  return state.bookings.filter((booking) => booking.routeId === routeId && booking.date === date && ["booked", "in_progress"].includes(booking.status)).length;
 }
 
 export async function listPilotPireps(pilotId: string) {
