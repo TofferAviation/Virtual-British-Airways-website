@@ -41,7 +41,7 @@ export function PilotRegisterForm() {
   }
 
   return (
-    <form className="pilot-auth-form" onSubmit={submit}>
+    <form className="pilot-auth-form register-form" onSubmit={submit}>
       <label><span>Full name</span><input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required disabled={busy} /></label>
       <label><span>Email address</span><input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={busy} /></label>
       <label><span>Password</span><input type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
