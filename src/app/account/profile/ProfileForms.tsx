@@ -14,11 +14,13 @@ async function patchProfile(payload: Record<string, string>) {
   return body;
 }
 
-export function ProfileForms({ name, email }: { name: string; email: string }) {
+export function ProfileForms({ name, email, simbriefPilotId }: { name: string; email: string; simbriefPilotId: string }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [simbriefMessage, setSimbriefMessage] = useState("");
+  const [savingSimbrief, setSavingSimbrief] = useState(false);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,6 +34,21 @@ export function ProfileForms({ name, email }: { name: string; email: string }) {
       setProfileMessage(error instanceof Error ? error.message : "Unable to update profile.");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function saveSimbrief(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSavingSimbrief(true);
+    setSimbriefMessage("");
+    try {
+      await patchProfile({ simbriefPilotId: String(form.get("simbriefPilotId") || "") });
+      setSimbriefMessage("SimBrief Pilot ID saved. It will be used when you generate and sync a BAV flight plan.");
+    } catch (error) {
+      setSimbriefMessage(error instanceof Error ? error.message : "Unable to update SimBrief settings.");
+    } finally {
+      setSavingSimbrief(false);
     }
   }
 
@@ -75,6 +92,13 @@ export function ProfileForms({ name, email }: { name: string; email: string }) {
         <label>Confirm new password<input name="confirmPassword" type="password" minLength={8} autoComplete="new-password" required /></label>
         <button type="submit" disabled={savingPassword}>{savingPassword ? "Updating…" : "Change password"}</button>
         {passwordMessage ? <p className="pilot-profile-message">{passwordMessage}</p> : null}
+      </form>
+
+      <form className="pilot-profile-card" onSubmit={saveSimbrief}>
+        <div><span className="pilot-profile-kicker">FLIGHT PLANNING</span><h2>SimBrief connection</h2><p>Save your numeric SimBrief Pilot ID so BAV can pre-fill dispatches for your selected flights and save the generated plan to your BAV assignment. Your SimBrief password is never requested or stored.</p></div>
+        <label>SimBrief Pilot ID<input name="simbriefPilotId" inputMode="numeric" pattern="[0-9]*" maxLength={12} defaultValue={simbriefPilotId} placeholder="For example: 123456" /></label>
+        <button type="submit" disabled={savingSimbrief}>{savingSimbrief ? "Saving…" : "Save SimBrief setting"}</button>
+        {simbriefMessage ? <p className="pilot-profile-message">{simbriefMessage}</p> : null}
       </form>
     </div>
   );

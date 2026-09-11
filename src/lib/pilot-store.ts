@@ -35,6 +35,8 @@ export type PilotAccount = {
   bestLanding: number | null;
   onTime: number;
   streak: number;
+  /** Numeric SimBrief Pilot ID. This is not a password or an access token. */
+  simbriefPilotId: string | null;
 };
 
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash">;
@@ -74,6 +76,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     bestLanding: raw.bestLanding ?? null,
     onTime: Number.isFinite(raw.onTime) ? Number(raw.onTime) : 100,
     streak: Number(raw.streak) || 0,
+    simbriefPilotId: normalizeSimbriefPilotId(raw.simbriefPilotId),
   };
 }
 
@@ -140,6 +143,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
     createdAt: now, lastLoginAt: now, rank: "Second Officer", rankOverride: null, hub: "London Heathrow", tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
+    simbriefPilotId: null,
   };
   state.nextPilotNumber += 1;
   state.pilots.push(account);
@@ -181,6 +185,22 @@ export async function updatePilotProfile(id: string, input: { name: string; emai
   if (state.pilots.some((pilot) => pilot.id !== id && pilot.email === email)) throw new Error("That email address is already in use.");
   account.name = name;
   account.email = email;
+  await writeState(state);
+  return toPublicPilot(account);
+}
+
+function normalizeSimbriefPilotId(value: unknown) {
+  const id = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+  return /^\d{1,12}$/.test(id) ? id : null;
+}
+
+export async function updatePilotSimbriefId(id: string, simbriefPilotId: string) {
+  const normalized = normalizeSimbriefPilotId(simbriefPilotId);
+  if (simbriefPilotId.trim() && !normalized) throw new Error("Enter your numeric SimBrief Pilot ID, or leave it blank to remove the link.");
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  account.simbriefPilotId = normalized;
   await writeState(state);
   return toPublicPilot(account);
 }

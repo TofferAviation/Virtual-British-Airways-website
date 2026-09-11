@@ -23,6 +23,24 @@ export type PilotBooking = {
   createdAt: string;
 };
 
+export type PilotFlightPlan = {
+  id: string;
+  bookingId: string;
+  pilotId: string;
+  status: "draft" | "dispatch_opened" | "synced" | "sync_failed";
+  simbriefPilotId: string | null;
+  simbriefDispatchUrl: string | null;
+  simbriefOfpId: string | null;
+  simbriefOfpUrl: string | null;
+  route: string | null;
+  cruiseAltitude: string | null;
+  alternate: string | null;
+  generatedAt: string | null;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PirepStatus = "pending" | "changes_requested" | "accepted" | "rejected";
 
 export type PilotPirep = {
@@ -53,8 +71,9 @@ export type PilotPirep = {
 };
 
 type OperationsState = {
-  version: 3;
+  version: 4;
   bookings: PilotBooking[];
+  flightPlans: PilotFlightPlan[];
   pireps: PilotPirep[];
 };
 
@@ -86,15 +105,16 @@ async function readState(): Promise<OperationsState> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     const raw = await fs.readFile(FILE, "utf8");
-    const parsed = JSON.parse(raw) as { bookings?: PilotBooking[]; pireps?: PilotPirep[] };
+    const parsed = JSON.parse(raw) as { bookings?: PilotBooking[]; flightPlans?: PilotFlightPlan[]; pireps?: PilotPirep[] };
     return {
-      version: 3,
+      version: 4,
       bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
+      flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans : [],
       pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const state: OperationsState = { version: 3, bookings: [], pireps: [] };
+    const state: OperationsState = { version: 4, bookings: [], flightPlans: [], pireps: [] };
     await fs.writeFile(FILE, `${JSON.stringify(state, null, 2)}\n`, "utf8");
     return state;
   }
@@ -114,6 +134,67 @@ export async function createPilotBooking(input: Omit<PilotBooking, "id" | "creat
   state.bookings.push(booking);
   await writeState(state);
   return booking;
+}
+
+export async function createFlightPlanForBooking(input: { bookingId: string; pilotId: string; simbriefPilotId: string | null; simbriefDispatchUrl: string | null }) {
+  const state = await readState();
+  const booking = state.bookings.find((item) => item.id === input.bookingId && item.pilotId === input.pilotId);
+  if (!booking) throw new Error("Flight assignment not found.");
+  const existing = state.flightPlans.find((item) => item.bookingId === input.bookingId);
+  if (existing) return existing;
+  const now = new Date().toISOString();
+  const flightPlan: PilotFlightPlan = { id: randomUUID(), bookingId: input.bookingId, pilotId: input.pilotId, status: "draft", simbriefPilotId: input.simbriefPilotId, simbriefDispatchUrl: input.simbriefDispatchUrl, simbriefOfpId: null, simbriefOfpUrl: null, route: null, cruiseAltitude: null, alternate: null, generatedAt: null, lastSyncedAt: null, createdAt: now, updatedAt: now };
+  state.flightPlans.push(flightPlan);
+  await writeState(state);
+  return flightPlan;
+}
+
+export async function getPilotFlightPlan(bookingId: string, pilotId: string) {
+  const state = await readState();
+  return state.flightPlans.find((item) => item.bookingId === bookingId && item.pilotId === pilotId) ?? null;
+}
+
+export async function markFlightPlanDispatchOpened(bookingId: string, pilotId: string) {
+  const state = await readState();
+  const flightPlan = state.flightPlans.find((item) => item.bookingId === bookingId && item.pilotId === pilotId);
+  if (!flightPlan) throw new Error("Flight plan not found.");
+  flightPlan.status = "dispatch_opened";
+  flightPlan.updatedAt = new Date().toISOString();
+  await writeState(state);
+  return flightPlan;
+}
+
+export async function configureFlightPlanSimbrief(input: { bookingId: string; pilotId: string; simbriefPilotId: string; simbriefDispatchUrl: string }) {
+  const state = await readState();
+  const flightPlan = state.flightPlans.find((item) => item.bookingId === input.bookingId && item.pilotId === input.pilotId);
+  if (!flightPlan) throw new Error("Flight plan not found.");
+  flightPlan.simbriefPilotId = input.simbriefPilotId;
+  flightPlan.simbriefDispatchUrl = input.simbriefDispatchUrl;
+  flightPlan.updatedAt = new Date().toISOString();
+  await writeState(state);
+  return flightPlan;
+}
+
+export async function updateFlightPlanFromSimbrief(input: { bookingId: string; pilotId: string; status: PilotFlightPlan["status"]; simbriefOfpId?: string | null; simbriefOfpUrl?: string | null; route?: string | null; cruiseAltitude?: string | null; alternate?: string | null; generatedAt?: string | null }) {
+  const state = await readState();
+  const flightPlan = state.flightPlans.find((item) => item.bookingId === input.bookingId && item.pilotId === input.pilotId);
+  if (!flightPlan) throw new Error("Flight plan not found.");
+  flightPlan.status = input.status;
+  if (input.simbriefOfpId !== undefined) flightPlan.simbriefOfpId = input.simbriefOfpId;
+  if (input.simbriefOfpUrl !== undefined) flightPlan.simbriefOfpUrl = input.simbriefOfpUrl;
+  if (input.route !== undefined) flightPlan.route = input.route;
+  if (input.cruiseAltitude !== undefined) flightPlan.cruiseAltitude = input.cruiseAltitude;
+  if (input.alternate !== undefined) flightPlan.alternate = input.alternate;
+  if (input.generatedAt !== undefined) flightPlan.generatedAt = input.generatedAt;
+  flightPlan.lastSyncedAt = new Date().toISOString();
+  flightPlan.updatedAt = new Date().toISOString();
+  await writeState(state);
+  return flightPlan;
+}
+
+export async function getPilotBooking(bookingId: string, pilotId: string) {
+  const state = await readState();
+  return state.bookings.find((item) => item.id === bookingId && item.pilotId === pilotId) ?? null;
 }
 
 export async function getActivePilotBooking(pilotId: string) {

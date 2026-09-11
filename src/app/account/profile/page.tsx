@@ -5,7 +5,7 @@ import { ProfileForms } from "./ProfileForms";
 import styles from "./profile.module.css";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Pilot profile" };
+export const metadata = { title: "Account settings" };
 
 export default async function PilotProfilePage() {
   const session = await requirePilotSession();
@@ -15,9 +15,9 @@ export default async function PilotProfilePage() {
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
-        <nav className={styles.breadcrumbs}><Link href="/account">Pilot account</Link><span>›</span><strong>Profile & security</strong></nav>
+        <nav className={styles.breadcrumbs}><Link href="/account">Pilot account</Link><span>›</span><strong>Account settings</strong></nav>
         <section className={styles.hero}>
-          <div><span className={styles.eyebrow}>BRITISH AIRWAYS VIRTUAL</span><h1>Profile & security</h1><p>Manage your in-house BAV pilot identity and account security.</p></div>
+          <div><span className={styles.eyebrow}>BRITISH AIRWAYS VIRTUAL</span><h1>Account settings</h1><p>Manage your in-house BAV pilot identity, security and flight-planning connections.</p></div>
           <div className={styles.identity}><span>{pilot.pilotNumber}</span><strong>{pilot.name}</strong><small>{pilot.rank} · {pilot.tier} member</small></div>
         </section>
         <section className={styles.statusRow}>
@@ -26,7 +26,7 @@ export default async function PilotProfilePage() {
           <article><span>MEMBER SINCE</span><strong>{new Date(pilot.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</strong></article>
           <article><span>LAST SIGN IN</span><strong>{pilot.lastLoginAt ? new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</strong></article>
         </section>
-        <ProfileForms name={pilot.name} email={pilot.email} />
+        <ProfileForms name={pilot.name} email={pilot.email} simbriefPilotId={pilot.simbriefPilotId ?? ""} />
         <div className={styles.back}><Link href="/account">← Back to pilot dashboard</Link></div>
       </div>
     </main>
