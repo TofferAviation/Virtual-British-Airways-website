@@ -51,7 +51,15 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
   try {
     const raw = await readFile(routesFile, "utf8");
     const parsed = JSON.parse(raw) as ManagedRoute[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const existingIds = new Set(parsed.map((route) => route.id));
+    const additions = starterSchedule.filter((route) => !existingIds.has(route.id));
+    if (additions.length) {
+      const merged = [...parsed, ...additions];
+      await saveManagedRoutes(merged);
+      return merged;
+    }
+    return parsed;
   } catch {
     return [];
   }
