@@ -25,6 +25,12 @@ const starterSchedule: ManagedRoute[] = [
   { id: "ba117-lhr-jfk", from: "LHR", to: "JFK", flightNumber: "BA117", departure: "08:20", arrival: "11:15", duration: "7h 55m", aircraft: "Boeing 777-200ER", slots: 12, active: true },
   { id: "ba175-lhr-jfk", from: "LHR", to: "JFK", flightNumber: "BA175", departure: "09:45", arrival: "12:40", duration: "7h 55m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
   { id: "ba183-lhr-jfk", from: "LHR", to: "JFK", flightNumber: "BA183", departure: "19:05", arrival: "22:00", duration: "7h 55m", aircraft: "Airbus A350-1000", slots: 12, active: true },
+  { id: "ba283-lhr-lax", from: "LHR", to: "LAX", flightNumber: "BA283", departure: "09:30", arrival: "20:50", duration: "11h 20m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
+  { id: "ba287-lhr-sfo", from: "LHR", to: "SFO", flightNumber: "BA287", departure: "13:30", arrival: "20:40", duration: "11h 10m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
+  { id: "ba48-lhr-sea", from: "LHR", to: "SEA", flightNumber: "BA48", departure: "03:20", arrival: "12:45", duration: "9h 25m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
+  { id: "ba197-lhr-iah", from: "LHR", to: "IAH", flightNumber: "BA197", departure: "13:45", arrival: "00:15", duration: "10h 30m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
+  { id: "ba11-lhr-sin", from: "LHR", to: "SIN", flightNumber: "BA11", departure: "18:25", arrival: "08:05", duration: "13h 40m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
+  { id: "ba55-lhr-jnb", from: "LHR", to: "JNB", flightNumber: "BA55", departure: "18:00", arrival: "05:00", duration: "11h 00m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
 ];
 
 async function ensureDataDir() {
@@ -82,13 +88,14 @@ export async function deleteManagedRoute(id: string) {
   await saveManagedRoutes(next);
 }
 
-export async function getFlightsForRoute(from: string, to: string, date?: string) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to);
-  return Promise.all(managed.map(async (route) => {
+async function withAvailability(routes: ManagedRoute[], date?: string) {
+  return Promise.all(routes.map(async (route) => {
     const reserved = date ? await countActiveScheduleBookings(route.id, date) : 0;
     return {
       routeId: route.id,
       number: route.flightNumber,
+      from: route.from,
+      to: route.to,
       departure: route.departure,
       arrival: route.arrival,
       duration: route.duration,
@@ -97,4 +104,14 @@ export async function getFlightsForRoute(from: string, to: string, date?: string
       slots: Math.max(0, route.slots - reserved),
     };
   }));
+}
+
+export async function getFlightsForRoute(from: string, to: string, date?: string) {
+  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to);
+  return withAvailability(managed, date);
+}
+
+export async function getFlightsForAircraft(aircraft: string, date?: string) {
+  const managed = (await getManagedRoutes()).filter((route) => route.active && route.aircraft === aircraft);
+  return withAvailability(managed, date);
 }
