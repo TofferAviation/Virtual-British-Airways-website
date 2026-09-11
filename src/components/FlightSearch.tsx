@@ -12,6 +12,20 @@ const baseAirports = [
 
 const preferredAirportCodes = ["LHR", "LGW", "LCY", "OSL", "JFK", "LAX", "DXB", "SIN"];
 
+const aircraftTypes = [
+  "Airbus A319",
+  "Airbus A320",
+  "Airbus A320neo",
+  "Airbus A321neo",
+  "Airbus A350-1000",
+  "Boeing 777-200ER",
+  "Boeing 777-300ER",
+  "Boeing 787-8",
+  "Boeing 787-9",
+  "Boeing 787-10",
+  "Embraer E190",
+];
+
 export function FlightSearch() {
   const router = useRouter();
   const [from, setFrom] = useState("LHR");
@@ -33,8 +47,11 @@ export function FlightSearch() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const query = new URLSearchParams({ from, to, date, aircraft });
-    router.push(`/book?${query.toString()}`);
+    if (aircraft !== "Any aircraft") {
+      router.push(`/book?${new URLSearchParams({ aircraft, date }).toString()}`);
+      return;
+    }
+    router.push(`/book?${new URLSearchParams({ from, to, date }).toString()}`);
   }
 
   return (
@@ -47,7 +64,7 @@ export function FlightSearch() {
       <div className="flight-search-body">
         <div className="field">
           <label htmlFor="from">From</label>
-          <select id="from" value={from} onChange={(event) => setFrom(event.target.value)}>
+          <select id="from" value={from} onChange={(event) => setFrom(event.target.value)} disabled={aircraft !== "Any aircraft"}>
             {orderedAirports.map((airport) => (
               <option key={`from-${airport.code}`} value={airport.code}>
                 {airport.name} ({airport.code}) — {airport.country}
@@ -57,7 +74,7 @@ export function FlightSearch() {
         </div>
         <div className="field">
           <label htmlFor="to">To</label>
-          <select id="to" value={to} onChange={(event) => setTo(event.target.value)}>
+          <select id="to" value={to} onChange={(event) => setTo(event.target.value)} disabled={aircraft !== "Any aircraft"}>
             {orderedAirports.map((airport) => (
               <option key={`to-${airport.code}`} value={airport.code}>
                 {airport.name} ({airport.code}) — {airport.country}
@@ -73,24 +90,14 @@ export function FlightSearch() {
           <label htmlFor="aircraft">Aircraft</label>
           <select id="aircraft" value={aircraft} onChange={(event) => setAircraft(event.target.value)}>
             <option>Any aircraft</option>
-            <option>Airbus A319</option>
-            <option>Airbus A320</option>
-            <option>Airbus A320neo</option>
-            <option>Airbus A321neo</option>
-            <option>Airbus A350-1000</option>
-            <option>Boeing 777-200ER</option>
-            <option>Boeing 777-300ER</option>
-            <option>Boeing 787-8</option>
-            <option>Boeing 787-9</option>
-            <option>Boeing 787-10</option>
-            <option>Embraer E190</option>
+            {aircraftTypes.map((type) => <option key={type}>{type}</option>)}
           </select>
         </div>
         <button className="button button-primary search-submit" type="submit">Find flights</button>
       </div>
       <div className="search-helper">
         <span><strong>{airports.length + baseAirports.length} BA destinations / bases</strong> loaded into the current network selector.</span>
-        <span>Phoenix-ready assignment flow</span>
+        <span>{aircraft === "Any aircraft" ? "Search a city pair or select an airframe to see its current routes" : `${aircraft} · showing routes operated by this airframe`}</span>
       </div>
     </form>
   );
