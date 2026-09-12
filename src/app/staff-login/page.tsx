@@ -67,7 +67,15 @@ export default async function StaffLoginPage({ searchParams }: StaffLoginPagePro
               <p className="staff-login-config-note">Signed in as the configured owner pilot. Continue without entering a separate staff password.</p>
               <button className="button button-primary" type="submit">Continue as owner pilot</button>
             </form>
-          ) : null}
+          ) : pilot ? (
+            <div className="staff-login-config-note" role="status">
+              The signed-in pilot account is not the configured Staff Centre owner. Set <code>BAV_STAFF_EMAIL</code> to this pilot account&apos;s email, save and redeploy, then return here.
+            </div>
+          ) : (
+            <div className="staff-login-config-note" role="status">
+              Owner recovery is available after signing in to your pilot account. <Link href="/login">Sign in as owner pilot</Link>, then return to this page.
+            </div>
+          )}
           <StaffLoginForm configured={isStaffAuthConfigured()} />
           <p className="staff-login-footnote">Flight simulation only · Independent virtual airline · Not affiliated with British Airways Plc</p>
         </div>
