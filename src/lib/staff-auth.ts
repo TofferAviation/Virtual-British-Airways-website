@@ -69,9 +69,27 @@ export async function validateStaffCredentials(email: string, password: string):
   const normalizedEmail = email.trim().toLowerCase();
   const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
   const configuredPassword = process.env.BAV_STAFF_PASSWORD ?? "";
+  const isConfiguredOwner = safeEqual(normalizedEmail, configuredEmail) && safeEqual(password, configuredPassword);
 
   const account = await findStaffUserByEmail(normalizedEmail);
-  if (!account || account.status !== "active") return null;
+  // The configured owner is the break-glass account for the service. Its
+  // access must not depend on a mutable staff_state record being present or
+  // correctly normalised after deployment; the matching environment email and
+  // password remain mandatory.
+  if (!account) {
+    if (!isConfiguredOwner) return null;
+    return {
+      id: "env-admin",
+      name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || "Administrator",
+      email: configuredEmail,
+      roleId: "admin",
+      status: "active",
+      overrides: {},
+      isEnvironmentAdmin: true,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  if (account.status !== "active") return null;
 
   if (account.isEnvironmentAdmin || normalizedEmail === configuredEmail) {
     if (!safeEqual(normalizedEmail, configuredEmail)) return null;
@@ -80,7 +98,7 @@ export async function validateStaffCredentials(email: string, password: string):
     // own stored password hash.
     const passwordMatches =
       (account.passwordHash && verifyPassword(password, account.passwordHash)) ||
-      safeEqual(password, configuredPassword);
+      isConfiguredOwner;
     if (!passwordMatches) return null;
   } else if (!verifyPassword(password, account.passwordHash)) {
     return null;
