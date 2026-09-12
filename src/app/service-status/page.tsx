@@ -156,7 +156,7 @@ export default async function ServiceStatusPage() {
 
               <section className="status-side-card status-help-card">
                 <div className="status-card-heading"><span className="status-heading-icon">?</span><h2>Need help?</h2></div>
-                <div className="status-help-actions"><Link className="primary" href="/help">Open help centre ↗</Link><Link href="/help#contact">Report an issue</Link><Link href="/help#contact">◉ Join our Discord</Link></div>
+                <div className="status-help-actions"><Link className="primary" href="/help">Open help centre ↗</Link><Link href="/help#contact">Report an issue</Link><a href="https://discord.gg/HM76YewaWe" target="_blank" rel="noreferrer">◉ Join our Discord ↗</a></div>
               </section>
             </aside>
           </div>

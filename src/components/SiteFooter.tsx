@@ -33,6 +33,7 @@ export async function SiteFooter() {
         <div>
           <h3>Support</h3>
           <Link href="/help">Help centre</Link>
+          <a href="https://discord.gg/HM76YewaWe" target="_blank" rel="noreferrer">Join our Discord ↗</a>
           <a href="#">Operations manual</a>
           <a href="#">System status</a>
         </div>
