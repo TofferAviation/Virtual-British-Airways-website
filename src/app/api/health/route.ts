@@ -14,5 +14,8 @@ export function GET() {
         process.env.BAV_STAFF_SESSION_SECRET &&
         process.env.BAV_STAFF_SESSION_SECRET.length >= 24,
     ),
+    pilotPersistenceConfigured: Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SECRET_KEY,
+    ),
   });
 }
