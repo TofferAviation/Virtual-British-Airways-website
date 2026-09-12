@@ -190,7 +190,6 @@ async function resolveStaffSession(): Promise<StaffSessionResolution> {
 }
 
 export function isConfiguredStaffOwnerEmail(email: string) {
-  if (!isStaffAuthConfigured()) return false;
   const configuredEmail = getMasterAdminEmail();
   return Boolean(configuredEmail && safeEqual(email.trim().toLowerCase(), configuredEmail));
 }
