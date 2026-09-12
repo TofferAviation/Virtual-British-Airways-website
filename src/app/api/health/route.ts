@@ -40,7 +40,7 @@ export async function GET() {
     // This is deliberately a source revision rather than an environment
     // value so the public health endpoint can confirm which authentication
     // release Render is actually serving, without exposing any secret.
-    revision: "owner-session-recovery-5d9730f",
+    revision: "owner-session-recovery-62a5ad6",
     staffAuthConfigured: Boolean(
       process.env.BAV_STAFF_EMAIL &&
         process.env.BAV_STAFF_PASSWORD &&
