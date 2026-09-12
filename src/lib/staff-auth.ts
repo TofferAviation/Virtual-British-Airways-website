@@ -188,6 +188,34 @@ async function resolveStaffSession(): Promise<StaffSessionResolution> {
   } satisfies StaffSession, failure: null };
 }
 
+export function isConfiguredStaffOwnerEmail(email: string) {
+  if (!isStaffAuthConfigured()) return false;
+  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
+  return Boolean(configuredEmail && safeEqual(email.trim().toLowerCase(), configuredEmail));
+}
+
+/**
+ * Recover a Staff Centre session from the already-verified native pilot
+ * session. This is intentionally limited to the single configured owner
+ * email; an ordinary pilot session can never obtain staff access here.
+ */
+export async function recoverConfiguredOwnerFromPilot(email: string): Promise<StaffAccount | null> {
+  if (!isConfiguredStaffOwnerEmail(email)) return null;
+  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
+  const account = await findStaffUserByEmail(configuredEmail);
+  if (account && account.status === "active") return account;
+  return {
+    id: "env-admin",
+    name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || "Administrator",
+    email: configuredEmail,
+    roleId: "admin",
+    status: "active",
+    overrides: {},
+    isEnvironmentAdmin: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export async function getStaffSession() {
   return (await resolveStaffSession()).session;
 }
