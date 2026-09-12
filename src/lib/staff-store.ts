@@ -10,6 +10,7 @@ import {
   type StaffRoleId,
   type StaffRoleTemplate,
 } from "@/lib/permissions";
+import { getMasterAdminEmail } from "@/lib/staff-owner";
 
 export type StaffAccountStatus = "active" | "invited" | "inactive";
 
@@ -75,7 +76,7 @@ function nowIso() {
 }
 
 function envAdmin(): StaffAccount | null {
-  const email = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase();
+  const email = getMasterAdminEmail();
   if (!email) return null;
   return {
     id: "env-admin",
@@ -90,7 +91,7 @@ function envAdmin(): StaffAccount | null {
 }
 
 export function isMasterAdminAccount(user: StaffAccount) {
-  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase();
+  const configuredEmail = getMasterAdminEmail();
   return Boolean(
     user.isEnvironmentAdmin ||
       user.id === "env-admin" ||

@@ -11,6 +11,7 @@ import {
   type StaffAccount,
 } from "@/lib/staff-store";
 import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
+import { getMasterAdminEmail } from "@/lib/staff-owner";
 
 export const STAFF_COOKIE_NAME = "bav_staff_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
@@ -58,8 +59,7 @@ function safeEqual(a: string, b: string) {
 
 export function isStaffAuthConfigured() {
   return Boolean(
-    process.env.BAV_STAFF_EMAIL &&
-      process.env.BAV_STAFF_PASSWORD &&
+    process.env.BAV_STAFF_PASSWORD &&
       process.env.BAV_STAFF_SESSION_SECRET &&
       process.env.BAV_STAFF_SESSION_SECRET.length >= 24,
   );
@@ -68,7 +68,7 @@ export function isStaffAuthConfigured() {
 export async function validateStaffCredentials(email: string, password: string): Promise<StaffAccount | null> {
   if (!isStaffAuthConfigured()) return null;
   const normalizedEmail = email.trim().toLowerCase();
-  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
+  const configuredEmail = getMasterAdminEmail();
   const configuredPassword = process.env.BAV_STAFF_PASSWORD ?? "";
   const isConfiguredOwner = safeEqual(normalizedEmail, configuredEmail) && safeEqual(password, configuredPassword);
 
@@ -190,7 +190,7 @@ async function resolveStaffSession(): Promise<StaffSessionResolution> {
 
 export function isConfiguredStaffOwnerEmail(email: string) {
   if (!isStaffAuthConfigured()) return false;
-  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
+  const configuredEmail = getMasterAdminEmail();
   return Boolean(configuredEmail && safeEqual(email.trim().toLowerCase(), configuredEmail));
 }
 
@@ -201,7 +201,7 @@ export function isConfiguredStaffOwnerEmail(email: string) {
  */
 export async function recoverConfiguredOwnerFromPilot(email: string): Promise<StaffAccount | null> {
   if (!isConfiguredStaffOwnerEmail(email)) return null;
-  const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase() ?? "";
+  const configuredEmail = getMasterAdminEmail();
   const account = await findStaffUserByEmail(configuredEmail);
   if (account && account.status === "active") return account;
   return {
