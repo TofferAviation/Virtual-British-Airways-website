@@ -68,7 +68,11 @@ export async function validateStaffCredentials(email: string, password: string):
   if (!account || account.status !== "active") return null;
 
   if (account.isEnvironmentAdmin || normalizedEmail === configuredEmail) {
-    if (!safeEqual(normalizedEmail, configuredEmail) || !safeEqual(password, configuredPassword)) return null;
+    if (!safeEqual(normalizedEmail, configuredEmail)) return null;
+    const passwordMatches = account.passwordHash
+      ? verifyPassword(password, account.passwordHash)
+      : safeEqual(password, configuredPassword);
+    if (!passwordMatches) return null;
   } else if (!verifyPassword(password, account.passwordHash)) {
     return null;
   }

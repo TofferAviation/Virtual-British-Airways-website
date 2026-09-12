@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   defaultRoleTemplates,
   effectivePermissions,
@@ -60,6 +61,15 @@ export type StaffState = {
 const dataDir = path.join(process.cwd(), ".bav-data");
 const staffFile = path.join(dataDir, "staff.json");
 
+function getStaffStateClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secret) return null;
+  return createClient(url, secret, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -105,7 +115,6 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
       existing.status = "active";
       existing.overrides = {};
       existing.isEnvironmentAdmin = true;
-      existing.passwordHash = undefined;
     } else {
       users.unshift(admin);
     }
@@ -119,6 +128,17 @@ async function ensureDataDir() {
 }
 
 export async function getStaffState(): Promise<StaffState> {
+  const client = getStaffStateClient();
+  if (client) {
+    const { data, error } = await client.from("staff_state").select("state").eq("singleton", true).maybeSingle();
+    if (error) throw error;
+    if (data?.state) return normalizeState(data.state as StaffState);
+
+    const initial = normalizeState();
+    const { error: createError } = await client.from("staff_state").upsert({ singleton: true, state: initial });
+    if (createError) throw createError;
+    return initial;
+  }
   try {
     const raw = await readFile(staffFile, "utf8");
     return normalizeState(JSON.parse(raw) as StaffState);
@@ -128,8 +148,14 @@ export async function getStaffState(): Promise<StaffState> {
 }
 
 export async function saveStaffState(state: StaffState) {
-  await ensureDataDir();
   const normalized = normalizeState(state);
+  const client = getStaffStateClient();
+  if (client) {
+    const { error } = await client.from("staff_state").upsert({ singleton: true, state: normalized });
+    if (error) throw error;
+    return;
+  }
+  await ensureDataDir();
   const tmp = `${staffFile}.tmp`;
   await writeFile(tmp, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
   await rename(tmp, staffFile);
@@ -188,6 +214,35 @@ export async function markStaffActive(id: string) {
   const user = state.users.find((item) => item.id === id);
   if (!user) return;
   user.lastActiveAt = nowIso();
+  await saveStaffState(state);
+}
+
+export async function updateOwnStaffProfile(id: string, input: { name: string }) {
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (name.length < 2 || name.length > 80) throw new Error("Display name must be between 2 and 80 characters.");
+  const state = await getStaffState();
+  const user = state.users.find((item) => item.id === id && item.status === "active");
+  if (!user) throw new Error("Staff account not found.");
+  user.name = name;
+  addAudit(state, { actorEmail: user.email, actorName: name, action: "staff.profile.updated", targetUserId: user.id, targetName: name, details: "Updated their own staff display name." });
+  await saveStaffState(state);
+  return user;
+}
+
+export async function changeOwnStaffPassword(id: string, currentPassword: string, newPassword: string) {
+  if (newPassword.length < 10) throw new Error("Use a password with at least 10 characters.");
+  const state = await getStaffState();
+  const user = state.users.find((item) => item.id === id && item.status === "active");
+  if (!user) throw new Error("Staff account not found.");
+
+  const configuredOwnerPassword = process.env.BAV_STAFF_PASSWORD ?? "";
+  const currentPasswordMatches = user.passwordHash
+    ? verifyPassword(currentPassword, user.passwordHash)
+    : Boolean(user.isEnvironmentAdmin && configuredOwnerPassword && currentPassword.length === configuredOwnerPassword.length && timingSafeEqual(Buffer.from(currentPassword), Buffer.from(configuredOwnerPassword)));
+  if (!currentPasswordMatches) throw new Error("Your current password is incorrect.");
+
+  user.passwordHash = hashPassword(newPassword);
+  addAudit(state, { actorEmail: user.email, actorName: user.name, action: "staff.password.updated", targetUserId: user.id, targetName: user.name, details: "Updated their own staff password." });
   await saveStaffState(state);
 }
 
