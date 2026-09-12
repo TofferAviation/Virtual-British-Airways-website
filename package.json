@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate:pilot-state": "node --env-file=.env.local scripts/migrate-pilot-state-to-supabase.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

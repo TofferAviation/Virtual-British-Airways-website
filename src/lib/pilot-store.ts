@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { automaticPilotRank, isPilotRank, type PilotRank } from "@/lib/pilot-ranks";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
@@ -11,6 +12,8 @@ type PilotState = {
   nextPilotNumber: number;
   pilots: PilotAccount[];
 };
+
+type PilotStateRow = { state: unknown };
 
 export type PilotAccount = {
   id: string;
@@ -43,6 +46,19 @@ export type PublicPilotAccount = Omit<PilotAccount, "passwordHash">;
 
 function emptyState(): PilotState {
   return { version: 2, nextPilotNumber: 1, pilots: [] };
+}
+
+function getPilotStateClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secret) return null;
+  return createClient(url, secret, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+}
+
+function localFallbackAllowed() {
+  return process.env.NODE_ENV !== "production" || process.env.BAV_PILOT_LOCAL_FALLBACK === "1";
 }
 
 async function ensureDataDir() {
@@ -80,27 +96,69 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
   };
 }
 
-async function readState(): Promise<PilotState> {
+function normalizeState(raw?: Partial<PilotState>): PilotState {
+  const pilots = Array.isArray(raw?.pilots)
+    ? raw.pilots
+      .filter((pilot): pilot is PilotAccount => Boolean(pilot?.id && pilot?.pilotNumber && pilot?.email && pilot?.name && pilot?.passwordHash))
+      .map((pilot) => normalizePilot(pilot))
+    : [];
+  const nextPilotNumber = Math.max(
+    1,
+    Number(raw?.nextPilotNumber) || 0,
+    ...pilots.map((pilot) => Number(pilot.pilotNumber.replace(/\D/g, "")) + 1).filter(Number.isFinite),
+  );
+  return { version: 2, nextPilotNumber, pilots };
+}
+
+async function readLocalState(): Promise<PilotState> {
   await ensureDataDir();
   try {
     const raw = await fs.readFile(PILOT_FILE, "utf8");
-    const parsed = JSON.parse(raw) as { nextPilotNumber?: number; pilots?: PilotAccount[] };
-    return {
-      version: 2,
-      nextPilotNumber: Math.max(1, Number(parsed.nextPilotNumber) || 1),
-      pilots: Array.isArray(parsed.pilots) ? parsed.pilots.map((pilot) => normalizePilot(pilot)) : [],
-    };
+    return normalizeState(JSON.parse(raw) as Partial<PilotState>);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const state = emptyState();
-    await writeState(state);
-    return state;
+    return emptyState();
   }
 }
 
-async function writeState(state: PilotState) {
+async function writeLocalState(state: PilotState) {
   await ensureDataDir();
   await fs.writeFile(PILOT_FILE, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+}
+
+async function readState(): Promise<PilotState> {
+  const client = getPilotStateClient();
+  if (client) {
+    const { data, error } = await client.from("pilot_state").select("state").eq("singleton", true).maybeSingle();
+    if (error) throw error;
+    if (data?.state) return normalizeState((data as PilotStateRow).state as Partial<PilotState>);
+
+    // A one-time local import is permitted only when explicitly enabled. It
+    // supports moving the existing development state into Supabase without
+    // allowing an ephemeral production instance to become authoritative.
+    const initial = localFallbackAllowed() ? await readLocalState() : emptyState();
+    const { error: createError } = await client.from("pilot_state").upsert({ singleton: true, state: initial });
+    if (createError) throw createError;
+    return initial;
+  }
+  if (!localFallbackAllowed()) {
+    throw new Error("Pilot account persistence is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY on the website host.");
+  }
+  return readLocalState();
+}
+
+async function writeState(state: PilotState) {
+  const normalized = normalizeState(state);
+  const client = getPilotStateClient();
+  if (client) {
+    const { error } = await client.from("pilot_state").upsert({ singleton: true, state: normalized });
+    if (error) throw error;
+    return;
+  }
+  if (!localFallbackAllowed()) {
+    throw new Error("Pilot account persistence is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY on the website host.");
+  }
+  await writeLocalState(normalized);
 }
 
 function normalizeEmail(email: string) {
