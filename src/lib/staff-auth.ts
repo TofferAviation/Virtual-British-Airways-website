@@ -11,6 +11,7 @@ import {
   type StaffAccount,
 } from "@/lib/staff-store";
 import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
+import { getPilotSession } from "@/lib/pilot-auth";
 import { getMasterAdminEmail } from "@/lib/staff-owner";
 
 export const STAFF_COOKIE_NAME = "bav_staff_session";
@@ -238,7 +239,13 @@ export async function requireStaffPermission(permission: PermissionId) {
 
 export async function requireStaffSession() {
   const result = await resolveStaffSession();
-  if (!result.session) redirect(`/staff-login?reason=${result.failure}`);
+  if (!result.session) {
+    const pilot = await getPilotSession();
+    if (pilot && isConfiguredStaffOwnerEmail(pilot.email)) {
+      redirect("/api/staff/owner-recovery?returnTo=%2Fstaff");
+    }
+    redirect(`/staff-login?reason=${result.failure}`);
+  }
   return result.session;
 }
 
