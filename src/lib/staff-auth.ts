@@ -12,7 +12,7 @@ import {
 } from "@/lib/staff-store";
 import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
 import { getPilotSession } from "@/lib/pilot-auth";
-import { getMasterAdminEmail } from "@/lib/staff-owner";
+import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 
 export const STAFF_COOKIE_NAME = "bav_staff_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
@@ -69,9 +69,8 @@ export function isStaffAuthConfigured() {
 export async function validateStaffCredentials(email: string, password: string): Promise<StaffAccount | null> {
   if (!isStaffAuthConfigured()) return null;
   const normalizedEmail = email.trim().toLowerCase();
-  const configuredEmail = getMasterAdminEmail();
   const configuredPassword = process.env.BAV_STAFF_PASSWORD ?? "";
-  const isConfiguredOwner = safeEqual(normalizedEmail, configuredEmail) && safeEqual(password, configuredPassword);
+  const isConfiguredOwner = isConfiguredStaffOwnerEmail(normalizedEmail) && safeEqual(password, configuredPassword);
 
   // The configured owner is also allowed to recover Staff Centre access using
   // their active native pilot account. This keeps the single owner identity
@@ -79,7 +78,7 @@ export async function validateStaffCredentials(email: string, password: string):
   // while requiring the exact configured owner email and a real password hash
   // from the persistent pilot account store. It never grants staff access to
   // other pilots.
-  const ownerPilot = !isConfiguredOwner && safeEqual(normalizedEmail, configuredEmail)
+  const ownerPilot = !isConfiguredOwner && isConfiguredStaffOwnerEmail(normalizedEmail)
     ? await findPilotByEmail(normalizedEmail)
     : null;
   const isOwnerPilotLogin = Boolean(
@@ -99,7 +98,7 @@ export async function validateStaffCredentials(email: string, password: string):
     return {
       id: "env-admin",
       name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || "Administrator",
-      email: configuredEmail,
+      email: normalizedEmail,
       roleId: "admin",
       status: "active",
       overrides: {},
@@ -109,8 +108,8 @@ export async function validateStaffCredentials(email: string, password: string):
   }
   if (account.status !== "active") return null;
 
-  if (account.isEnvironmentAdmin || normalizedEmail === configuredEmail) {
-    if (!safeEqual(normalizedEmail, configuredEmail)) return null;
+  if (account.isEnvironmentAdmin || isConfiguredStaffOwnerEmail(normalizedEmail)) {
+    if (!isConfiguredStaffOwnerEmail(normalizedEmail)) return null;
     // The configured owner password remains a server-side recovery credential
     // for the master-admin email. Invited staff accounts can only use their
     // own stored password hash.
@@ -126,8 +125,8 @@ export async function validateStaffCredentials(email: string, password: string):
   return account;
 }
 
-export function createStaffSessionToken(account: StaffAccount): string {
-  const session: StaffSession = {
+function staffSessionForAccount(account: StaffAccount): StaffSession {
+  return {
     userId: account.id,
     email: account.email.trim().toLowerCase(),
     name: account.name,
@@ -135,6 +134,10 @@ export function createStaffSessionToken(account: StaffAccount): string {
     isMasterAdmin: Boolean(account.isEnvironmentAdmin),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
+}
+
+export function createStaffSessionToken(account: StaffAccount): string {
+  const session = staffSessionForAccount(account);
   const payload = encode(JSON.stringify(session));
   return `${payload}.${sign(payload)}`;
 }
@@ -190,8 +193,7 @@ async function resolveStaffSession(): Promise<StaffSessionResolution> {
 }
 
 export function isConfiguredStaffOwnerEmail(email: string) {
-  const configuredEmail = getMasterAdminEmail();
-  return Boolean(configuredEmail && safeEqual(email.trim().toLowerCase(), configuredEmail));
+  return isConfiguredStaffOwner(email);
 }
 
 /**
@@ -201,13 +203,13 @@ export function isConfiguredStaffOwnerEmail(email: string) {
  */
 export async function recoverConfiguredOwnerFromPilot(email: string): Promise<StaffAccount | null> {
   if (!isConfiguredStaffOwnerEmail(email)) return null;
-  const configuredEmail = getMasterAdminEmail();
-  const account = await findStaffUserByEmail(configuredEmail);
+  const normalizedEmail = email.trim().toLowerCase();
+  const account = await findStaffUserByEmail(normalizedEmail);
   if (account && account.status === "active") return account;
   return {
     id: "env-admin",
     name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || "Administrator",
-    email: configuredEmail,
+    email: normalizedEmail,
     roleId: "admin",
     status: "active",
     overrides: {},
@@ -216,8 +218,24 @@ export async function recoverConfiguredOwnerFromPilot(email: string): Promise<St
   };
 }
 
+/**
+ * Staff Centre shares the native pilot sign-in rather than requiring a second
+ * browser cookie. An active pilot can enter only when their email has an
+ * active staff record, or when it is one of the configured owner identities.
+ */
+async function getPilotBackedStaffSession(): Promise<StaffSession | null> {
+  const pilot = await getPilotSession();
+  if (!pilot) return null;
+
+  const owner = await recoverConfiguredOwnerFromPilot(pilot.email);
+  if (owner) return staffSessionForAccount(owner);
+
+  const account = await findStaffUserByEmail(pilot.email);
+  return account?.status === "active" ? staffSessionForAccount(account) : null;
+}
+
 export async function getStaffSession() {
-  return (await resolveStaffSession()).session;
+  return (await resolveStaffSession()).session ?? getPilotBackedStaffSession();
 }
 
 export async function staffHasPermission(permission: PermissionId) {
@@ -237,15 +255,9 @@ export async function requireStaffPermission(permission: PermissionId) {
 }
 
 export async function requireStaffSession() {
-  const result = await resolveStaffSession();
-  if (!result.session) {
-    const pilot = await getPilotSession();
-    if (pilot && isConfiguredStaffOwnerEmail(pilot.email)) {
-      redirect("/api/staff/owner-recovery?returnTo=%2Fstaff");
-    }
-    redirect(`/staff-login?reason=${result.failure}`);
-  }
-  return result.session;
+  const session = await getStaffSession();
+  if (!session) redirect("/staff-login?reason=missing-cookie");
+  return session;
 }
 
 export const staffSessionCookieOptions = {
