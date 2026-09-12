@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 type StaffLoginPageProps = {
-  searchParams: Promise<{ reason?: string }>;
+  searchParams: Promise<{ reason?: string; error?: string }>;
 };
 
 const sessionFailureMessage: Record<string, string> = {
@@ -21,10 +21,15 @@ const sessionFailureMessage: Record<string, string> = {
   "not-configured": "Staff sign-in is not configured on the server.",
 };
 
+const loginErrorMessage: Record<string, string> = {
+  "invalid-credentials": "The staff email or password was not accepted.",
+  "not-configured": "Staff sign-in is not configured on the server.",
+};
+
 export default async function StaffLoginPage({ searchParams }: StaffLoginPageProps) {
   const session = await getStaffSession();
   if (session) redirect("/staff");
-  const { reason } = await searchParams;
+  const { reason, error } = await searchParams;
 
   return (
     <main className="staff-login-page">
@@ -52,6 +57,7 @@ export default async function StaffLoginPage({ searchParams }: StaffLoginPagePro
           <span className="section-kicker">Authorised staff only</span>
           <h2>Sign in to Staff Centre</h2>
           {reason && sessionFailureMessage[reason] ? <p className="staff-login-error" role="alert">{sessionFailureMessage[reason]}</p> : null}
+          {error && loginErrorMessage[error] ? <p className="staff-login-error" role="alert">{loginErrorMessage[error]}</p> : null}
           <StaffLoginForm configured={isStaffAuthConfigured()} />
           <p className="staff-login-footnote">Flight simulation only · Independent virtual airline · Not affiliated with British Airways Plc</p>
         </div>

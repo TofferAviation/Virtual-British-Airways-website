@@ -9,27 +9,45 @@ import {
 import { requestUsesHttps } from "@/lib/request-context";
 
 export async function POST(request: NextRequest) {
+  const formSubmission = request.headers.get("content-type")?.toLowerCase().startsWith("application/x-www-form-urlencoded") ?? false;
+  const loginError = (code: string, status: number, message: string) => {
+    if (formSubmission) {
+      return NextResponse.redirect(new URL(`/staff-login?error=${encodeURIComponent(code)}`, request.url), 303);
+    }
+    return NextResponse.json({ error: message }, { status });
+  };
+
   if (!isStaffAuthConfigured()) {
-    return NextResponse.json(
-      { error: "Staff login is not configured. Add the BAV_STAFF_* environment variables first." },
-      { status: 503 },
-    );
+    return loginError("not-configured", 503, "Staff login is not configured. Add the BAV_STAFF_* environment variables first.");
   }
 
-  const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
-  const email = body?.email?.trim() ?? "";
-  const password = body?.password ?? "";
+  let email = "";
+  let password = "";
+  if (formSubmission) {
+    const form = await request.formData().catch(() => null);
+    email = form?.get("email")?.toString().trim() ?? "";
+    password = form?.get("password")?.toString() ?? "";
+  } else {
+    const body = await request.json().catch(() => null) as { email?: string; password?: string } | null;
+    email = body?.email?.trim() ?? "";
+    password = body?.password ?? "";
+  }
 
   if (!email || !password) {
-    return NextResponse.json({ error: "Invalid staff email or password." }, { status: 401 });
+    return loginError("invalid-credentials", 401, "Invalid staff email or password.");
   }
 
   const account = await validateStaffCredentials(email, password);
   if (!account) {
-    return NextResponse.json({ error: "Invalid staff email or password." }, { status: 401 });
+    return loginError("invalid-credentials", 401, "Invalid staff email or password.");
   }
 
-  const response = NextResponse.json({ ok: true, role: account.roleId });
+  // Form navigation is intentional: some browsers fail to retain an HttpOnly
+  // cookie issued from a client-side fetch before an immediate route change.
+  // A 303 response makes the browser persist the cookie first, then load /staff.
+  const response = formSubmission
+    ? NextResponse.redirect(new URL("/staff", request.url), 303)
+    : NextResponse.json({ ok: true, role: account.roleId });
   response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
     ...staffSessionCookieOptions,
     secure: requestUsesHttps(request),
