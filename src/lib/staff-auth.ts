@@ -117,7 +117,22 @@ export async function getStaffSession() {
 
   const state = await getStaffState();
   const account = state.users.find((user) => user.id === rawSession.userId && user.status === "active");
-  if (!account) return null;
+  if (!account) {
+    // The environment owner is authenticated by a signed, server-issued
+    // cookie. Preserve that access if a previous deployment stored the owner
+    // with a different user id in staff_state. This avoids a valid owner
+    // session being bounced back to /staff-login while staff_state is being
+    // normalised after a deployment.
+    const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase();
+    if (!configuredEmail || rawSession.email.trim().toLowerCase() !== configuredEmail) return null;
+    return {
+      ...rawSession,
+      email: configuredEmail,
+      name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || rawSession.name || "Administrator",
+      roleId: "admin",
+      isMasterAdmin: true,
+    } satisfies StaffSession;
+  }
 
   return {
     ...rawSession,

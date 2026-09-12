@@ -115,4 +115,17 @@ export async function getAcarsSession(id: string) { const client = requirePersis
 export async function getActiveAcarsSessionForPilot(pilotId: string) { const client = requirePersistentClient(); return client ? getPersistentActiveAcarsSessionForPilot(client, pilotId) : getActiveLocalAcarsSessionForPilot(pilotId); }
 export async function appendAcarsSnapshot(id: string, pilotId: string, snapshot: AcarsFlightSnapshot) { const client = requirePersistentClient(); return client ? appendPersistentAcarsSnapshot(client, id, pilotId, snapshot) : appendLocalAcarsSnapshot(id, pilotId, snapshot); }
 export async function completeAcarsSession(id: string, pilotId: string, landingFpm?: number | null) { const client = requirePersistentClient(); return client ? completePersistentAcarsSession(client, id, pilotId, landingFpm) : completeLocalAcarsSession(id, pilotId, landingFpm); }
-export async function listLiveAcarsSessions() { const client = requirePersistentClient(); return client ? listPersistentLiveAcarsSessions(client) : listLocalLiveAcarsSessions(); }
+export async function listLiveAcarsSessions() {
+  // BA-Radar is a public, read-only surface. A missing or temporarily
+  // unavailable telemetry store must never turn the whole public map into a
+  // 500 page. ACARS write operations still use requirePersistentClient(), so
+  // a configuration problem remains visible to the operator who needs to fix
+  // it rather than being mistaken for a working telemetry connection.
+  try {
+    const client = requirePersistentClient();
+    return client ? await listPersistentLiveAcarsSessions(client) : await listLocalLiveAcarsSessions();
+  } catch (error) {
+    console.error("[acars] Could not load live sessions for the tracker.", error);
+    return [];
+  }
+}
