@@ -10,6 +10,7 @@ import {
   verifyPassword,
   type StaffAccount,
 } from "@/lib/staff-store";
+import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
 
 export const STAFF_COOKIE_NAME = "bav_staff_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
@@ -71,13 +72,29 @@ export async function validateStaffCredentials(email: string, password: string):
   const configuredPassword = process.env.BAV_STAFF_PASSWORD ?? "";
   const isConfiguredOwner = safeEqual(normalizedEmail, configuredEmail) && safeEqual(password, configuredPassword);
 
+  // The configured owner is also allowed to recover Staff Centre access using
+  // their active native pilot account. This keeps the single owner identity
+  // usable if a host environment password is accidentally changed or lost,
+  // while requiring the exact configured owner email and a real password hash
+  // from the persistent pilot account store. It never grants staff access to
+  // other pilots.
+  const ownerPilot = !isConfiguredOwner && safeEqual(normalizedEmail, configuredEmail)
+    ? await findPilotByEmail(normalizedEmail)
+    : null;
+  const isOwnerPilotLogin = Boolean(
+    ownerPilot &&
+      ownerPilot.status === "active" &&
+      verifyPilotPassword(password, ownerPilot.passwordHash),
+  );
+  const isAuthenticatedOwner = isConfiguredOwner || isOwnerPilotLogin;
+
   const account = await findStaffUserByEmail(normalizedEmail);
   // The configured owner is the break-glass account for the service. Its
   // access must not depend on a mutable staff_state record being present or
   // correctly normalised after deployment; the matching environment email and
-  // password remain mandatory.
+  // password or verified owner-pilot password remain mandatory.
   if (!account) {
-    if (!isConfiguredOwner) return null;
+    if (!isAuthenticatedOwner) return null;
     return {
       id: "env-admin",
       name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || "Administrator",
@@ -98,7 +115,7 @@ export async function validateStaffCredentials(email: string, password: string):
     // own stored password hash.
     const passwordMatches =
       (account.passwordHash && verifyPassword(password, account.passwordHash)) ||
-      isConfiguredOwner;
+      isAuthenticatedOwner;
     if (!passwordMatches) return null;
   } else if (!verifyPassword(password, account.passwordHash)) {
     return null;
