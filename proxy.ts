@@ -20,9 +20,7 @@ function isPublicPreviewPath(pathname: string) {
 export async function proxy(request: NextRequest) {
   if (!previewProtectionEnabled()) return NextResponse.next();
 
-  // Only direct local browsing bypasses the preview gate. Requests that arrive
-  // through Cloudflare are still treated as external even though the origin is
-  // localhost:3000 behind the tunnel.
+  // Only direct local browsing bypasses the preview gate.
   if (isDirectLocalRequest(request)) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
@@ -39,8 +37,8 @@ export async function proxy(request: NextRequest) {
     next: `${request.nextUrl.pathname}${request.nextUrl.search}`,
   });
 
-  // Keep the redirect origin-relative so a Cloudflare request can never leak
-  // the internal localhost origin back to the browser.
+  // Keep redirects origin-relative so internal development addresses are never
+  // exposed to the browser.
   return relativeRedirect(`${ACCESS_PAGE}?${params.toString()}`, 307);
 }
 

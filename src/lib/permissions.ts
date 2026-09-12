@@ -34,6 +34,13 @@ export type PermissionId =
   | "settings.edit"
   | "settings.roles"
   | "settings.audit"
+  | "fleet.view"
+  | "fleet.manage"
+  | "fleet.defects.report"
+  | "fleet.defects.manage"
+  | "fleet.maintenance.manage"
+  | "fleet.release_to_service"
+  | "fleet.audit.view"
   | "service.source";
 
 export const SERVICE_SOURCE_PERMISSION: PermissionId = "service.source";
@@ -70,6 +77,20 @@ export type PermissionGroup = {
 // Service Settings intentionally does not appear in these general permission groups.
 // Its source-code permission is delegated only from the Master Admin's Service Settings page.
 export const permissionGroups: PermissionGroup[] = [
+  {
+    id: "fleet",
+    label: "Fleet Management",
+    icon: "✈",
+    permissions: [
+      { id: "fleet.view", label: "View fleet records", description: "View aircraft, technical state, defects and maintenance information." },
+      { id: "fleet.manage", label: "Manage aircraft operations", description: "Manage aircraft master data and operational status." },
+      { id: "fleet.defects.report", label: "Report defects", description: "Record aircraft and cabin defect reports." },
+      { id: "fleet.defects.manage", label: "Manage defects", description: "Review, defer, rectify and close defects.", highLevel: true },
+      { id: "fleet.maintenance.manage", label: "Manage maintenance", description: "Schedule and record maintenance activity.", highLevel: true },
+      { id: "fleet.release_to_service", label: "Release aircraft to service", description: "Perform authorised maintenance return-to-service actions.", highLevel: true },
+      { id: "fleet.audit.view", label: "View fleet audit history", description: "Review protected operational change history.", highLevel: true },
+    ],
+  },
   {
     id: "events",
     label: "Events",
@@ -200,6 +221,12 @@ export const permissionDependencies: Partial<Record<PermissionId, PermissionId[]
   "settings.edit": ["settings.view"],
   "settings.roles": ["settings.view", "users.view", "users.roles"],
   "settings.audit": ["settings.view"],
+  "fleet.manage": ["fleet.view"],
+  "fleet.defects.report": ["fleet.view"],
+  "fleet.defects.manage": ["fleet.view", "fleet.defects.report"],
+  "fleet.maintenance.manage": ["fleet.view"],
+  "fleet.release_to_service": ["fleet.view", "fleet.maintenance.manage"],
+  "fleet.audit.view": ["fleet.view"],
 };
 
 export const defaultRoleTemplates: StaffRoleTemplate[] = [
@@ -220,6 +247,8 @@ export const defaultRoleTemplates: StaffRoleTemplate[] = [
       "routes.view",
       "routes.create",
       "routes.edit",
+      "fleet.view",
+      "fleet.manage",
       "content.view",
       "users.view",
       "status.view",

@@ -22,7 +22,10 @@ export default async function HomePage() {
             <p>
               Fly a structured British Airways-inspired network in your simulator, build your pilot career and carry your progress between the website and Phoenix.
             </p>
-            <Link className="button button-light" href="/book">Browse virtual flights</Link>
+            <div className="home-hero-actions">
+              <Link className="button button-light" href="/book">Browse virtual flights</Link>
+              <Link className="button button-radar" href="/ba-radar">Open Live Map · BA-Radar</Link>
+            </div>
             <div className="status-pill"><span /> Virtual operations online · Flight simulation only</div>
           </div>
         </section>

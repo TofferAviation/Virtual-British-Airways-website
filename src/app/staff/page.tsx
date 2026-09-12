@@ -28,6 +28,7 @@ export default async function StaffPage() {
   const canViewSupport = Boolean(account && hasPermission(state, account, "support.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
   const canViewServiceStatus = Boolean(account && hasPermission(state, account, "status.view"));
+  const canViewFleet = Boolean(account && hasPermission(state, account, "fleet.view"));
   const canAccessServiceSettings = Boolean(account && hasPermission(state, account, SERVICE_SOURCE_PERMISSION));
   const preferences = await getStaffPreferences(session.userId);
   const staffBackground = preferences.staffPageBackground;
@@ -57,6 +58,7 @@ export default async function StaffPage() {
               {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}
               {canViewPermissions ? <><span>·</span><Link href="/staff/pilots">Pilot Management</Link><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
               {canViewServiceStatus ? <><span>·</span><Link href="/staff/service-status">Service status</Link></> : null}
+              {canViewFleet ? <><span>·</span><Link href="/staff/fleet">Fleet management</Link></> : null}
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
@@ -82,6 +84,7 @@ export default async function StaffPage() {
           {canViewNews ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/news"><span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span><span><strong>News & announcements</strong><small>Create, edit and publish the stories shown on the public What&apos;s New page.</small></span><b aria-hidden="true">→</b></Link></div> : null}
           {canViewPermissions ? <><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/pilots"><span className="staff-permissions-launch-icon" aria-hidden="true">♙</span><span><strong>Pilot Management</strong><small>Search native BAV pilot accounts, review career activity and suspend or reactivate pilots.</small></span><b aria-hidden="true">→</b></Link></div><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/permissions"><span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span><span><strong>User permissions</strong><small>Manage staff roles, individual permissions and access controls.</small></span><b aria-hidden="true">→</b></Link></div></> : null}
           {canViewServiceStatus ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/service-status"><span className="staff-permissions-launch-icon" aria-hidden="true">◔</span><span><strong>Service status manager</strong><small>Manage system health, public incidents, maintenance and uptime information.</small></span><b aria-hidden="true">→</b></Link></div> : null}
+          {canViewFleet ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/fleet"><span className="staff-permissions-launch-icon" aria-hidden="true">✈</span><span><strong>Fleet management</strong><small>Review the live aircraft fleet, technical condition and dispatch availability.</small></span><b aria-hidden="true">→</b></Link></div> : null}
           {canAccessServiceSettings ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings"><span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span><span><strong>Service settings</strong><small>Open the protected website source workspace for maintenance and direct code changes.</small></span><b aria-hidden="true">→</b></Link></div> : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
           <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />

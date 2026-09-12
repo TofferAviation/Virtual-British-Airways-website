@@ -19,17 +19,6 @@ function isLocalHostname(hostname: string) {
 }
 
 export function isDirectLocalRequest(request: NextRequest) {
-  // Cloudflare adds these headers when the browser reached us through a tunnel.
-  // In that case the local origin may still appear as localhost internally, but
-  // the request is external and must not bypass preview protection.
-  if (
-    request.headers.get("cf-ray") ||
-    request.headers.get("cf-connecting-ip") ||
-    request.headers.get("cf-visitor")
-  ) {
-    return false;
-  }
-
   const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
   if (forwardedHost) return isLocalHostname(hostnameFromAuthority(forwardedHost));
 
@@ -44,9 +33,6 @@ export function requestUsesHttps(request: NextRequest) {
 
   const forwardedProto = firstHeaderValue(request.headers.get("x-forwarded-proto")).toLowerCase();
   if (forwardedProto) return forwardedProto === "https";
-
-  const cfVisitor = request.headers.get("cf-visitor")?.toLowerCase() ?? "";
-  if (cfVisitor.includes('"scheme":"https"')) return true;
 
   return request.nextUrl.protocol === "https:";
 }

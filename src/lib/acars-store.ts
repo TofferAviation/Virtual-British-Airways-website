@@ -28,6 +28,7 @@ export type AcarsSession = {
   distanceNm: number;
   landingFpm: number | null;
   lastSnapshot: AcarsFlightSnapshot | null;
+  recentSnapshots?: AcarsFlightSnapshot[];
 };
 
 type State = { version: 1; sessions: AcarsSession[] };
@@ -80,6 +81,7 @@ export async function startAcarsSession(input: Omit<AcarsSession, "id" | "status
     distanceNm: 0,
     landingFpm: null,
     lastSnapshot: null,
+    recentSnapshots: [],
   };
   state.sessions.push(session);
   await writeState(state);
@@ -91,6 +93,13 @@ export async function getAcarsSession(id: string) {
   return state.sessions.find((session) => session.id === id) ?? null;
 }
 
+export async function getActiveAcarsSessionForPilot(pilotId: string) {
+  const state = await readState();
+  return state.sessions
+    .filter((session) => session.pilotId === pilotId && session.status === "active")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+}
+
 export async function appendAcarsSnapshot(id: string, pilotId: string, snapshot: AcarsFlightSnapshot) {
   const state = await readState();
   const session = state.sessions.find((item) => item.id === id && item.pilotId === pilotId);
@@ -99,6 +108,9 @@ export async function appendAcarsSnapshot(id: string, pilotId: string, snapshot:
     const leg = haversineNm(session.lastSnapshot, snapshot);
     if (Number.isFinite(leg) && leg >= 0 && leg < 25) session.distanceNm += leg;
   }
+  const recentSnapshots = session.recentSnapshots ?? (session.recentSnapshots = []);
+  recentSnapshots.push(snapshot);
+  if (recentSnapshots.length > 60) recentSnapshots.splice(0, recentSnapshots.length - 60);
   if (session.firstFuelKg == null && snapshot.fuelKg != null) session.firstFuelKg = snapshot.fuelKg;
   if (snapshot.fuelKg != null) session.lastFuelKg = snapshot.fuelKg;
   if (snapshot.onGround && snapshot.verticalSpeedFpm != null && snapshot.verticalSpeedFpm < -20) {
