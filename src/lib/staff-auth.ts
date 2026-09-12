@@ -116,23 +116,15 @@ export async function getStaffSession() {
   if (!rawSession) return null;
 
   const state = await getStaffState();
-  const account = state.users.find((user) => user.id === rawSession.userId && user.status === "active");
-  if (!account) {
-    // The environment owner is authenticated by a signed, server-issued
-    // cookie. Preserve that access if a previous deployment stored the owner
-    // with a different user id in staff_state. This avoids a valid owner
-    // session being bounced back to /staff-login while staff_state is being
-    // normalised after a deployment.
-    const configuredEmail = process.env.BAV_STAFF_EMAIL?.trim().toLowerCase();
-    if (!configuredEmail || rawSession.email.trim().toLowerCase() !== configuredEmail) return null;
-    return {
-      ...rawSession,
-      email: configuredEmail,
-      name: process.env.BAV_STAFF_DISPLAY_NAME?.trim() || rawSession.name || "Administrator",
-      roleId: "admin",
-      isMasterAdmin: true,
-    } satisfies StaffSession;
-  }
+  const sessionEmail = rawSession.email.trim().toLowerCase();
+  // An invited account can be re-created or normalised after a deployment.
+  // Match the immutable email as well as the historical id, but only for an
+  // active account in the current authoritative staff state.
+  const account = state.users.find((user) =>
+    user.status === "active" &&
+    (user.id === rawSession.userId || user.email.trim().toLowerCase() === sessionEmail),
+  );
+  if (!account) return null;
 
   return {
     ...rawSession,
