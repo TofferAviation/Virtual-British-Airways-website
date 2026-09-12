@@ -6,13 +6,19 @@ import {
   staffSessionCookieOptions,
   validateStaffCredentials,
 } from "@/lib/staff-auth";
-import { relativeRedirect, requestUsesHttps } from "@/lib/request-context";
+import { requestUsesHttps } from "@/lib/request-context";
+
+const publicSiteOrigin = process.env.BAV_PUBLIC_ORIGIN?.trim() || "https://britishairwaysva.co.uk";
+
+function publicRedirect(path: string) {
+  return NextResponse.redirect(new URL(path, publicSiteOrigin), 303);
+}
 
 export async function POST(request: NextRequest) {
   const formSubmission = request.headers.get("content-type")?.toLowerCase().startsWith("application/x-www-form-urlencoded") ?? false;
   const loginError = (code: string, status: number, message: string) => {
     if (formSubmission) {
-      return relativeRedirect(`/staff-login?error=${encodeURIComponent(code)}`, 303);
+      return publicRedirect(`/staff-login?error=${encodeURIComponent(code)}`);
     }
     return NextResponse.json({ error: message }, { status });
   };
@@ -46,7 +52,7 @@ export async function POST(request: NextRequest) {
   // cookie issued from a client-side fetch before an immediate route change.
   // A 303 response makes the browser persist the cookie first, then load /staff.
   const response = formSubmission
-    ? relativeRedirect("/staff", 303)
+    ? publicRedirect("/staff")
     : NextResponse.json({ ok: true, role: account.roleId });
   response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
     ...staffSessionCookieOptions,
