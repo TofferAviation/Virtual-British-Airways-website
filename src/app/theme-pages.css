@@ -315,6 +315,7 @@ html[data-theme="dark"] .hc-quick-card:hover,
 html[data-theme="dark"] .hc-topic-card:hover{background:#162438!important;border-color:#45617f!important}
 html[data-theme="dark"] .hc-popular button,
 html[data-theme="dark"] .hc-icon{background:#102944!important;color:#71b8ff!important}
+html[data-theme="dark"] .hc-icon.hc-icon-discord{background:#5865f2!important;color:#fff!important}
 html[data-theme="dark"] .hc-faq-list details,
 html[data-theme="dark"] .hc-steps article:not(:last-child):after,
 html[data-theme="dark"] .hc-support-options>div{border-color:var(--bav-dark-line)!important}

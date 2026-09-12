@@ -2,3 +2,10 @@
 @media(max-width:1100px){.hc-topic-grid{grid-template-columns:repeat(3,1fr)}.hc-quick-grid{grid-template-columns:repeat(2,1fr)}.hc-hero-message{display:none}}
 @media(max-width:850px){.hc-lower-grid{grid-template-columns:1fr}.hc-steps{grid-template-columns:repeat(2,1fr)}.hc-steps article:nth-child(2):after{display:none}.hc-support{grid-template-columns:1fr}.hc-support-options{grid-template-columns:1fr}.hc-support-options>div{border-left:0;border-top:1px solid #d9e1ea;padding:12px 0}.hc-return{align-items:flex-start;flex-direction:column}}
 @media(max-width:650px){.hc-page{padding-top:0}.hc-shell{width:100%;margin-bottom:10px}.hc-hero{border-left:0;border-right:0;border-radius:0;padding:24px 18px;min-height:auto}.hc-hero:after{display:none}.hc-search{grid-template-columns:38px 1fr}.hc-search button{grid-column:1/-1;margin:0;border-radius:0;height:40px}.hc-quick-grid,.hc-topic-grid,.hc-steps{grid-template-columns:1fr}.hc-quick-grid,.hc-panel,.hc-return{width:92%;margin-left:auto;margin-right:auto}.hc-steps article:after{display:none}.hc-return>div:last-child{width:100%;flex-direction:column}.hc-return .button{width:100%}}
+
+/* Keep the Discord action recognisable even if an external image fails to load. */
+.hc-icon.hc-icon-discord{background:#5865f2;color:#fff}
+.hc-icon-discord svg{display:block;width:29px;height:29px;fill:currentColor}
+.hc-support-options>a{display:grid;grid-template-columns:42px 1fr;gap:10px;padding:4px 18px;border-left:1px solid #d9e1ea;color:inherit;text-decoration:none;transition:background .15s ease}
+.hc-support-options>a:hover{background:#edf4ff}
+.hc-support-options em{display:block;margin-top:6px;color:#075aaa;font-size:10px;font-style:normal;font-weight:700}

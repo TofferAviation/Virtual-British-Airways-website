@@ -32,12 +32,12 @@ const faqs = [
 const quickActions = [
   ["Contact the team", "Get in touch with our support team for help and advice.", "#support", "✉"],
   ["Open a support ticket", "Support-ticket integration will be connected for launch.", "#support", "◇"],
-  ["Join Discord", "Community support and pilot discussion.", "#support", "discord"],
+  ["Join Discord", "Community support and pilot discussion.", "https://discord.gg/HM76YewaWe", "discord"],
   ["Service status", "Check system updates and planned maintenance.", "#support", "◌"],
 ];
 
 function DiscordIcon() {
-  return <img src="/branding/discord-support-icon.png" alt="" aria-hidden="true" />;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.8 5.7A15.3 15.3 0 0 0 15 4.5l-.5 1a11.8 11.8 0 0 0-5 0l-.5-1a15.4 15.4 0 0 0-3.8 1.2C2.8 9.3 2.2 12.8 2.5 16.2c1.6 1.2 3.1 1.9 4.6 2.3l1.1-1.5c-.6-.2-1.2-.5-1.7-.8l.4-.3c3.3 1.5 7.2 1.5 10.4 0l.4.3c-.5.3-1.1.6-1.7.8l1.1 1.5c1.5-.4 3.1-1.1 4.6-2.3.4-3.9-.6-7.4-2.9-10.5ZM8.6 14.1c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm6.8 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z" /></svg>;
 }
 
 export function HelpClient() {
@@ -88,7 +88,7 @@ export function HelpClient() {
 
       <section className="hc-shell hc-quick-grid" aria-label="Support shortcuts">
         {quickActions.map(([title, body, href, icon]) => (
-          <a key={title} className="hc-quick-card" href={href}>
+          <a key={title} className="hc-quick-card" href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined}>
             <span className={`hc-icon${icon === "discord" ? " hc-icon-discord" : ""}`}>
               {icon === "discord" ? <DiscordIcon /> : icon}
             </span>
@@ -144,7 +144,7 @@ export function HelpClient() {
       <section className="hc-shell hc-panel hc-support" id="support">
         <div className="hc-support-intro"><span className="hc-kicker">Get in touch</span><h2>Need more help?</h2><p className="hc-muted">Our support team and community are here for you.</p></div>
         <div className="hc-support-options">
-          <div><span className="hc-icon hc-icon-discord"><DiscordIcon /></span><p><strong>Community support</strong><small>Discord connection will be added using the official server invite.</small></p></div>
+          <a className="hc-support-discord" href="https://discord.gg/HM76YewaWe" target="_blank" rel="noreferrer"><span className="hc-icon hc-icon-discord"><DiscordIcon /></span><p><strong>Join our Discord</strong><small>Meet other pilots, get community support and join upcoming events.</small><em>Open Discord ↗</em></p></a>
           <div><span className="hc-icon">✉</span><p><strong>Support contact</strong><small>Production support email and ticket handling will be connected before launch.</small></p></div>
           <div><span className="hc-icon">◷</span><p><strong>Service status</strong><small>Operational status integration is prepared for the production service.</small></p></div>
         </div>
