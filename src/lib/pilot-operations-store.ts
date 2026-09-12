@@ -1,11 +1,42 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
 import { applyApprovedPirepStats } from "@/lib/pilot-store";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
+
+type PirepRow = {
+  id: string; pilot_id: string; booking_id: string | null; flight_number: string;
+  departure_station: string; arrival_station: string; aircraft: string; started_at: string;
+  completed_at: string; block_minutes: number; distance_nm: number; landing_fpm: number | null;
+  fuel_used_kg: number | null; points_awarded: number; tier_points_awarded: number;
+  status: PirepStatus; source: "manual" | "acars"; simulator: SupportedSimulator;
+  acars_session_id: string | null; pilot_comments: string; staff_comments: string;
+  reviewed_at: string | null; reviewed_by: string | null; created_at: string;
+};
+
+function getPirepClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secret) return null;
+  return createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } });
+}
+
+function pirepFromRow(row: PirepRow): PilotPirep {
+  return {
+    id: row.id, pilotId: row.pilot_id, bookingId: row.booking_id, flightNumber: row.flight_number,
+    from: row.departure_station, to: row.arrival_station, aircraft: row.aircraft, startedAt: row.started_at,
+    completedAt: row.completed_at, blockMinutes: row.block_minutes, distanceNm: row.distance_nm,
+    landingFpm: row.landing_fpm, fuelUsedKg: row.fuel_used_kg, pointsAwarded: row.points_awarded,
+    tierPointsAwarded: row.tier_points_awarded, status: row.status, source: row.source,
+    simulator: row.simulator, acarsSessionId: row.acars_session_id, pilotComments: row.pilot_comments,
+    staffComments: row.staff_comments, reviewedAt: row.reviewed_at, reviewedBy: row.reviewed_by,
+    createdAt: row.created_at,
+  };
+}
 
 export type PilotBooking = {
   id: string;
@@ -213,16 +244,34 @@ export async function countActiveScheduleBookings(routeId: string, date: string)
 }
 
 export async function listPilotPireps(pilotId: string) {
+  const client = getPirepClient();
+  if (client) {
+    const { data, error } = await client.from("pilot_pireps").select("*").eq("pilot_id", pilotId).order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data as PirepRow[]).map(pirepFromRow);
+  }
   const state = await readState();
   return state.pireps.filter((pirep) => pirep.pilotId === pilotId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function listAllPireps() {
+  const client = getPirepClient();
+  if (client) {
+    const { data, error } = await client.from("pilot_pireps").select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data as PirepRow[]).map(pirepFromRow);
+  }
   const state = await readState();
   return [...state.pireps].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getPirep(id: string) {
+  const client = getPirepClient();
+  if (client) {
+    const { data, error } = await client.from("pilot_pireps").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? pirepFromRow(data as PirepRow) : null;
+  }
   const state = await readState();
   return state.pireps.find((pirep) => pirep.id === id) ?? null;
 }
@@ -237,6 +286,25 @@ export async function cancelActivePilotBooking(pilotId: string) {
 }
 
 export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt" | "reviewedAt" | "reviewedBy" | "staffComments" | "pointsAwarded" | "tierPointsAwarded">) {
+  const client = getPirepClient();
+  if (client) {
+    const createdAt = new Date().toISOString();
+    const { data, error } = await client.from("pilot_pireps").insert({
+      id: randomUUID(), pilot_id: input.pilotId, booking_id: input.bookingId, flight_number: input.flightNumber,
+      departure_station: input.from, arrival_station: input.to, aircraft: input.aircraft, started_at: input.startedAt,
+      completed_at: input.completedAt, block_minutes: input.blockMinutes, distance_nm: input.distanceNm,
+      landing_fpm: input.landingFpm, fuel_used_kg: input.fuelUsedKg, points_awarded: 0, tier_points_awarded: 0,
+      status: input.status, source: input.source, simulator: input.simulator, acars_session_id: input.acarsSessionId,
+      pilot_comments: input.pilotComments, staff_comments: "", reviewed_at: null, reviewed_by: null, created_at: createdAt,
+    }).select("*").single();
+    if (error) throw error;
+    if (input.bookingId) {
+      const state = await readState();
+      const booking = state.bookings.find((item) => item.id === input.bookingId);
+      if (booking) { booking.status = "completed"; await writeState(state); }
+    }
+    return pirepFromRow(data as PirepRow);
+  }
   const state = await readState();
   const pirep: PilotPirep = {
     ...input,
@@ -256,6 +324,24 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
 }
 
 export async function reviewPirep(input: { id: string; decision: "accepted" | "rejected" | "changes_requested"; staffName: string; comments: string }) {
+  const client = getPirepClient();
+  if (client) {
+    const current = await getPirep(input.id);
+    if (!current) throw new Error("PIREP not found.");
+    if (current.status === "accepted") throw new Error("Accepted PIREPs cannot be reviewed twice.");
+    const reviewedAt = new Date().toISOString();
+    const update: Record<string, unknown> = { status: input.decision, staff_comments: input.comments.trim().slice(0, 2000), reviewed_at: reviewedAt, reviewed_by: input.staffName };
+    if (input.decision === "accepted") {
+      const points = Math.max(25, Math.round(current.blockMinutes / 5 + current.distanceNm / 50));
+      const tierPoints = Math.max(5, Math.round(points * 0.4));
+      update.points_awarded = points;
+      update.tier_points_awarded = tierPoints;
+      await applyApprovedPirepStats(current.pilotId, { blockMinutes: current.blockMinutes, distanceNm: current.distanceNm, landingFpm: current.landingFpm, points, tierPoints });
+    }
+    const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
+    if (error) throw error;
+    return pirepFromRow(data as PirepRow);
+  }
   const state = await readState();
   const pirep = state.pireps.find((item) => item.id === input.id);
   if (!pirep) throw new Error("PIREP not found.");
