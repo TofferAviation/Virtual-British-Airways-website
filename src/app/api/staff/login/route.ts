@@ -43,7 +43,12 @@ export async function POST(request: NextRequest) {
     return loginError("invalid-credentials", 401, "Invalid staff email or password.");
   }
 
-  const account = await validateStaffCredentials(email, password);
+  let account;
+  try {
+    account = await validateStaffCredentials(email, password);
+  } catch {
+    return loginError("service-unavailable", 503, "Staff account service is temporarily unavailable. Please try again shortly.");
+  }
   if (!account) {
     return loginError("invalid-credentials", 401, "Invalid staff email or password.");
   }

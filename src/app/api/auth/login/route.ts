@@ -9,12 +9,21 @@ export async function POST(request: NextRequest) {
   const password = body?.password ?? "";
   if (!email || !password) return NextResponse.json({ error: "Enter your email and password." }, { status: 400 });
 
-  const account = await findPilotByEmail(email);
+  let account;
+  try {
+    account = await findPilotByEmail(email);
+  } catch {
+    return NextResponse.json({ error: "Pilot account service is temporarily unavailable. Please try again shortly." }, { status: 503 });
+  }
   if (!account || account.status !== "active" || !verifyPilotPassword(password, account.passwordHash)) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
 
-  await markPilotLogin(account.id);
+  try {
+    await markPilotLogin(account.id);
+  } catch {
+    return NextResponse.json({ error: "Pilot account service is temporarily unavailable. Please try again shortly." }, { status: 503 });
+  }
   const response = NextResponse.json({ ok: true, pilotNumber: account.pilotNumber });
   response.cookies.set(PILOT_COOKIE_NAME, createPilotSessionToken(account), {
     ...pilotSessionCookieOptions,

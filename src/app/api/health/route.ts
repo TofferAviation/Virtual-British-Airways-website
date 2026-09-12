@@ -1,6 +1,39 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export function GET() {
+type PersistenceCheck = {
+  configured: boolean;
+  keyKind: "secret" | "legacy-service-role" | "public-or-unrecognised" | "missing";
+  status: "ready" | "unavailable" | "not-configured";
+  errorCode?: string;
+};
+
+async function checkPersistenceTable(table: "pilot_state" | "staff_state"): Promise<PersistenceCheck> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) {
+    return { configured: false, keyKind: "missing", status: "not-configured" };
+  }
+
+  const keyKind = key.startsWith("sb_secret_")
+    ? "secret"
+    : key.startsWith("eyJ")
+      ? "legacy-service-role"
+      : "public-or-unrecognised";
+  const client = createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+  const { error } = await client.from(table).select("singleton").limit(1);
+  return error
+    ? { configured: true, keyKind, status: "unavailable", errorCode: error.code ?? "unknown" }
+    : { configured: true, keyKind, status: "ready" };
+}
+
+export async function GET() {
+  const [pilotPersistence, staffPersistence] = await Promise.all([
+    checkPersistenceTable("pilot_state"),
+    checkPersistenceTable("staff_state"),
+  ]);
   return NextResponse.json({
     service: "british-airways-virtual-website",
     status: "ok",
@@ -14,8 +47,8 @@ export function GET() {
         process.env.BAV_STAFF_SESSION_SECRET &&
         process.env.BAV_STAFF_SESSION_SECRET.length >= 24,
     ),
-    pilotPersistenceConfigured: Boolean(
-      process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SECRET_KEY,
-    ),
+    pilotPersistenceConfigured: pilotPersistence.configured,
+    pilotPersistence,
+    staffPersistence,
   });
 }
