@@ -23,6 +23,12 @@ export type StaffSession = {
   exp: number;
 };
 
+export type StaffSessionFailure = "missing-cookie" | "invalid-session" | "account-unavailable" | "not-configured";
+
+type StaffSessionResolution =
+  | { session: StaffSession; failure: null }
+  | { session: null; failure: StaffSessionFailure };
+
 function requireSessionSecret() {
   const secret = process.env.BAV_STAFF_SESSION_SECRET;
   if (!secret || secret.length < 24) {
@@ -110,10 +116,14 @@ function verifySignedSessionToken(token?: string | null): StaffSession | null {
   }
 }
 
-export async function getStaffSession() {
+async function resolveStaffSession(): Promise<StaffSessionResolution> {
   const cookieStore = await cookies();
-  const rawSession = verifySignedSessionToken(cookieStore.get(STAFF_COOKIE_NAME)?.value);
-  if (!rawSession) return null;
+  const token = cookieStore.get(STAFF_COOKIE_NAME)?.value;
+  if (!token) return { session: null, failure: "missing-cookie" };
+  if (!isStaffAuthConfigured()) return { session: null, failure: "not-configured" };
+
+  const rawSession = verifySignedSessionToken(token);
+  if (!rawSession) return { session: null, failure: "invalid-session" };
 
   const state = await getStaffState();
   const sessionEmail = rawSession.email.trim().toLowerCase();
@@ -124,9 +134,9 @@ export async function getStaffSession() {
     user.status === "active" &&
     (user.id === rawSession.userId || user.email.trim().toLowerCase() === sessionEmail),
   );
-  if (!account) return null;
+  if (!account) return { session: null, failure: "account-unavailable" };
 
-  return {
+  return { session: {
     ...rawSession,
     // Always issue the current authoritative id to downstream permission
     // checks. A signed session may contain an older id after an account has
@@ -137,7 +147,11 @@ export async function getStaffSession() {
     name: account.name,
     roleId: account.roleId,
     isMasterAdmin: Boolean(account.isEnvironmentAdmin),
-  } satisfies StaffSession;
+  } satisfies StaffSession, failure: null };
+}
+
+export async function getStaffSession() {
+  return (await resolveStaffSession()).session;
 }
 
 export async function staffHasPermission(permission: PermissionId) {
@@ -157,9 +171,9 @@ export async function requireStaffPermission(permission: PermissionId) {
 }
 
 export async function requireStaffSession() {
-  const session = await getStaffSession();
-  if (!session) redirect("/staff-login");
-  return session;
+  const result = await resolveStaffSession();
+  if (!result.session) redirect(`/staff-login?reason=${result.failure}`);
+  return result.session;
 }
 
 export const staffSessionCookieOptions = {
