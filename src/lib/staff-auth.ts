@@ -128,6 +128,11 @@ export async function getStaffSession() {
 
   return {
     ...rawSession,
+    // Always issue the current authoritative id to downstream permission
+    // checks. A signed session may contain an older id after an account has
+    // been re-created, but the validated active account above is the one
+    // whose permissions must be applied.
+    userId: account.id,
     email: account.email,
     name: account.name,
     roleId: account.roleId,
