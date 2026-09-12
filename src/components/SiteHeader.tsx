@@ -55,7 +55,7 @@ export async function SiteHeader() {
               <div className="site-mega-column"><h3>Flights and destinations</h3><Link href="/destinations">Explore our destinations</Link><Link href="/book?to=LHR">Flights to London</Link><Link href="/book?to=JFK">Flights to New York</Link><Link href="/book?to=LAX">Flights to Los Angeles</Link><Link href="/book?to=SFO">Flights to San Francisco</Link><Link href="/book">Routes and timetables</Link><Link href="/book">Before you fly</Link></div>
               <div className="site-mega-column"><h3>Operations</h3><Link href="/fleet">Short haul</Link><Link href="/fleet">Long haul</Link><Link href="/fleet">CityFlyer</Link><Link href={isLoggedIn ? "/account" : "/login"}>Assignments</Link></div>
               <div className="site-mega-column"><h3>Community</h3><Link href="/events">Events</Link><Link href="/help">Tours</Link><a href="https://discord.gg/HM76YewaWe" target="_blank" rel="noreferrer">Join our Discord ↗</a><Link href="/news">News</Link></div>
-              <div className="site-mega-column"><h3>Extras</h3><Link href="/support/tickets">Support tickets</Link><Link href="/service-status">Service status</Link><Link href="/help">Operations manual</Link><Link prefetch={false} href={staffSession ? "/staff" : "/staff-login"}>Staff Centre</Link>{staffSession ? <Link prefetch={false} href="/staff/permissions">User permissions</Link> : null}</div>
+              <div className="site-mega-column"><h3>Extras</h3><Link href="/support/tickets">Support tickets</Link><Link href="/service-status">Service status</Link><Link href="/help">Operations manual</Link><a href={staffSession ? "/staff" : "/staff-login"}>Staff Centre</a>{staffSession ? <a href="/staff/permissions">User permissions</a> : null}</div>
             </div>
           </div>
         </div>
@@ -72,8 +72,8 @@ export async function SiteHeader() {
         <ThemeToggle />
         {staffSession ? (
           <>
-            <Link className="header-user-link" prefetch={false} href="/staff/profile"><UserIcon /><span>{staffSession.name}</span></Link>
-            <Link className="header-admin-badge" prefetch={false} href="/staff/permissions">{staffSession.isMasterAdmin ? "Master Admin" : staffRoleLabel(staffSession.roleId)}</Link>
+            <a className="header-user-link" href="/staff/profile"><UserIcon /><span>{staffSession.name}</span></a>
+            <a className="header-admin-badge" href="/staff/permissions">{staffSession.isMasterAdmin ? "Master Admin" : staffRoleLabel(staffSession.roleId)}</a>
             <Link className="header-logout-button" href="/api/staff/logout">Log out</Link>
             <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information"><OneworldBadge /></Link>
           </>
