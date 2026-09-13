@@ -90,6 +90,11 @@ function envAdmin(): StaffAccount | null {
   };
 }
 
+function configuredStaffBootstrapPassword() {
+  const password = process.env.BAV_STAFF_PASSWORD ?? "";
+  return password.length >= 10 ? password : null;
+}
+
 export function isMasterAdminAccount(user: StaffAccount) {
   const configuredEmail = getMasterAdminEmail();
   return Boolean(
@@ -109,6 +114,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
   if (admin) {
     const existing = users.find((user) => user.id === admin.id || user.email.toLowerCase() === admin.email);
     if (existing) {
+      const identityChanged = existing.email.trim().toLowerCase() !== admin.email;
       existing.id = "env-admin";
       // The founding owner may customise their Staff Centre display name.
       // Only seed the default name when the account is first created.
@@ -118,8 +124,16 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
       existing.status = "active";
       existing.overrides = {};
       existing.isEnvironmentAdmin = true;
+      // A host-configured Staff account is seeded once. If the configured
+      // identity has changed (as happens after a production reset), use the
+      // configured password to initialise that new identity. Afterward normal
+      // profile password changes remain persistent and are not overwritten.
+      if ((identityChanged || !existing.passwordHash) && configuredStaffBootstrapPassword()) {
+        existing.passwordHash = hashPassword(configuredStaffBootstrapPassword()!);
+      }
     } else {
-      users.unshift(admin);
+      const password = configuredStaffBootstrapPassword();
+      users.unshift(password ? { ...admin, passwordHash: hashPassword(password) } : admin);
     }
   }
 
@@ -265,8 +279,11 @@ export async function changeOwnStaffPassword(id: string, currentPassword: string
 export async function setInitialOwnerStaffPassword(email: string, password: string) {
   if (password.length < 10) throw new Error("Use a password with at least 10 characters.");
   const state = await getStaffState();
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = state.users.find((item) => item.email.trim().toLowerCase() === normalizedEmail);
+  // `email` is the authenticated founding pilot identity. The Staff Centre
+  // username may be different, so resolve the configured master Staff record
+  // rather than requiring both addresses to be identical.
+  void email;
+  const user = state.users.find((item) => isMasterAdminAccount(item) && item.status === "active");
   if (!user || !isMasterAdminAccount(user) || user.status !== "active") {
     throw new Error("This BAV account is not authorised to set the founding Staff Centre password.");
   }
@@ -294,8 +311,11 @@ export async function setInitialOwnerStaffPassword(email: string, password: stri
 export async function resetFoundingStaffPassword(email: string, password: string) {
   if (password.length < 10) throw new Error("Use a password with at least 10 characters.");
   const state = await getStaffState();
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = state.users.find((item) => item.email.trim().toLowerCase() === normalizedEmail);
+  // The caller's pilot identity has already been checked by the route. Staff
+  // and pilot usernames can intentionally differ, so recover the master Staff
+  // record by role instead of comparing their email addresses.
+  void email;
+  const user = state.users.find((item) => isMasterAdminAccount(item) && item.status === "active");
   if (!user || !isMasterAdminAccount(user) || user.status !== "active") {
     throw new Error("This BAV account is not authorised to recover the founding Staff Centre password.");
   }

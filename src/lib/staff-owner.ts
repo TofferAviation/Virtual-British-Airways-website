@@ -1,18 +1,21 @@
-// The founding Staff Centre owner is intentionally a stable identity in the
-// application rather than a mutable host setting. Their initial Staff Centre
-// password may be set only while this BAV pilot identity is authenticated;
-// the resulting staff credential is stored as a one-way hash, never in code.
-export const MASTER_ADMIN_EMAIL = "razergamerhd1991@outlook.com";
+// The founding BAV pilot is the authority allowed to recover Staff Centre
+// access. The Staff Centre username itself is deliberately separate and may
+// be configured on the host with BAV_STAFF_EMAIL.
+export const MASTER_ADMIN_PILOT_EMAIL = "razergamerhd1991@outlook.com";
+
+function normalise(email?: string) {
+  return email?.trim().toLowerCase() ?? "";
+}
 
 export function getMasterAdminEmail() {
-  return MASTER_ADMIN_EMAIL;
+  return normalise(process.env.BAV_STAFF_EMAIL) || MASTER_ADMIN_PILOT_EMAIL;
 }
 
 export function getConfiguredStaffOwnerEmails() {
-  return [MASTER_ADMIN_EMAIL];
+  return [normalise(process.env.BAV_STAFF_OWNER_PILOT_EMAIL) || MASTER_ADMIN_PILOT_EMAIL];
 }
 
 export function isConfiguredStaffOwner(email: string) {
-  const normalized = email.trim().toLowerCase();
+  const normalized = normalise(email);
   return getConfiguredStaffOwnerEmails().includes(normalized);
 }
