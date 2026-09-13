@@ -54,6 +54,41 @@ export type PilotBooking = {
   createdAt: string;
 };
 
+/** A compact operational briefing copied from a generated SimBrief OFP. */
+export type SimbriefBriefing = {
+  airline: string | null;
+  flightNumber: string | null;
+  callsign: string | null;
+  aircraft: string | null;
+  aircraftIcao: string | null;
+  airac: string | null;
+  originName: string | null;
+  originRunway: string | null;
+  originMetar: string | null;
+  destinationName: string | null;
+  destinationRunway: string | null;
+  destinationMetar: string | null;
+  alternateName: string | null;
+  alternateMetar: string | null;
+  scheduledOut: string | null;
+  scheduledIn: string | null;
+  estimatedOut: string | null;
+  estimatedIn: string | null;
+  blockTime: string | null;
+  enrouteTime: string | null;
+  distanceNm: string | null;
+  costIndex: string | null;
+  passengerCount: string | null;
+  cargoWeight: string | null;
+  taxiFuel: string | null;
+  tripFuel: string | null;
+  contingencyFuel: string | null;
+  alternateFuel: string | null;
+  reserveFuel: string | null;
+  extraFuel: string | null;
+  blockFuel: string | null;
+};
+
 export type PilotFlightPlan = {
   id: string;
   bookingId: string;
@@ -66,6 +101,7 @@ export type PilotFlightPlan = {
   route: string | null;
   cruiseAltitude: string | null;
   alternate: string | null;
+  simbriefBriefing: SimbriefBriefing | null;
   generatedAt: string | null;
   lastSyncedAt: string | null;
   createdAt: string;
@@ -112,6 +148,10 @@ function normalizeBooking(booking: PilotBooking): PilotBooking {
   return { ...booking, routeId: booking.routeId ?? null };
 }
 
+function normalizeFlightPlan(plan: PilotFlightPlan): PilotFlightPlan {
+  return { ...plan, simbriefBriefing: plan.simbriefBriefing && typeof plan.simbriefBriefing === "object" ? plan.simbriefBriefing : null };
+}
+
 function normalizePirep(pirep: Partial<PilotPirep> & Pick<PilotPirep, "id" | "pilotId" | "flightNumber" | "from" | "to" | "aircraft" | "startedAt" | "completedAt" | "blockMinutes" | "distanceNm">): PilotPirep {
   return {
     bookingId: null,
@@ -140,7 +180,7 @@ async function readState(): Promise<OperationsState> {
     return {
       version: 4,
       bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
-      flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans : [],
+      flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans.map(normalizeFlightPlan) : [],
       pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
     };
   } catch (error) {
@@ -174,7 +214,7 @@ export async function createFlightPlanForBooking(input: { bookingId: string; pil
   const existing = state.flightPlans.find((item) => item.bookingId === input.bookingId);
   if (existing) return existing;
   const now = new Date().toISOString();
-  const flightPlan: PilotFlightPlan = { id: randomUUID(), bookingId: input.bookingId, pilotId: input.pilotId, status: "draft", simbriefPilotId: input.simbriefPilotId, simbriefDispatchUrl: input.simbriefDispatchUrl, simbriefOfpId: null, simbriefOfpUrl: null, route: null, cruiseAltitude: null, alternate: null, generatedAt: null, lastSyncedAt: null, createdAt: now, updatedAt: now };
+  const flightPlan: PilotFlightPlan = { id: randomUUID(), bookingId: input.bookingId, pilotId: input.pilotId, status: "draft", simbriefPilotId: input.simbriefPilotId, simbriefDispatchUrl: input.simbriefDispatchUrl, simbriefOfpId: null, simbriefOfpUrl: null, route: null, cruiseAltitude: null, alternate: null, simbriefBriefing: null, generatedAt: null, lastSyncedAt: null, createdAt: now, updatedAt: now };
   state.flightPlans.push(flightPlan);
   await writeState(state);
   return flightPlan;
@@ -206,7 +246,7 @@ export async function configureFlightPlanSimbrief(input: { bookingId: string; pi
   return flightPlan;
 }
 
-export async function updateFlightPlanFromSimbrief(input: { bookingId: string; pilotId: string; status: PilotFlightPlan["status"]; simbriefOfpId?: string | null; simbriefOfpUrl?: string | null; route?: string | null; cruiseAltitude?: string | null; alternate?: string | null; generatedAt?: string | null }) {
+export async function updateFlightPlanFromSimbrief(input: { bookingId: string; pilotId: string; status: PilotFlightPlan["status"]; simbriefOfpId?: string | null; simbriefOfpUrl?: string | null; route?: string | null; cruiseAltitude?: string | null; alternate?: string | null; simbriefBriefing?: SimbriefBriefing | null; generatedAt?: string | null }) {
   const state = await readState();
   const flightPlan = state.flightPlans.find((item) => item.bookingId === input.bookingId && item.pilotId === input.pilotId);
   if (!flightPlan) throw new Error("Flight plan not found.");
@@ -216,6 +256,7 @@ export async function updateFlightPlanFromSimbrief(input: { bookingId: string; p
   if (input.route !== undefined) flightPlan.route = input.route;
   if (input.cruiseAltitude !== undefined) flightPlan.cruiseAltitude = input.cruiseAltitude;
   if (input.alternate !== undefined) flightPlan.alternate = input.alternate;
+  if (input.simbriefBriefing !== undefined) flightPlan.simbriefBriefing = input.simbriefBriefing;
   if (input.generatedAt !== undefined) flightPlan.generatedAt = input.generatedAt;
   flightPlan.lastSyncedAt = new Date().toISOString();
   flightPlan.updatedAt = new Date().toISOString();

@@ -34,6 +34,7 @@ export async function POST(request: Request, context: { params: Promise<{ bookin
       route: details.route,
       cruiseAltitude: details.cruiseAltitude,
       alternate: details.alternate,
+      simbriefBriefing: details.briefing,
       generatedAt: details.generatedAt ?? new Date().toISOString(),
     });
     return NextResponse.json({ ok: true, flightPlan }, { headers: { "Cache-Control": "no-store" } });

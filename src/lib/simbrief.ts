@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PilotBooking } from "@/lib/pilot-operations-store";
+import type { PilotBooking, SimbriefBriefing } from "@/lib/pilot-operations-store";
 
 const airportIcao: Record<string, string> = {
   LHR: "EGLL", LGW: "EGKK", LCY: "EGLC", OSL: "ENGM", JFK: "KJFK", LAX: "KLAX", PDX: "KPDX", DXB: "OMDB", SIN: "WSSS", HND: "RJTT", CPT: "FACT", SYD: "YSSY", SFO: "KSFO", SEA: "KSEA", IAH: "KIAH", JNB: "FAOR",
@@ -128,18 +128,69 @@ function pick(payload: SimbriefPayload, path: string[]) {
   return result || null;
 }
 
-export type SimbriefPlanDetails = { ofpId: string | null; ofpUrl: string | null; route: string | null; cruiseAltitude: string | null; alternate: string | null; generatedAt: string | null; origin: string | null; destination: string | null };
+function pickFirst(payload: SimbriefPayload, paths: string[][]) {
+  for (const path of paths) {
+    const value = pick(payload, path);
+    if (value) return value;
+  }
+  return null;
+}
+
+function timestampValue(value: string | null) {
+  if (!value || !/^\d{9,12}$/.test(value)) return value;
+  const timestamp = Number(value);
+  return Number.isSafeInteger(timestamp) ? new Date(timestamp * 1000).toISOString() : value;
+}
+
+export type SimbriefPlanDetails = { ofpId: string | null; ofpUrl: string | null; route: string | null; cruiseAltitude: string | null; alternate: string | null; generatedAt: string | null; origin: string | null; destination: string | null; briefing: SimbriefBriefing };
 
 export function extractSimbriefPlan(payload: SimbriefPayload): SimbriefPlanDetails {
+  const generatedAt = timestampValue(pick(payload, ["general", "time_generated"]));
+  const route = pick(payload, ["general", "route"]);
+  const cruiseAltitude = pick(payload, ["general", "initial_altitude"]);
+  const alternate = pick(payload, ["alternate", "icao_code"]) ?? pick(payload, ["alternate", "icao"]);
   return {
     ofpId: pick(payload, ["general", "ofp_id"]),
     ofpUrl: pick(payload, ["files", "pdf", "link"]) ?? pick(payload, ["files", "pdf"]),
-    route: pick(payload, ["general", "route"]),
-    cruiseAltitude: pick(payload, ["general", "initial_altitude"]),
-    alternate: pick(payload, ["alternate", "icao_code"]) ?? pick(payload, ["alternate", "icao"]),
-    generatedAt: pick(payload, ["general", "time_generated"]),
+    route,
+    cruiseAltitude,
+    alternate,
+    generatedAt,
     origin: pick(payload, ["origin", "icao_code"]) ?? pick(payload, ["origin", "icao"]),
     destination: pick(payload, ["destination", "icao_code"]) ?? pick(payload, ["destination", "icao"]),
+    briefing: {
+      airline: pick(payload, ["general", "icao_airline"]),
+      flightNumber: pick(payload, ["general", "flight_number"]),
+      callsign: pick(payload, ["general", "callsign"]),
+      aircraft: pickFirst(payload, [["aircraft", "name"], ["aircraft", "type"]]),
+      aircraftIcao: pickFirst(payload, [["aircraft", "icaocode"], ["aircraft", "icao_code"], ["general", "icao_aircraft"]]),
+      airac: pickFirst(payload, [["general", "airac"], ["params", "airac"]]),
+      originName: pick(payload, ["origin", "name"]),
+      originRunway: pickFirst(payload, [["origin", "plan_rwy"], ["origin", "runway"]]),
+      originMetar: pick(payload, ["origin", "metar"]),
+      destinationName: pick(payload, ["destination", "name"]),
+      destinationRunway: pickFirst(payload, [["destination", "plan_rwy"], ["destination", "runway"]]),
+      destinationMetar: pick(payload, ["destination", "metar"]),
+      alternateName: pick(payload, ["alternate", "name"]),
+      alternateMetar: pick(payload, ["alternate", "metar"]),
+      scheduledOut: timestampValue(pickFirst(payload, [["times", "sched_out"], ["times", "scheduled_out"]])),
+      scheduledIn: timestampValue(pickFirst(payload, [["times", "sched_in"], ["times", "scheduled_in"]])),
+      estimatedOut: timestampValue(pickFirst(payload, [["times", "est_out"], ["times", "estimated_out"]])),
+      estimatedIn: timestampValue(pickFirst(payload, [["times", "est_in"], ["times", "estimated_in"]])),
+      blockTime: pickFirst(payload, [["times", "est_block"], ["times", "block_time"], ["times", "time_block"]]),
+      enrouteTime: pickFirst(payload, [["times", "est_time_enroute"], ["times", "time_enroute"], ["times", "enroute_time"]]),
+      distanceNm: pickFirst(payload, [["general", "route_distance"], ["general", "route_distance_nm"]]),
+      costIndex: pickFirst(payload, [["general", "costindex"], ["general", "cost_index"]]),
+      passengerCount: pick(payload, ["weights", "pax_count"]),
+      cargoWeight: pickFirst(payload, [["weights", "cargo"], ["weights", "freight"]]),
+      taxiFuel: pick(payload, ["fuel", "taxi"]),
+      tripFuel: pickFirst(payload, [["fuel", "enroute_burn"], ["fuel", "trip"]]),
+      contingencyFuel: pickFirst(payload, [["fuel", "contingency"], ["fuel", "cont"]]),
+      alternateFuel: pickFirst(payload, [["fuel", "alternate_burn"], ["fuel", "alternate"]]),
+      reserveFuel: pick(payload, ["fuel", "reserve"]),
+      extraFuel: pick(payload, ["fuel", "extra"]),
+      blockFuel: pickFirst(payload, [["fuel", "plan_ramp"], ["fuel", "ramp"], ["fuel", "block"]]),
+    },
   };
 }
 

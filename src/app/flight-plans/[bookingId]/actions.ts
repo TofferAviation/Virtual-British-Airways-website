@@ -34,11 +34,13 @@ export async function syncSimbriefFlightPlan(formData: FormData) {
     if (!details.origin || !details.destination || details.origin.toUpperCase() !== codes.origin || details.destination.toUpperCase() !== codes.destination) {
       throw new Error(`Your latest SimBrief plan does not match ${codes.origin ?? booking.from} → ${codes.destination ?? booking.to}. Generate this BAV flight first, then sync again.`);
     }
-    await updateFlightPlanFromSimbrief({ bookingId, pilotId: session.pilotId, status: "synced", simbriefOfpId: details.ofpId, simbriefOfpUrl: details.ofpUrl, route: details.route, cruiseAltitude: details.cruiseAltitude, alternate: details.alternate, generatedAt: details.generatedAt ?? new Date().toISOString() });
-    redirect(`${flightPlanPath(bookingId)}?synced=1`);
+    await updateFlightPlanFromSimbrief({ bookingId, pilotId: session.pilotId, status: "synced", simbriefOfpId: details.ofpId, simbriefOfpUrl: details.ofpUrl, route: details.route, cruiseAltitude: details.cruiseAltitude, alternate: details.alternate, simbriefBriefing: details.briefing, generatedAt: details.generatedAt ?? new Date().toISOString() });
   } catch (error) {
     await updateFlightPlanFromSimbrief({ bookingId, pilotId: session.pilotId, status: "sync_failed" });
     const message = error instanceof Error ? error.message : "Unable to sync the SimBrief plan.";
     redirect(`${flightPlanPath(bookingId)}?error=${encodeURIComponent(message)}`);
   }
+  // `redirect()` deliberately throws in Next.js. Keeping the successful
+  // redirect outside the catch prevents it being reported as NEXT_REDIRECT.
+  redirect(`${flightPlanPath(bookingId)}?synced=1`);
 }
