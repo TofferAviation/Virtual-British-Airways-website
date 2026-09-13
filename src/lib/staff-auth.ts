@@ -78,7 +78,14 @@ export function isStaffAuthConfigured() {
 
 export async function validateStaffCredentials(email: string, password: string): Promise<StaffAccount | null> {
   const account = await findStaffUserByEmail(email);
-  if (!account || account.status !== "active" || !verifyPassword(password, account.passwordHash)) return null;
+  const passwordAccepted = Boolean(account && verifyPassword(password, account.passwordHash));
+  console.info("[staff-login-diag]", {
+    accountFound: Boolean(account),
+    accountActive: account?.status === "active",
+    passwordConfigured: Boolean(account?.passwordHash),
+    passwordAccepted,
+  });
+  if (!account || account.status !== "active" || !passwordAccepted) return null;
   await markStaffActive(account.id);
   return account;
 }

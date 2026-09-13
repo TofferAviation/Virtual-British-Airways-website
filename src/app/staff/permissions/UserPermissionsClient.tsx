@@ -315,6 +315,35 @@ export function UserPermissionsClient({
     }
   }
 
+  async function resetStaffPassword() {
+    if (!selected || selected.isEnvironmentAdmin || !canManageUsers) return;
+    const password = window.prompt(`Set a new temporary Staff Centre password for ${selected.name} (minimum 10 characters):`);
+    if (password == null) return;
+    if (password.length < 10) {
+      setMessage("The temporary password must be at least 10 characters long.");
+      return;
+    }
+    if (!window.confirm(`Reset the Staff Centre password for ${selected.name}? Send the new temporary password to them securely.`)) return;
+
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/staff/permissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-password", userId: selected.id, password }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not reset the Staff Centre password.");
+      await refreshData();
+      setMessage(`Password reset for ${selected.name}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not reset the Staff Centre password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendInvite(event: FormEvent) {
     event.preventDefault();
     if (!canManageUsers) return;
@@ -499,6 +528,7 @@ export function UserPermissionsClient({
               <div className="permissions-editor-actions">
                 <button className="permissions-primary" onClick={saveUserChanges} disabled={busy || !canManageUsers}>{selected.isEnvironmentAdmin ? "Full access active" : "Save changes"}</button>
                 <button className="permissions-secondary" onClick={resetDraft} disabled={busy}>Reset changes</button>
+                <button className="permissions-secondary" onClick={resetStaffPassword} disabled={busy || !canManageUsers || selected.isEnvironmentAdmin}>Reset password</button>
                 <button className="permissions-danger" onClick={removeStaffAccess} disabled={busy || !canManageUsers || selected.isEnvironmentAdmin || selected.id === currentUserId}>Remove staff access</button>
               </div>
             </> : <p>No staff accounts are available.</p>}

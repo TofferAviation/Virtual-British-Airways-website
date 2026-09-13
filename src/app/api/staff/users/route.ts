@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
   if (!name) return jsonError("Staff name is required.");
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) return jsonError("Enter a valid staff email address.");
-  if (password.length < 8) return jsonError("Temporary password must be at least 8 characters long.");
+  if (password.length < 10) return jsonError("Temporary password must be at least 10 characters long.");
 
   const role = getRole(state, roleId);
   if (!role) return jsonError("Selected role does not exist.");

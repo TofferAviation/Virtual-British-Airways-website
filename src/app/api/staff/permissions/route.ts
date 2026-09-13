@@ -14,6 +14,7 @@ import {
   getRole,
   getStaffState,
   hasPermission,
+  hashPassword,
   permissionsForUser,
   saveStaffState,
   type StaffAccount,
@@ -160,6 +161,28 @@ export async function POST(request: NextRequest) {
       targetUserId: user.id,
       targetName: user.name,
       details: `Removed staff access from ${user.name}. Their pilot account is unchanged.`,
+    });
+    await saveStaffState(state);
+    return NextResponse.json({ user: publicUser(user), audit: state.audit.slice(0, 30) });
+  }
+
+  if (action === "reset-password") {
+    if (!hasPermission(state, actor, "users.roles")) return jsonError("You do not have permission to reset staff passwords.", 403);
+    const userId = typeof body?.userId === "string" ? body.userId : "";
+    const password = typeof body?.password === "string" ? body.password : "";
+    if (password.length < 10) return jsonError("The temporary password must be at least 10 characters long.");
+    const user = state.users.find((item) => item.id === userId);
+    if (!user) return jsonError("Staff account not found.", 404);
+    if (user.isEnvironmentAdmin) return jsonError("Use the founding-owner recovery flow to reset the environment administrator password.", 409);
+
+    user.passwordHash = hashPassword(password);
+    addAudit(state, {
+      actorEmail: actor.email,
+      actorName: actor.name,
+      action: "staff.password.reset",
+      targetUserId: user.id,
+      targetName: user.name,
+      details: `Reset the Staff Centre password for ${user.name}.`,
     });
     await saveStaffState(state);
     return NextResponse.json({ user: publicUser(user), audit: state.audit.slice(0, 30) });

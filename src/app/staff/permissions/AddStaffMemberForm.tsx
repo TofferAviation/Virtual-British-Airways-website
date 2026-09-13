@@ -15,6 +15,7 @@ export function AddStaffMemberForm({ roles, canManageUsers }: Props) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [roleId, setRoleId] = useState(defaultRole?.id ?? "support");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [busy, setBusy] = useState(false);
@@ -24,6 +25,14 @@ export function AddStaffMemberForm({ roles, canManageUsers }: Props) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canManageUsers || busy) return;
+    if (password.length < 10) {
+      setMessage("Use a temporary password with at least 10 characters.");
+      return;
+    }
+    if (password !== passwordConfirmation) {
+      setMessage("The password confirmation does not match.");
+      return;
+    }
     setBusy(true);
     setMessage("");
     setSuccess(false);
@@ -42,6 +51,7 @@ export function AddStaffMemberForm({ roles, canManageUsers }: Props) {
       setName("");
       setEmail("");
       setPassword("");
+      setPasswordConfirmation("");
       setStatus("active");
       setRoleId(defaultRole?.id ?? "support");
 
@@ -83,8 +93,12 @@ export function AddStaffMemberForm({ roles, canManageUsers }: Props) {
             </label>
             <label>
               <span>Temporary password</span>
-              <input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" />
-              <small>Minimum 8 characters. Send this to the staff member securely.</small>
+              <input type="password" minLength={10} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" />
+              <small>Minimum 10 characters. Send this to the staff member securely.</small>
+            </label>
+            <label>
+              <span>Confirm temporary password</span>
+              <input type="password" minLength={10} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} required autoComplete="new-password" />
             </label>
             <label>
               <span>Role</span>
