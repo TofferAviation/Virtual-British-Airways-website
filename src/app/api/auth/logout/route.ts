@@ -1,45 +1,9 @@
 import { NextRequest } from "next/server";
-import { PILOT_COOKIE_NAME } from "@/lib/pilot-auth";
-import { pilotSessionCookieDomain, relativeRedirect, requestUsesHttps } from "@/lib/request-context";
+import { clearPilotSession } from "@/lib/pilot-auth";
+import { relativeRedirect } from "@/lib/request-context";
 
 export async function GET(request: NextRequest) {
   const response = relativeRedirect("/", 303);
-  const secure = requestUsesHttps(request);
-  response.cookies.set(PILOT_COOKIE_NAME, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: 0,
-    domain: pilotSessionCookieDomain(request),
-  });
-  response.cookies.set("bav_pilot_session", "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: 0,
-  });
-  response.cookies.set("bav_pilot_session_v2", "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: 0,
-  });
-  response.cookies.set("bav_pilot_session_v3", "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: 0,
-  });
-  response.cookies.set("bav_demo_session", "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: 0,
-  });
+  clearPilotSession(response, request);
   return response;
 }
