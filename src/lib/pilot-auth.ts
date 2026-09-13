@@ -78,9 +78,23 @@ function verifyToken(token?: string | null): PilotSession | null {
 
 export async function getPilotSession() {
   const cookieStore = await cookies();
-  const session = verifyToken(cookieStore.get(PILOT_COOKIE_NAME)?.value);
+  const raw = cookieStore.get(PILOT_COOKIE_NAME)?.value;
+  const session = verifyToken(raw);
+
+  // Temporary production diagnostics for the session-recovery investigation.
+  // Deliberately do not log cookie contents, emails, passwords, keys, or pilot IDs.
+  console.info("[pilot-session-diag]", {
+    cookiePresent: Boolean(raw),
+    cookieLength: raw?.length ?? 0,
+    tokenValid: Boolean(session),
+  });
   if (!session) return null;
+
   const account = await getPilotById(session.pilotId);
+  console.info("[pilot-session-diag]", {
+    pilotFound: Boolean(account),
+    pilotActive: account?.status === "active",
+  });
   if (!account || account.status !== "active") return null;
   return {
     ...session,
