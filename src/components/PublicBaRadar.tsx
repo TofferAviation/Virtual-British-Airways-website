@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
@@ -90,7 +91,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
 
   return <div className="ba-radar ba-radar-tracker">
     <header className="ba-radar-toolbar">
-      <div className="ba-radar-brand"><span className="ba-radar-brand-mark">◉</span><div><strong>BA-Radar</strong><small>LIVE VIRTUAL FLIGHT TRACKER</small></div></div>
+      <div className="ba-radar-brand"><Image className="ba-radar-brand-mark" src="/branding/ba-radar-icon.png" width={40} height={40} alt="BA-Radar" priority /><div><strong>BA-Radar</strong><small>LIVE VIRTUAL FLIGHT TRACKER</small></div></div>
       <div className="ba-radar-toolbar-status"><i /><span>{flights.length} active</span><b>{airborne} airborne</b><em>Refreshed {checkedAt.toLocaleTimeString("en-GB")}</em></div>
       <label className="ba-radar-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search flights, routes or aircraft" aria-label="Search live flights" /></label>
     </header>
