@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { acceptStaffInvitation } from "@/lib/staff-store";
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { token?: string } | null;
+  const body = (await request.json().catch(() => null)) as { token?: string; password?: string } | null;
   const token = body?.token?.trim() ?? "";
-  if (!token) {
-    return NextResponse.json({ error: "Invitation token is required." }, { status: 400 });
+  const password = body?.password ?? "";
+  if (!token || !password) {
+    return NextResponse.json({ error: "Invitation token and a new Staff Centre password are required." }, { status: 400 });
   }
 
   try {
-    const user = await acceptStaffInvitation(token);
+    const user = await acceptStaffInvitation(token, password);
     return NextResponse.json({ ok: true, email: user.email });
   } catch (error) {
     return NextResponse.json(

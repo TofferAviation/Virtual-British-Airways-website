@@ -1,10 +1,6 @@
-import { NextResponse } from "next/server";
+import { relativeRedirect } from "@/lib/request-context";
 
-function signInRedirect(request: Request) {
-  return NextResponse.redirect(new URL("/login?returnTo=%2Fstaff", request.url), 303);
-}
-
-// Legacy endpoint retained for old bookmarks. Owner access is now derived
-// directly from the BAV account and its Staff role record.
-export async function GET(request: Request) { return signInRedirect(request); }
-export async function POST(request: Request) { return signInRedirect(request); }
+// Legacy endpoint retained for old bookmarks. Staff Centre now has its own
+// sign-in and the protected one-time setup is available from that page.
+export async function GET() { return relativeRedirect("/staff-login", 303); }
+export async function POST() { return relativeRedirect("/staff-login", 303); }

@@ -15,3 +15,5 @@ services:
         sync: false
       - key: BAV_PILOT_SESSION_SECRET
         generateValue: true
+      - key: BAV_STAFF_SESSION_SECRET
+        generateValue: true

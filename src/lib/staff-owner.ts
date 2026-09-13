@@ -1,7 +1,7 @@
 // The founding Staff Centre owner is intentionally a stable identity in the
-// application rather than a mutable host setting. Authentication still
-// requires either the owner pilot session or a server-side password; no secret
-// is stored in source control.
+// application rather than a mutable host setting. Their initial Staff Centre
+// password may be set only while this BAV pilot identity is authenticated;
+// the resulting staff credential is stored as a one-way hash, never in code.
 export const MASTER_ADMIN_EMAIL = "razergamerhd1991@outlook.com";
 
 export function getMasterAdminEmail() {

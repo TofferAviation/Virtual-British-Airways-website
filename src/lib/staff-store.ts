@@ -110,7 +110,9 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     const existing = users.find((user) => user.id === admin.id || user.email.toLowerCase() === admin.email);
     if (existing) {
       existing.id = "env-admin";
-      existing.name = admin.name;
+      // The founding owner may customise their Staff Centre display name.
+      // Only seed the default name when the account is first created.
+      existing.name = existing.name?.trim() || admin.name;
       existing.email = admin.email;
       existing.roleId = "admin";
       existing.status = "active";
@@ -247,15 +249,45 @@ export async function changeOwnStaffPassword(id: string, currentPassword: string
   const user = state.users.find((item) => item.id === id && item.status === "active");
   if (!user) throw new Error("Staff account not found.");
 
-  const configuredOwnerPassword = process.env.BAV_STAFF_PASSWORD ?? "";
-  const currentPasswordMatches = user.passwordHash
-    ? verifyPassword(currentPassword, user.passwordHash)
-    : Boolean(user.isEnvironmentAdmin && configuredOwnerPassword && currentPassword.length === configuredOwnerPassword.length && timingSafeEqual(Buffer.from(currentPassword), Buffer.from(configuredOwnerPassword)));
-  if (!currentPasswordMatches) throw new Error("Your current password is incorrect.");
+  if (!verifyPassword(currentPassword, user.passwordHash)) throw new Error("Your current password is incorrect.");
 
   user.passwordHash = hashPassword(newPassword);
   addAudit(state, { actorEmail: user.email, actorName: user.name, action: "staff.password.updated", targetUserId: user.id, targetName: user.name, details: "Updated their own staff password." });
   await saveStaffState(state);
+}
+
+/**
+ * The founding owner sets their first Staff Centre password from an already
+ * authenticated BAV pilot session. After that one-time bootstrap, Staff
+ * Centre credentials are entirely separate from pilot credentials and stored
+ * only as a salted one-way hash in the persistent staff state.
+ */
+export async function setInitialOwnerStaffPassword(email: string, password: string) {
+  if (password.length < 10) throw new Error("Use a password with at least 10 characters.");
+  const state = await getStaffState();
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = state.users.find((item) => item.email.trim().toLowerCase() === normalizedEmail);
+  if (!user || !isMasterAdminAccount(user) || user.status !== "active") {
+    throw new Error("This BAV account is not authorised to set the founding Staff Centre password.");
+  }
+  if (user.passwordHash) throw new Error("A Staff Centre password is already configured. Sign in with it, then use My profile to change it.");
+
+  user.passwordHash = hashPassword(password);
+  addAudit(state, {
+    actorEmail: user.email,
+    actorName: user.name,
+    action: "staff.password.initialised",
+    targetUserId: user.id,
+    targetName: user.name,
+    details: "Set the founding Staff Centre password.",
+  });
+  await saveStaffState(state);
+  return user;
+}
+
+export async function hasStaffPasswordForEmail(email: string) {
+  const user = await findStaffUserByEmail(email);
+  return Boolean(user?.passwordHash);
 }
 
 export function addAudit(
@@ -334,7 +366,8 @@ export async function createStaffInvitation(input: {
   return { invitation, token };
 }
 
-export async function acceptStaffInvitation(token: string) {
+export async function acceptStaffInvitation(token: string, password: string) {
+  if (password.length < 10) throw new Error("Use a Staff Centre password with at least 10 characters.");
   const state = await getStaffState();
   const tokenHash = hashInvitationToken(token);
   const invitation = state.invitations.find((item) => item.tokenHash === tokenHash && item.status === "pending");
@@ -361,9 +394,7 @@ export async function acceptStaffInvitation(token: string) {
   user.name = invitation.name;
   user.roleId = invitation.roleId;
   user.status = "active";
-  // Staff access has no second password. The matching BAV pilot account is
-  // the only authentication source; this invitation grants its role record.
-  delete user.passwordHash;
+  user.passwordHash = hashPassword(password);
   user.overrides = {};
   invitation.status = "accepted";
 
