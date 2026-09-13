@@ -24,21 +24,40 @@ function siteUrl() {
   }
 }
 
+function envValue(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function envPassword(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value?.trim()) return value.replace(/\s/g, "");
+  }
+  return undefined;
+}
+
 function emailConfig() {
-  const user = process.env.BAV_SMTP_USER?.trim();
-  const password = process.env.BAV_SMTP_PASSWORD?.replace(/\s/g, "");
+  // BAV_* is the documented configuration. The fallback names make this
+  // release compatible with a standard SMTP configuration already present on
+  // the Render service without weakening how credentials are handled.
+  const user = envValue("BAV_SMTP_USER", "SMTP_USER", "EMAIL_USER");
+  const password = envPassword("BAV_SMTP_PASSWORD", "SMTP_PASSWORD", "EMAIL_PASSWORD", "GMAIL_APP_PASSWORD");
   if (!user || !password) return null;
 
-  const port = Number(process.env.BAV_SMTP_PORT ?? 465);
+  const port = Number(envValue("BAV_SMTP_PORT", "SMTP_PORT", "EMAIL_PORT") ?? 465);
   if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
-  const secure = (process.env.BAV_SMTP_SECURE ?? "true").trim().toLowerCase() !== "false";
+  const secure = (envValue("BAV_SMTP_SECURE", "SMTP_SECURE", "EMAIL_SECURE") ?? "true").toLowerCase() !== "false";
   return {
-    host: process.env.BAV_SMTP_HOST?.trim() || "smtp.gmail.com",
+    host: envValue("BAV_SMTP_HOST", "SMTP_HOST", "EMAIL_HOST") || "smtp.gmail.com",
     port,
     secure,
     auth: { user, pass: password },
-    from: process.env.BAV_EMAIL_FROM?.trim() || DEFAULT_FROM,
-    replyTo: process.env.BAV_EMAIL_REPLY_TO?.trim() || DEFAULT_REPLY_TO,
+    from: envValue("BAV_EMAIL_FROM", "EMAIL_FROM") || DEFAULT_FROM,
+    replyTo: envValue("BAV_EMAIL_REPLY_TO", "EMAIL_REPLY_TO") || DEFAULT_REPLY_TO,
   };
 }
 
