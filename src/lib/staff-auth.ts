@@ -12,7 +12,7 @@ import {
   verifyPassword,
   type StaffAccount,
 } from "@/lib/staff-store";
-import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
+import { BAV_PUBLIC_COOKIE_DOMAIN, pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
 // v2 deliberately replaces v1. Earlier production versions could issue v1
 // as host-only and later as domain-scoped, leaving two same-named cookies for
@@ -96,14 +96,16 @@ export function createStaffSessionToken(account: StaffAccount) {
 }
 
 function expireCookie(response: NextResponse, name: string, request: NextRequest, domain?: string) {
-  response.cookies.set(name, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: requestUsesHttps(request),
-    path: "/",
-    maxAge: 0,
-    domain,
-  });
+  const attributes = [
+    `${name}=`,
+    "Path=/",
+    "Max-Age=0",
+    "HttpOnly",
+    "SameSite=Lax",
+    ...(requestUsesHttps(request) ? ["Secure"] : []),
+    ...(domain ? [`Domain=${domain}`] : []),
+  ];
+  response.headers.append("Set-Cookie", attributes.join("; "));
 }
 
 /** Issue one unambiguous Staff Centre session and retire all older variants. */
@@ -123,9 +125,10 @@ export function issueStaffSession(response: NextResponse, request: NextRequest, 
 /** End the current session and remove both host-only and domain-scoped copies. */
 export function clearStaffSession(response: NextResponse, request: NextRequest) {
   const domain = pilotSessionCookieDomain(request);
+  const domains = new Set([BAV_PUBLIC_COOKIE_DOMAIN, ...(domain ? [domain] : [])]);
   for (const name of [STAFF_COOKIE_NAME, ...LEGACY_STAFF_COOKIE_NAMES]) {
-    expireCookie(response, name, request, domain);
-    if (domain) expireCookie(response, name, request);
+    expireCookie(response, name, request);
+    for (const cookieDomain of domains) expireCookie(response, name, request, cookieDomain);
   }
 }
 
