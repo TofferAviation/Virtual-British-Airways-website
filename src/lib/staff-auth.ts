@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { NextRequest, NextResponse } from "next/server";
 import type { PermissionId, StaffRoleId } from "@/lib/permissions";
 import {
   findStaffUserByEmail,
@@ -11,8 +12,13 @@ import {
   verifyPassword,
   type StaffAccount,
 } from "@/lib/staff-store";
+import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
-export const STAFF_COOKIE_NAME = "bav_staff_session_v1";
+// v2 deliberately replaces v1. Earlier production versions could issue v1
+// as host-only and later as domain-scoped, leaving two same-named cookies for
+// the browser to send in an unpredictable order on Staff Centre tile routes.
+export const STAFF_COOKIE_NAME = "bav_staff_session_v2";
+const LEGACY_STAFF_COOKIE_NAMES = ["bav_staff_session_v1"];
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 export type StaffSession = {
@@ -80,6 +86,40 @@ export async function validateStaffCredentials(email: string, password: string):
 export function createStaffSessionToken(account: StaffAccount) {
   const payload = encode(JSON.stringify(sessionFor(account)));
   return `${payload}.${sign(payload)}`;
+}
+
+function expireCookie(response: NextResponse, name: string, request: NextRequest, domain?: string) {
+  response.cookies.set(name, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: requestUsesHttps(request),
+    path: "/",
+    maxAge: 0,
+    domain,
+  });
+}
+
+/** Issue one unambiguous Staff Centre session and retire all older variants. */
+export function issueStaffSession(response: NextResponse, request: NextRequest, account: StaffAccount) {
+  const domain = pilotSessionCookieDomain(request);
+  response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
+    ...staffSessionCookieOptions,
+    secure: requestUsesHttps(request),
+    domain,
+  });
+  for (const name of LEGACY_STAFF_COOKIE_NAMES) {
+    expireCookie(response, name, request, domain);
+    if (domain) expireCookie(response, name, request);
+  }
+}
+
+/** End the current session and remove both host-only and domain-scoped copies. */
+export function clearStaffSession(response: NextResponse, request: NextRequest) {
+  const domain = pilotSessionCookieDomain(request);
+  for (const name of [STAFF_COOKIE_NAME, ...LEGACY_STAFF_COOKIE_NAMES]) {
+    expireCookie(response, name, request, domain);
+    if (domain) expireCookie(response, name, request);
+  }
 }
 
 function verifyToken(token?: string | null): StaffSession | null {

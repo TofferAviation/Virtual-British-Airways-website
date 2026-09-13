@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { STAFF_COOKIE_NAME, createStaffSessionToken, isStaffAuthConfigured, staffSessionCookieOptions, validateStaffCredentials } from "@/lib/staff-auth";
-import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
+import { isStaffAuthConfigured, issueStaffSession, validateStaffCredentials } from "@/lib/staff-auth";
 
 export async function POST(request: NextRequest) {
   if (!isStaffAuthConfigured()) {
@@ -15,11 +14,7 @@ export async function POST(request: NextRequest) {
     const account = await validateStaffCredentials(email, password);
     if (!account) return NextResponse.json({ error: "Incorrect Staff Centre email or password." }, { status: 401 });
     const response = NextResponse.json({ ok: true, role: account.roleId });
-    response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
-      ...staffSessionCookieOptions,
-      secure: requestUsesHttps(request),
-      domain: pilotSessionCookieDomain(request),
-    });
+    issueStaffSession(response, request, account);
     return response;
   } catch {
     return NextResponse.json({ error: "Staff account service is temporarily unavailable. Please try again shortly." }, { status: 503 });

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { STAFF_COOKIE_NAME, createStaffSessionToken, isStaffAuthConfigured, staffSessionCookieOptions } from "@/lib/staff-auth";
+import { isStaffAuthConfigured, issueStaffSession } from "@/lib/staff-auth";
 import { getPilotSession } from "@/lib/pilot-auth";
-import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 import { setInitialOwnerStaffPassword } from "@/lib/staff-store";
 import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 
@@ -27,11 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     const account = await setInitialOwnerStaffPassword(pilot.email, password);
     const response = NextResponse.json({ ok: true });
-    response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
-      ...staffSessionCookieOptions,
-      secure: requestUsesHttps(request),
-      domain: pilotSessionCookieDomain(request),
-    });
+    issueStaffSession(response, request, account);
     return response;
   } catch (error) {
     return NextResponse.json(
