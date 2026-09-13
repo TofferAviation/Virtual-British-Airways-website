@@ -17,6 +17,11 @@ function UserIcon() {
   );
 }
 
+function ProfileAvatar({ image }: { image?: string | null }) {
+  if (!image) return <UserIcon />;
+  return <span className="header-profile-avatar"><img src={image} alt="" /></span>;
+}
+
 function OneworldBadge() {
   return (
     <span aria-hidden="true">
@@ -72,14 +77,14 @@ export async function SiteHeader() {
         <ThemeToggle />
         {staffSession ? (
           <>
-            <a className="header-user-link" href="/staff/profile"><UserIcon /><span>{staffSession.name}</span></a>
+            <a className="header-user-link" href="/staff/profile"><ProfileAvatar image={staffSession.profileImage} /><span>{staffSession.name}</span></a>
             <a className="header-admin-badge" href="/staff/permissions">{staffSession.isMasterAdmin ? "Master Admin" : staffRoleLabel(staffSession.roleId)}</a>
             <Link className="header-logout-button" href="/api/staff/logout">Log out</Link>
             <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information"><OneworldBadge /></Link>
           </>
         ) : pilotSession ? (
           <>
-            <Link className="header-user-link" href="/account"><UserIcon /><span>{pilotSession.name}</span></Link>
+            <Link className="header-user-link" href="/account"><ProfileAvatar image={pilotSession.profileImage} /><span>{pilotSession.name}</span></Link>
             <Link className="header-logout-button" href="/api/auth/logout">Log out</Link>
             <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information"><OneworldBadge /></Link>
           </>

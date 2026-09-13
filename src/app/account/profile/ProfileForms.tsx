@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 
-async function patchProfile(payload: Record<string, string>) {
+async function patchProfile(payload: Record<string, string | null>) {
   const response = await fetch("/api/pilot/profile", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -14,13 +15,14 @@ async function patchProfile(payload: Record<string, string>) {
   return body;
 }
 
-export function ProfileForms({ name, email, simbriefPilotId }: { name: string; email: string; simbriefPilotId: string }) {
+export function ProfileForms({ name, email, simbriefPilotId, profileImage: initialProfileImage }: { name: string; email: string; simbriefPilotId: string; profileImage: string | null }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [simbriefMessage, setSimbriefMessage] = useState("");
   const [savingSimbrief, setSavingSimbrief] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(initialProfileImage);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +30,7 @@ export function ProfileForms({ name, email, simbriefPilotId }: { name: string; e
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || "") });
+      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), profileImage });
       setProfileMessage("Profile updated successfully.");
     } catch (error) {
       setProfileMessage(error instanceof Error ? error.message : "Unable to update profile.");
@@ -81,6 +83,7 @@ export function ProfileForms({ name, email, simbriefPilotId }: { name: string; e
         <div><span className="pilot-profile-kicker">PERSONAL DETAILS</span><h2>Your profile</h2><p>Keep the details used by British Airways Virtual up to date.</p></div>
         <label>Full name<input name="name" defaultValue={name} autoComplete="name" required /></label>
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
+        <ProfileImagePicker value={profileImage} name={name} onChange={setProfileImage} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
         {profileMessage ? <p className="pilot-profile-message">{profileMessage}</p> : null}
       </form>

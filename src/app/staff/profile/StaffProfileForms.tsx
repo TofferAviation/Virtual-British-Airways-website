@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 
-async function updateProfile(body: Record<string, string>) {
+async function updateProfile(body: Record<string, string | null>) {
   const response = await fetch("/api/staff/profile", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -14,19 +15,20 @@ async function updateProfile(body: Record<string, string>) {
   return payload;
 }
 
-export function StaffProfileForms({ initialName, email, role }: { initialName: string; email: string; role: string }) {
+export function StaffProfileForms({ initialName, email, role, initialProfileImage }: { initialName: string; email: string; role: string; initialProfileImage: string | null }) {
   const [name, setName] = useState(initialName);
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(initialProfileImage);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      const result = await updateProfile({ name });
+      const result = await updateProfile({ name, profileImage });
       setName(result.name ?? name);
       setProfileMessage("Profile updated.");
     } catch (error) {
@@ -69,6 +71,7 @@ export function StaffProfileForms({ initialName, email, role }: { initialName: s
       <label>Display name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} required autoComplete="name" /></label>
       <label>Email address<input value={email} readOnly aria-readonly="true" /></label>
       <label>Staff role<input value={role} readOnly aria-readonly="true" /></label>
+      <ProfileImagePicker value={profileImage} name={name} onChange={setProfileImage} />
       <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
       {profileMessage ? <p className="staff-profile-message">{profileMessage}</p> : null}
     </form>

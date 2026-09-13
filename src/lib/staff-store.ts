@@ -11,6 +11,7 @@ import {
   type StaffRoleTemplate,
 } from "@/lib/permissions";
 import { getMasterAdminEmail } from "@/lib/staff-owner";
+import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 
 export type StaffAccountStatus = "active" | "invited" | "inactive";
 
@@ -26,6 +27,8 @@ export type StaffAccount = {
   isEnvironmentAdmin?: boolean;
   createdAt: string;
   lastActiveAt?: string;
+  /** Compact, user-selected Staff Centre avatar stored as a data URL. */
+  profileImage?: string | null;
 };
 
 export type StaffInvitation = {
@@ -106,7 +109,9 @@ export function isMasterAdminAccount(user: StaffAccount) {
 
 function normalizeState(input?: Partial<StaffState>): StaffState {
   const roles = Array.isArray(input?.roles) && input!.roles!.length ? input!.roles! : defaultRoleTemplates;
-  const users = Array.isArray(input?.users) ? input!.users! : [];
+  const users: StaffAccount[] = Array.isArray(input?.users)
+    ? input!.users!.map((user) => ({ ...user, profileImage: normaliseStoredProfileImage(user.profileImage) }))
+    : [];
   const invitations = Array.isArray(input?.invitations) ? input!.invitations! : [];
   const audit = Array.isArray(input?.audit) ? input!.audit! : [];
 
@@ -245,14 +250,15 @@ export async function markStaffActive(id: string) {
   await saveStaffState(state);
 }
 
-export async function updateOwnStaffProfile(id: string, input: { name: string }) {
+export async function updateOwnStaffProfile(id: string, input: { name: string; profileImage?: string | null }) {
   const name = input.name.trim().replace(/\s+/g, " ");
   if (name.length < 2 || name.length > 80) throw new Error("Display name must be between 2 and 80 characters.");
   const state = await getStaffState();
   const user = state.users.find((item) => item.id === id && item.status === "active");
   if (!user) throw new Error("Staff account not found.");
   user.name = name;
-  addAudit(state, { actorEmail: user.email, actorName: name, action: "staff.profile.updated", targetUserId: user.id, targetName: name, details: "Updated their own staff display name." });
+  if (input.profileImage !== undefined) user.profileImage = validateProfileImage(input.profileImage);
+  addAudit(state, { actorEmail: user.email, actorName: name, action: "staff.profile.updated", targetUserId: user.id, targetName: name, details: "Updated their own staff profile." });
   await saveStaffState(state);
   return user;
 }

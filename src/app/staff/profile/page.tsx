@@ -16,8 +16,8 @@ export default async function StaffProfilePage() {
     <main className="staff-profile-page">
       <div className="staff-profile-shell">
         <nav className="staff-profile-crumbs"><Link href="/">Home</Link><span>›</span><Link href="/staff">Staff Centre</Link><span>›</span><strong>My profile</strong></nav>
-        <header><span>Staff account</span><h1>My profile</h1><p>Update your Staff Centre display name and separate Staff Centre password.</p></header>
-        <StaffProfileForms initialName={session.name} email={session.email} role={session.isMasterAdmin ? "Master Admin" : session.roleId.replace(/-/g, " ")} />
+        <header><span>Staff account</span><h1>My profile</h1><p>Update your Staff Centre display name, profile photo and separate Staff Centre password.</p></header>
+        <StaffProfileForms initialName={session.name} email={session.email} role={session.isMasterAdmin ? "Master Admin" : session.roleId.replace(/-/g, " ")} initialProfileImage={session.profileImage ?? null} />
       </div>
     </main>
     <SiteFooter />

@@ -25,6 +25,7 @@ export type StaffSession = {
   userId: string;
   email: string;
   name: string;
+  profileImage?: string | null;
   roleId: StaffRoleId;
   isMasterAdmin: boolean;
   exp: number;
@@ -65,6 +66,7 @@ function sessionFor(account: StaffAccount): StaffSession {
     userId: account.id,
     email: normaliseEmail(account.email),
     name: account.name,
+    profileImage: account.profileImage ?? null,
     roleId: account.roleId,
     isMasterAdmin: isMasterAdminAccount(account),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,

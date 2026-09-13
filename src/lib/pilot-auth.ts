@@ -23,6 +23,7 @@ export type PilotSession = {
   pilotNumber: string;
   email: string;
   name: string;
+  profileImage?: string | null;
   authVersion?: number;
   exp: number;
 };
@@ -145,6 +146,7 @@ export async function getPilotSession() {
     pilotNumber: account.pilotNumber,
     email: account.email,
     name: account.name,
+    profileImage: account.profileImage,
   } satisfies PilotSession;
 }
 

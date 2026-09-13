@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { automaticPilotRank, isPilotRank, type PilotRank } from "@/lib/pilot-ranks";
+import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
@@ -51,6 +52,8 @@ export type PilotAccount = {
   streak: number;
   /** Numeric SimBrief Pilot ID. This is not a password or an access token. */
   simbriefPilotId: string | null;
+  /** Compact, user-selected account avatar stored as a data URL. */
+  profileImage: string | null;
 };
 
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
@@ -105,6 +108,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     onTime: Number.isFinite(raw.onTime) ? Number(raw.onTime) : 100,
     streak: Number(raw.streak) || 0,
     simbriefPilotId: normalizeSimbriefPilotId(raw.simbriefPilotId),
+    profileImage: normaliseStoredProfileImage(raw.profileImage),
   };
 }
 
@@ -234,6 +238,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
+    profileImage: null,
   };
   state.nextPilotNumber += 1;
   state.pilots.push(account);
@@ -264,7 +269,7 @@ export async function markPilotLogin(id: string) {
   await writeState(state);
 }
 
-export async function updatePilotProfile(id: string, input: { name: string; email: string }) {
+export async function updatePilotProfile(id: string, input: { name: string; email: string; profileImage?: string | null }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   if (name.length < 2) throw new Error("Please enter your full name.");
@@ -275,6 +280,7 @@ export async function updatePilotProfile(id: string, input: { name: string; emai
   if (state.pilots.some((pilot) => pilot.id !== id && pilot.email === email)) throw new Error("That email address is already in use.");
   account.name = name;
   account.email = email;
+  if (input.profileImage !== undefined) account.profileImage = validateProfileImage(input.profileImage);
   await writeState(state);
   return toPublicPilot(account);
 }
