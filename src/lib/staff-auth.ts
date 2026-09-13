@@ -14,14 +14,12 @@ import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 
-// This name is deliberately versioned. Earlier production builds issued a
-// `bav_staff_session` cookie while the Staff Centre login flow was changing.
-// A browser can retain that older cookie alongside a replacement when their
-// domain attributes differ, then send an unpredictable value to protected
-// pages. A new namespace makes the current signed session unambiguous and
-// lets every protected route read the exact cookie created by the current
-// login endpoint.
-export const STAFF_COOKIE_NAME = "bav_staff_session_v2";
+// This name is deliberately versioned. Earlier production builds issued
+// host-only Staff Centre cookies while the login flow was changing. A browser
+// can retain those alongside a domain-scoped replacement, then send an
+// unpredictable value to protected pages. The current namespace is therefore
+// unambiguous and is always issued with the public-site cookie domain below.
+export const STAFF_COOKIE_NAME = "bav_staff_session_v3";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 export type StaffSession = {
@@ -274,3 +272,16 @@ export const staffSessionCookieOptions = {
   path: "/",
   maxAge: SESSION_TTL_SECONDS,
 };
+
+/**
+ * Render terminates TLS upstream of the application. Explicitly scoping the
+ * production Staff Centre cookie to the public site prevents the proxy's
+ * internal host from producing a host-only cookie that a later page request
+ * does not send back. Local development intentionally remains host-only.
+ */
+export function staffSessionCookieDomain(request: { nextUrl: { hostname: string } }) {
+  const hostname = request.nextUrl.hostname.trim().toLowerCase();
+  return hostname === "britishairwaysva.co.uk" || hostname.endsWith(".britishairwaysva.co.uk")
+    ? "britishairwaysva.co.uk"
+    : undefined;
+}

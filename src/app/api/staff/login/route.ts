@@ -3,6 +3,7 @@ import {
   STAFF_COOKIE_NAME,
   createStaffSessionToken,
   isStaffAuthConfigured,
+  staffSessionCookieDomain,
   staffSessionCookieOptions,
   validateStaffCredentials,
 } from "@/lib/staff-auth";
@@ -62,9 +63,11 @@ export async function POST(request: NextRequest) {
   const response = formSubmission
     ? publicRedirect("/staff")
     : NextResponse.json({ ok: true, role: account.roleId });
+  const domain = staffSessionCookieDomain(request);
   response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
     ...staffSessionCookieOptions,
     secure: requestUsesHttps(request),
+    ...(domain ? { domain } : {}),
   });
   return response;
 }
