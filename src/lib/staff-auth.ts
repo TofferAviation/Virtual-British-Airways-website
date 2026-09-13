@@ -14,12 +14,11 @@ import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 
-// This name is deliberately versioned. Earlier production builds issued
-// host-only Staff Centre cookies while the login flow was changing. A browser
-// can retain those alongside a domain-scoped replacement, then send an
-// unpredictable value to protected pages. The current namespace is therefore
-// unambiguous and is always issued with the public-site cookie domain below.
-export const STAFF_COOKIE_NAME = "bav_staff_session_v4";
+// This name is deliberately versioned. Earlier production builds issued a
+// domain-scoped Staff Centre cookie. The pilot account uses a host-only cookie
+// successfully on the public site, so Staff Centre now uses that same browser
+// model under a fresh name to avoid sending an older duplicate token.
+export const STAFF_COOKIE_NAME = "bav_staff_session_v5";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 export type StaffSession = {
@@ -272,21 +271,3 @@ export const staffSessionCookieOptions = {
   path: "/",
   maxAge: SESSION_TTL_SECONDS,
 };
-
-/**
- * Render terminates TLS upstream of the application. Explicitly scoping the
- * production Staff Centre cookie to the public site prevents the proxy's
- * internal host from producing a host-only cookie that a later page request
- * does not send back. Local development intentionally remains host-only.
- */
-export function staffSessionCookieDomain(request: { nextUrl: { hostname: string }; headers: Headers }) {
-  // On Render, NextRequest.nextUrl identifies the internal service host. The
-  // forwarded host preserves the browser-facing custom domain that is needed
-  // to issue a cookie shared by every public Staff Centre route.
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0]?.trim();
-  const authority = forwardedHost || request.headers.get("host") || request.nextUrl.hostname;
-  const hostname = authority.trim().toLowerCase().replace(/^\[/, "").split("]", 1)[0].split(":", 1)[0];
-  return hostname === "britishairwaysva.co.uk" || hostname.endsWith(".britishairwaysva.co.uk")
-    ? "britishairwaysva.co.uk"
-    : undefined;
-}

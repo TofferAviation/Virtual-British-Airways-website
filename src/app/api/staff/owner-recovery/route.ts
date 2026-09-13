@@ -4,7 +4,6 @@ import {
   createStaffSessionToken,
   recoverConfiguredOwnerFromPilot,
   STAFF_COOKIE_NAME,
-  staffSessionCookieDomain,
   staffSessionCookieOptions,
 } from "@/lib/staff-auth";
 import { relativeRedirect, requestUsesHttps } from "@/lib/request-context";
@@ -22,11 +21,9 @@ async function recoverOwnerSession(request: NextRequest) {
   if (!owner) return relativeRedirect("/staff-login?error=owner-pilot-not-authorized", 303);
 
   const response = relativeRedirect(safeReturnTo(request), 303);
-  const domain = staffSessionCookieDomain(request);
   response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(owner), {
     ...staffSessionCookieOptions,
     secure: requestUsesHttps(request),
-    ...(domain ? { domain } : {}),
   });
   return response;
 }
