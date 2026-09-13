@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   if (!account) return NextResponse.json({ error: "Invalid pilot credentials." }, { status: 401 });
   return NextResponse.json({
     token: createAcarsToken(account),
-    pilot: { id: account.id, pilotNumber: account.pilotNumber, name: account.name, email: account.email },
+    pilot: { id: account.id, pilotNumber: account.pilotNumber, name: account.name, email: account.email, profileImage: account.profileImage },
     expiresInSeconds: 60 * 60 * 12,
   });
 }

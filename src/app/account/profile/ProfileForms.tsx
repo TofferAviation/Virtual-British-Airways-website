@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 
 async function patchProfile(payload: Record<string, string | null>) {
@@ -23,6 +24,25 @@ export function ProfileForms({ name, email, simbriefPilotId, profileImage: initi
   const [simbriefMessage, setSimbriefMessage] = useState("");
   const [savingSimbrief, setSavingSimbrief] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(initialProfileImage);
+  const router = useRouter();
+
+  async function saveProfileImage(nextImage: string | null) {
+    const previousImage = profileImage;
+    setProfileImage(nextImage);
+    setSavingProfile(true);
+    setProfileMessage("");
+    try {
+      await patchProfile({ profileImage: nextImage });
+      setProfileMessage("Profile photo updated.");
+      router.refresh();
+    } catch (error) {
+      setProfileImage(previousImage);
+      setProfileMessage(error instanceof Error ? error.message : "Unable to update your profile photo.");
+      throw error;
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,6 +52,7 @@ export function ProfileForms({ name, email, simbriefPilotId, profileImage: initi
     try {
       await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), profileImage });
       setProfileMessage("Profile updated successfully.");
+      router.refresh();
     } catch (error) {
       setProfileMessage(error instanceof Error ? error.message : "Unable to update profile.");
     } finally {
@@ -83,7 +104,7 @@ export function ProfileForms({ name, email, simbriefPilotId, profileImage: initi
         <div><span className="pilot-profile-kicker">PERSONAL DETAILS</span><h2>Your profile</h2><p>Keep the details used by British Airways Virtual up to date.</p></div>
         <label>Full name<input name="name" defaultValue={name} autoComplete="name" required /></label>
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
-        <ProfileImagePicker value={profileImage} name={name} onChange={setProfileImage} />
+        <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
         {profileMessage ? <p className="pilot-profile-message">{profileMessage}</p> : null}
       </form>

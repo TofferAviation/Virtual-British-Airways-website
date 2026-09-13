@@ -6,7 +6,7 @@ import styles from "./ProfileImagePicker.module.css";
 type Props = {
   value: string | null;
   name: string;
-  onChange: (image: string | null) => void;
+  onChange: (image: string | null) => void | Promise<void>;
 };
 
 const MAX_INPUT_BYTES = 12 * 1024 * 1024;
@@ -81,8 +81,8 @@ export function ProfileImagePicker({ value, name, onChange }: Props) {
     setBusy(true);
     setMessage("Preparing profile photo…");
     try {
-      onChange(await resizeToAvatar(file));
-      setMessage("Photo ready. Save your profile to apply it.");
+      await onChange(await resizeToAvatar(file));
+      setMessage("Profile photo updated.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not prepare that image.");
     } finally {
@@ -90,9 +90,17 @@ export function ProfileImagePicker({ value, name, onChange }: Props) {
     }
   }
 
-  function removeImage() {
-    onChange(null);
-    setMessage("Photo removed. Save your profile to apply the change.");
+  async function removeImage() {
+    setBusy(true);
+    setMessage("Removing profile photo…");
+    try {
+      await onChange(null);
+      setMessage("Profile photo removed.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not remove your profile photo.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <div className={styles.picker}>

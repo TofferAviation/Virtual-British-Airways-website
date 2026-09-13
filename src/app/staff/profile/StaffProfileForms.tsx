@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 
 async function updateProfile(body: Record<string, string | null>) {
@@ -22,6 +23,25 @@ export function StaffProfileForms({ initialName, email, role, initialProfileImag
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(initialProfileImage);
+  const router = useRouter();
+
+  async function saveProfileImage(nextImage: string | null) {
+    const previousImage = profileImage;
+    setProfileImage(nextImage);
+    setSavingProfile(true);
+    setProfileMessage("");
+    try {
+      await updateProfile({ profileImage: nextImage });
+      setProfileMessage("Profile photo updated.");
+      router.refresh();
+    } catch (error) {
+      setProfileImage(previousImage);
+      setProfileMessage(error instanceof Error ? error.message : "Unable to update your profile photo.");
+      throw error;
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +51,7 @@ export function StaffProfileForms({ initialName, email, role, initialProfileImag
       const result = await updateProfile({ name, profileImage });
       setName(result.name ?? name);
       setProfileMessage("Profile updated.");
+      router.refresh();
     } catch (error) {
       setProfileMessage(error instanceof Error ? error.message : "Unable to update profile.");
     } finally {
@@ -71,7 +92,7 @@ export function StaffProfileForms({ initialName, email, role, initialProfileImag
       <label>Display name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} required autoComplete="name" /></label>
       <label>Email address<input value={email} readOnly aria-readonly="true" /></label>
       <label>Staff role<input value={role} readOnly aria-readonly="true" /></label>
-      <ProfileImagePicker value={profileImage} name={name} onChange={setProfileImage} />
+      <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
       <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
       {profileMessage ? <p className="staff-profile-message">{profileMessage}</p> : null}
     </form>
