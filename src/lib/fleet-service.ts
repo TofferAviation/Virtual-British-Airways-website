@@ -475,14 +475,33 @@ function asFlightAssignment(row: FlightAssignmentRow): FleetFlightAssignment {
 }
 
 async function organizationId(client: SupabaseClient) {
-  const { data, error } = await client
+  const findOrganization = () => client
     .from("organizations")
     .select("id")
     .eq("code", ORGANIZATION_CODE)
     .maybeSingle();
+
+  const { data, error } = await findOrganization();
   if (error) throw new FleetServiceError(`Could not load fleet organization: ${error.message}`);
-  if (!data?.id) throw new FleetServiceError("The British Airways Virtual fleet organization has not been initialized.", 503);
-  return String(data.id);
+  if (data?.id) return String(data.id);
+
+  // A clean production database contains the fleet schema but no tenant data.
+  // Bootstrap BAV once so the first authorised fleet action can proceed without
+  // a manual SQL seed. A concurrent first request is handled by the retry below.
+  const { data: created, error: createError } = await client
+    .from("organizations")
+    .insert({ code: ORGANIZATION_CODE, name: "British Airways Virtual" })
+    .select("id")
+    .single();
+  if (created?.id) return String(created.id);
+
+  if (createError?.code === "23505") {
+    const { data: concurrent, error: concurrentError } = await findOrganization();
+    if (concurrentError) throw new FleetServiceError(`Could not load fleet organization: ${concurrentError.message}`);
+    if (concurrent?.id) return String(concurrent.id);
+  }
+
+  throw new FleetServiceError(`Could not initialize fleet organization: ${createError?.message ?? "No organization ID was returned."}`, 503);
 }
 
 export function fleetRoleCodeForWebsiteRole(websiteRole: string) {
