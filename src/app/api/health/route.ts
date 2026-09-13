@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { emailDeliveryHealth } from "@/lib/email";
 
 type PersistenceCheck = {
   configured: boolean;
@@ -48,5 +49,6 @@ export async function GET() {
     pilotPersistenceConfigured: pilotPersistence.configured,
     pilotPersistence,
     staffPersistence,
+    emailDelivery: emailDeliveryHealth(),
   });
 }

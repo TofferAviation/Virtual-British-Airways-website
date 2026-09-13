@@ -7,6 +7,12 @@ const DEFAULT_REPLY_TO = "support@britishairwaysva.co.uk";
 
 type EmailDelivery = "sent" | "not-configured" | "failed";
 
+type SmtpDeliveryError = {
+  code?: unknown;
+  responseCode?: unknown;
+  command?: unknown;
+};
+
 function siteUrl() {
   const value = (process.env.BAV_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL).trim().replace(/\/$/, "");
   try {
@@ -33,6 +39,17 @@ function emailConfig() {
     auth: { user, pass: password },
     from: process.env.BAV_EMAIL_FROM?.trim() || DEFAULT_FROM,
     replyTo: process.env.BAV_EMAIL_REPLY_TO?.trim() || DEFAULT_REPLY_TO,
+  };
+}
+
+/** Safe for the public health endpoint: exposes no passwords or addresses. */
+export function emailDeliveryHealth() {
+  const config = emailConfig();
+  return {
+    configured: Boolean(config),
+    host: config?.host ?? null,
+    port: config?.port ?? null,
+    secure: config?.secure ?? null,
   };
 }
 
@@ -69,7 +86,13 @@ async function sendEmail(input: { to: string; subject: string; text: string; htm
   } catch (error) {
     // Do not log message content, recipient addresses, SMTP credentials, or
     // password-reset links. The delivery outcome remains intentionally generic.
-    console.error("BAV email delivery failed", error instanceof Error ? error.name : "unknown error");
+    const smtpError = error as SmtpDeliveryError;
+    console.error("BAV email delivery failed", {
+      name: error instanceof Error ? error.name : "unknown error",
+      code: typeof smtpError.code === "string" ? smtpError.code : null,
+      responseCode: typeof smtpError.responseCode === "number" ? smtpError.responseCode : null,
+      command: typeof smtpError.command === "string" ? smtpError.command : null,
+    });
     return "failed";
   }
 }
