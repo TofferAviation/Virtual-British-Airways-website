@@ -133,7 +133,18 @@ export async function getStaffState(): Promise<StaffState> {
   if (client) {
     const { data, error } = await client.from("staff_state").select("state").eq("singleton", true).maybeSingle();
     if (error) throw error;
-    if (data?.state) return normalizeState(data.state as StaffState);
+    if (data?.state) {
+      // Persist the one-time owner bootstrap/normalisation, rather than only
+      // applying it in memory. Every request and every Render instance then
+      // resolves the exact same Staff account record.
+      const before = JSON.stringify(data.state);
+      const normalized = normalizeState(data.state as StaffState);
+      if (before !== JSON.stringify(normalized)) {
+        const { error: saveError } = await client.from("staff_state").upsert({ singleton: true, state: normalized });
+        if (saveError) throw saveError;
+      }
+      return normalized;
+    }
 
     const initial = normalizeState();
     const { error: createError } = await client.from("staff_state").upsert({ singleton: true, state: initial });
@@ -323,8 +334,7 @@ export async function createStaffInvitation(input: {
   return { invitation, token };
 }
 
-export async function acceptStaffInvitation(token: string, password: string) {
-  if (password.length < 10) throw new Error("Use a password with at least 10 characters.");
+export async function acceptStaffInvitation(token: string) {
   const state = await getStaffState();
   const tokenHash = hashInvitationToken(token);
   const invitation = state.invitations.find((item) => item.tokenHash === tokenHash && item.status === "pending");
@@ -351,7 +361,9 @@ export async function acceptStaffInvitation(token: string, password: string) {
   user.name = invitation.name;
   user.roleId = invitation.roleId;
   user.status = "active";
-  user.passwordHash = hashPassword(password);
+  // Staff access has no second password. The matching BAV pilot account is
+  // the only authentication source; this invitation grants its role record.
+  delete user.passwordHash;
   user.overrides = {};
   invitation.status = "accepted";
 

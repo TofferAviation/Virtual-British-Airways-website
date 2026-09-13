@@ -16,10 +16,10 @@ export default async function StaffInvitePage({ params }: { params: Promise<{ to
         <div className="staff-login-copy">
           <span className="section-kicker">Staff invitation</span>
           <h1>Join the British Airways Virtual staff team.</h1>
-          <p>Create your staff password to activate the role that was assigned to you. Staff permissions are separate from your normal pilot account.</p>
+          <p>Activate the role assigned to your BAV email address. Staff permissions are separate from your normal pilot account, but sign-in always uses that one BAV account.</p>
           <div className="staff-login-security">
-            <strong>Your pilot account stays separate</strong>
-            <p>Removing staff access later will not delete or deactivate your British Airways Virtual pilot account.</p>
+            <strong>One BAV sign-in</strong>
+            <p>Removing Staff Centre access later will not delete or deactivate your British Airways Virtual pilot account.</p>
           </div>
         </div>
         <div className="staff-login-card">

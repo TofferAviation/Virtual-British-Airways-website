@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: british-airways-virtual
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: BAV_PILOT_SESSION_SECRET
+        generateValue: true

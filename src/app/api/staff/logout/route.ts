@@ -1,15 +1,5 @@
-import { NextRequest } from "next/server";
-import { STAFF_COOKIE_NAME } from "@/lib/staff-auth";
-import { relativeRedirect, requestUsesHttps } from "@/lib/request-context";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
-  const response = relativeRedirect("/staff-login", 303);
-  response.cookies.set(STAFF_COOKIE_NAME, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: requestUsesHttps(request),
-    path: "/",
-    maxAge: 0,
-  });
-  return response;
+export async function GET(request: Request) {
+  return NextResponse.redirect(new URL("/api/auth/logout", request.url), 303);
 }

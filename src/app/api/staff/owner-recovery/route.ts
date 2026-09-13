@@ -1,41 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getPilotSession } from "@/lib/pilot-auth";
-import {
-  createStaffSessionToken,
-  recoverConfiguredOwnerFromPilot,
-  STAFF_COOKIE_NAME,
-  staffSessionCookieOptions,
-} from "@/lib/staff-auth";
-import { relativeRedirect, requestUsesHttps } from "@/lib/request-context";
+import { NextResponse } from "next/server";
 
-function safeReturnTo(request: NextRequest) {
-  const candidate = request.nextUrl.searchParams.get("returnTo") ?? "/staff";
-  return candidate.startsWith("/") && !candidate.startsWith("//") ? candidate : "/staff";
+function signInRedirect(request: Request) {
+  return NextResponse.redirect(new URL("/login?returnTo=%2Fstaff", request.url), 303);
 }
 
-async function recoverOwnerSession(request: NextRequest) {
-  const pilot = await getPilotSession();
-  if (!pilot) return relativeRedirect("/login?returnTo=%2Fstaff-login", 303);
-
-  const owner = await recoverConfiguredOwnerFromPilot(pilot.email);
-  if (!owner) return relativeRedirect("/staff-login?error=owner-pilot-not-authorized", 303);
-
-  const response = relativeRedirect(safeReturnTo(request), 303);
-  response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(owner), {
-    ...staffSessionCookieOptions,
-    secure: requestUsesHttps(request),
-  });
-  return response;
-}
-
-// The GET handler is intentional: /staff can redirect an already authenticated
-// owner pilot here to establish their same-origin staff session without a UI
-// step. It grants no access unless the existing HttpOnly pilot session is the
-// fixed master-owner identity.
-export async function GET(request: NextRequest) {
-  return recoverOwnerSession(request);
-}
-
-export async function POST(request: NextRequest) {
-  return recoverOwnerSession(request);
-}
+// Legacy endpoint retained for old bookmarks. Owner access is now derived
+// directly from the BAV account and its Staff role record.
+export async function GET(request: Request) { return signInRedirect(request); }
+export async function POST(request: Request) { return signInRedirect(request); }
