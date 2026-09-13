@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { pilot } from "@/lib/mockData";
+import { getPilotSession } from "@/lib/pilot-auth";
 
 export const metadata: Metadata = {
   title: "Tier Points",
@@ -123,8 +123,7 @@ const examples = [
 ];
 
 export default async function TierPointsPage() {
-  const cookieStore = await cookies();
-  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const isLoggedIn = Boolean(await getPilotSession());
   const currentPoints = isLoggedIn ? pilot.tierPoints : 372;
 
   const currentBand = currentPoints < 150 ? "Blue" : currentPoints < 400 ? "Bronze" : currentPoints < 800 ? "Silver" : "Gold";

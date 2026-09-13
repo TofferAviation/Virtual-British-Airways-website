@@ -1,14 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { FlightSearch } from "@/components/FlightSearch";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { featuredDestinations, fleet } from "@/lib/mockData";
+import { getPilotSession } from "@/lib/pilot-auth";
 
 export default async function HomePage() {
-  const cookieStore = await cookies();
-  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const isLoggedIn = Boolean(await getPilotSession());
 
   return (
     <>

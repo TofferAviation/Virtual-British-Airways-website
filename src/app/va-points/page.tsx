@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { pilot } from "@/lib/mockData";
+import { getPilotSession } from "@/lib/pilot-auth";
 
 export const metadata: Metadata = {
   title: "VA Points",
@@ -99,8 +99,7 @@ const statusLevels = [
 ];
 
 export default async function VaPointsPage() {
-  const cookieStore = await cookies();
-  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const isLoggedIn = Boolean(await getPilotSession());
   const currentPoints = isLoggedIn ? pilot.points : 2450;
   const nextThreshold = currentPoints < 1000 ? 1000 : currentPoints < 2500 ? 2500 : currentPoints < 5000 ? 5000 : null;
   const lowerThreshold = currentPoints < 1000 ? 0 : currentPoints < 2500 ? 1000 : currentPoints < 5000 ? 2500 : 5000;

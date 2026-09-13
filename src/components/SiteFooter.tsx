@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { BrandLogo } from "@/components/BrandLogo";
+import { getPilotSession } from "@/lib/pilot-auth";
 
 export async function SiteFooter() {
-  const cookieStore = await cookies();
-  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const isLoggedIn = Boolean(await getPilotSession());
 
   return (
     <footer className="site-footer">

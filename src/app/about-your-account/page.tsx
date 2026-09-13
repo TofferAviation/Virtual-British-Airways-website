@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { getPilotSession } from "@/lib/pilot-auth";
 
 export const metadata: Metadata = {
   title: "About your account",
@@ -60,8 +60,7 @@ const reasons = [
 ];
 
 export default async function AboutYourAccountPage() {
-  const cookieStore = await cookies();
-  const isLoggedIn = cookieStore.get("bav_demo_session")?.value === "1";
+  const isLoggedIn = Boolean(await getPilotSession());
   const accountHref = isLoggedIn ? "/account" : "/login";
 
   return (
