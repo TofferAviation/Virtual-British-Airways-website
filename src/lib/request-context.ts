@@ -37,6 +37,18 @@ export function requestUsesHttps(request: NextRequest) {
   return request.nextUrl.protocol === "https:";
 }
 
+/**
+ * Share the one BAV account session between britishairwaysva.co.uk and its
+ * www hostname. Local development and temporary Render URLs intentionally
+ * remain host-only.
+ */
+export function pilotSessionCookieDomain(request: NextRequest) {
+  const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
+  const host = hostnameFromAuthority(forwardedHost || firstHeaderValue(request.headers.get("host")) || request.nextUrl.hostname);
+  const productionDomain = "britishairwaysva.co.uk";
+  return host === productionDomain || host.endsWith(`.${productionDomain}`) ? productionDomain : undefined;
+}
+
 export function relativeRedirect(location: string, status = 303) {
   if (!location.startsWith("/") || location.startsWith("//")) {
     throw new Error("relativeRedirect requires an origin-relative path.");

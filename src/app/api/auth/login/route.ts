@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPilotSessionToken, PILOT_COOKIE_NAME, pilotSessionCookieOptions } from "@/lib/pilot-auth";
 import { findPilotByEmail, markPilotLogin, verifyPilotPassword } from "@/lib/pilot-store";
-import { requestUsesHttps } from "@/lib/request-context";
+import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
@@ -28,7 +28,11 @@ export async function POST(request: NextRequest) {
   response.cookies.set(PILOT_COOKIE_NAME, createPilotSessionToken(account), {
     ...pilotSessionCookieOptions,
     secure: requestUsesHttps(request),
+    domain: pilotSessionCookieDomain(request),
   });
+  // Retire the pre-reset host-only cookie on the current hostname. The new v2
+  // cookie above is the sole source of the BAV and Staff Centre session.
+  response.cookies.set("bav_pilot_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
   response.cookies.set("bav_demo_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
   return response;
 }

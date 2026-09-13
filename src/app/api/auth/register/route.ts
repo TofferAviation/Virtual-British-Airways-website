@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPilotSessionToken, PILOT_COOKIE_NAME, pilotSessionCookieOptions } from "@/lib/pilot-auth";
 import { registerPilot } from "@/lib/pilot-store";
-import { requestUsesHttps } from "@/lib/request-context";
+import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string } | null;
@@ -15,7 +15,9 @@ export async function POST(request: NextRequest) {
     response.cookies.set(PILOT_COOKIE_NAME, createPilotSessionToken(account), {
       ...pilotSessionCookieOptions,
       secure: requestUsesHttps(request),
+      domain: pilotSessionCookieDomain(request),
     });
+    response.cookies.set("bav_pilot_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
     response.cookies.set("bav_demo_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
     return response;
   } catch (error) {
