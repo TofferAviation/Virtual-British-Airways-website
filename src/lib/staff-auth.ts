@@ -19,7 +19,7 @@ import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 // can retain those alongside a domain-scoped replacement, then send an
 // unpredictable value to protected pages. The current namespace is therefore
 // unambiguous and is always issued with the public-site cookie domain below.
-export const STAFF_COOKIE_NAME = "bav_staff_session_v3";
+export const STAFF_COOKIE_NAME = "bav_staff_session_v4";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 export type StaffSession = {
@@ -279,8 +279,13 @@ export const staffSessionCookieOptions = {
  * internal host from producing a host-only cookie that a later page request
  * does not send back. Local development intentionally remains host-only.
  */
-export function staffSessionCookieDomain(request: { nextUrl: { hostname: string } }) {
-  const hostname = request.nextUrl.hostname.trim().toLowerCase();
+export function staffSessionCookieDomain(request: { nextUrl: { hostname: string }; headers: Headers }) {
+  // On Render, NextRequest.nextUrl identifies the internal service host. The
+  // forwarded host preserves the browser-facing custom domain that is needed
+  // to issue a cookie shared by every public Staff Centre route.
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0]?.trim();
+  const authority = forwardedHost || request.headers.get("host") || request.nextUrl.hostname;
+  const hostname = authority.trim().toLowerCase().replace(/^\[/, "").split("]", 1)[0].split(":", 1)[0];
   return hostname === "britishairwaysva.co.uk" || hostname.endsWith(".britishairwaysva.co.uk")
     ? "britishairwaysva.co.uk"
     : undefined;
