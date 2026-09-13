@@ -14,7 +14,14 @@ import { findPilotByEmail, verifyPilotPassword } from "@/lib/pilot-store";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 
-export const STAFF_COOKIE_NAME = "bav_staff_session";
+// This name is deliberately versioned. Earlier production builds issued a
+// `bav_staff_session` cookie while the Staff Centre login flow was changing.
+// A browser can retain that older cookie alongside a replacement when their
+// domain attributes differ, then send an unpredictable value to protected
+// pages. A new namespace makes the current signed session unambiguous and
+// lets every protected route read the exact cookie created by the current
+// login endpoint.
+export const STAFF_COOKIE_NAME = "bav_staff_session_v2";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 export type StaffSession = {
