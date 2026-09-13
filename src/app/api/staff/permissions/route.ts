@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicWebsiteUrl, sendStaffInvitationEmail } from "@/lib/email";
 import {
   allPermissions,
   expandPermissionDependencies,
@@ -203,10 +204,18 @@ export async function POST(request: NextRequest) {
         actorEmail: actor.email,
         actorName: actor.name,
       });
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "http://localhost:3000";
+      const invitationUrl = `${publicWebsiteUrl()}/staff-invite/${encodeURIComponent(token)}`;
+      const emailDelivery = await sendStaffInvitationEmail({
+        name: invitation.name,
+        email: invitation.email,
+        roleName: getRole(state, invitation.roleId)?.name ?? invitation.roleId,
+        invitationUrl,
+        message: invitation.message,
+      });
       return NextResponse.json({
         invitation: { ...invitation, tokenHash: undefined },
-        invitationUrl: `${baseUrl}/staff-invite/${token}`,
+        invitationUrl,
+        emailDelivery,
       }, { status: 201 });
     } catch (error) {
       return jsonError(error instanceof Error ? error.message : "Could not create invitation.");

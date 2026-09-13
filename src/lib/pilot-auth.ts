@@ -23,6 +23,7 @@ export type PilotSession = {
   pilotNumber: string;
   email: string;
   name: string;
+  authVersion?: number;
   exp: number;
 };
 
@@ -63,6 +64,7 @@ export function createPilotSessionToken(account: PilotAccount) {
     pilotNumber: account.pilotNumber,
     email: account.email,
     name: account.name,
+    authVersion: account.authVersion,
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
   const payload = encode(JSON.stringify(session));
@@ -137,7 +139,7 @@ export async function getPilotSession() {
     pilotFound: Boolean(account),
     pilotActive: account?.status === "active",
   });
-  if (!account || account.status !== "active") return null;
+  if (!account || account.status !== "active" || (session.authVersion ?? 1) !== account.authVersion) return null;
   return {
     ...session,
     pilotNumber: account.pilotNumber,

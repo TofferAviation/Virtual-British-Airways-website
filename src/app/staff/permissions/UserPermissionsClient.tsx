@@ -355,9 +355,17 @@ export function UserPermissionsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "invite", name: inviteName, email: inviteEmail, roleId: inviteRole, message: inviteMessage }),
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; invitationUrl?: string };
+      const body = (await response.json().catch(() => ({}))) as { error?: string; invitationUrl?: string; emailDelivery?: "sent" | "not-configured" | "failed" };
       if (!response.ok) throw new Error(body.error || "Could not create invitation.");
-      setInviteResult(body.invitationUrl || "Invitation created.");
+      setInviteResult(
+        body.emailDelivery === "sent"
+          ? "Invitation created and emailed."
+          : body.emailDelivery === "failed" && body.invitationUrl
+            ? `Invitation created, but email delivery failed. Use this link: ${body.invitationUrl}`
+          : body.invitationUrl
+            ? `Invitation created. Email delivery is not configured, so use this link: ${body.invitationUrl}`
+            : "Invitation created.",
+      );
       await refreshData();
     } catch (error) {
       setInviteResult(error instanceof Error ? error.message : "Could not create invitation.");

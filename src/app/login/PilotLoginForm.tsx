@@ -40,6 +40,7 @@ export function PilotLoginForm({ returnTo = "/account" }: { returnTo?: string })
       <label><span>Password</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
       {error ? <p className="pilot-auth-error" role="alert">{error}</p> : null}
       <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+      <p className="pilot-auth-switch"><Link href="/forgot-password">Forgot your password?</Link></p>
       <p className="pilot-auth-switch">New to British Airways Virtual? <Link href="/register">Create a pilot account</Link></p>
     </form>
   );

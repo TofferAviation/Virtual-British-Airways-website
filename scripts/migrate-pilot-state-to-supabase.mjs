@@ -24,9 +24,10 @@ const { error } = await client
   .upsert({
     singleton: true,
     state: {
-      version: 2,
+      version: 3,
       nextPilotNumber: Math.max(1, Number(parsed.nextPilotNumber) || 1),
       pilots: parsed.pilots,
+      passwordResetTokens: [],
     },
   });
 

@@ -17,3 +17,21 @@ services:
         generateValue: true
       - key: BAV_STAFF_SESSION_SECRET
         generateValue: true
+      - key: BAV_SMTP_HOST
+        value: smtp.gmail.com
+      - key: BAV_SMTP_PORT
+        value: "465"
+      - key: BAV_SMTP_SECURE
+        value: "true"
+      - key: BAV_SMTP_USER
+        sync: false
+      - key: BAV_SMTP_PASSWORD
+        sync: false
+      - key: BAV_EMAIL_FROM
+        value: British Airways Virtual <support@britishairwaysva.co.uk>
+      - key: BAV_EMAIL_REPLY_TO
+        value: support@britishairwaysva.co.uk
+      - key: BAV_PUBLIC_SITE_URL
+        value: https://britishairwaysva.co.uk
+      - key: BAV_PASSWORD_RESET_SECRET
+        generateValue: true

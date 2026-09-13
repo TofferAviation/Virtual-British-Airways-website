@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -8,9 +8,18 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 2;
+  version: 3;
   nextPilotNumber: number;
   pilots: PilotAccount[];
+  passwordResetTokens: PilotPasswordResetToken[];
+};
+
+type PilotPasswordResetToken = {
+  pilotId: string;
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
 };
 
 type PilotStateRow = { state: unknown };
@@ -21,6 +30,8 @@ export type PilotAccount = {
   email: string;
   name: string;
   passwordHash: string;
+  /** Increments on password changes so previously issued sessions stop working. */
+  authVersion: number;
   status: "active" | "suspended";
   createdAt: string;
   lastLoginAt: string | null;
@@ -42,10 +53,10 @@ export type PilotAccount = {
   simbriefPilotId: string | null;
 };
 
-export type PublicPilotAccount = Omit<PilotAccount, "passwordHash">;
+export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
 
 function emptyState(): PilotState {
-  return { version: 2, nextPilotNumber: 1, pilots: [] };
+  return { version: 3, nextPilotNumber: 1, pilots: [], passwordResetTokens: [] };
 }
 
 function getPilotStateClient(): SupabaseClient | null {
@@ -75,6 +86,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     email: raw.email,
     name: raw.name,
     passwordHash: raw.passwordHash,
+    authVersion: Math.max(1, Math.floor(Number(raw.authVersion) || 1)),
     status: raw.status === "suspended" ? "suspended" : "active",
     createdAt: raw.createdAt ?? new Date().toISOString(),
     lastLoginAt: raw.lastLoginAt ?? null,
@@ -107,7 +119,26 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     Number(raw?.nextPilotNumber) || 0,
     ...pilots.map((pilot) => Number(pilot.pilotNumber.replace(/\D/g, "")) + 1).filter(Number.isFinite),
   );
-  return { version: 2, nextPilotNumber, pilots };
+  const passwordResetTokens = Array.isArray(raw?.passwordResetTokens)
+    ? raw.passwordResetTokens
+      .filter((item): item is PilotPasswordResetToken => Boolean(
+        item &&
+          typeof item.pilotId === "string" &&
+          typeof item.tokenHash === "string" &&
+          typeof item.createdAt === "string" &&
+          typeof item.expiresAt === "string",
+      ))
+      .map((item) => ({
+        pilotId: item.pilotId,
+        tokenHash: item.tokenHash,
+        createdAt: item.createdAt,
+        expiresAt: item.expiresAt,
+        usedAt: typeof item.usedAt === "string" ? item.usedAt : null,
+      }))
+      .filter((item) => pilots.some((pilot) => pilot.id === item.pilotId))
+      .slice(-1000)
+    : [];
+  return { version: 3, nextPilotNumber, pilots, passwordResetTokens };
 }
 
 async function readLocalState(): Promise<PilotState> {
@@ -198,6 +229,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const now = new Date().toISOString();
   const account: PilotAccount = {
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
+    authVersion: 1,
     createdAt: now, lastLoginAt: now, rank: "Second Officer", rankOverride: null, hub: "London Heathrow", tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
@@ -270,7 +302,84 @@ export async function changePilotPassword(id: string, currentPassword: string, n
   if (!account) throw new Error("Pilot account not found.");
   if (!verifyPilotPassword(currentPassword, account.passwordHash)) throw new Error("Your current password is incorrect.");
   account.passwordHash = hashPilotPassword(newPassword);
+  account.authVersion += 1;
   await writeState(state);
+}
+
+function passwordResetSecret() {
+  const secret = (process.env.BAV_PASSWORD_RESET_SECRET ?? process.env.BAV_PILOT_SESSION_SECRET ?? "").trim();
+  if (secret.length < 32) throw new Error("Password-reset security is not configured on this server.");
+  return secret;
+}
+
+function hashPasswordResetToken(token: string) {
+  return createHmac("sha256", passwordResetSecret()).update(token).digest("hex");
+}
+
+function removeExpiredResetTokens(state: PilotState, now = Date.now()) {
+  state.passwordResetTokens = state.passwordResetTokens.filter((item) => {
+    const expiresAt = Date.parse(item.expiresAt);
+    return Number.isFinite(expiresAt) && (item.usedAt === null ? expiresAt > now : now - expiresAt < 24 * 60 * 60 * 1000);
+  });
+}
+
+/**
+ * Creates a single-use reset token without ever persisting the token itself.
+ * The caller must treat the returned token as secret and send it directly to
+ * the verified pilot email address.
+ */
+export async function createPilotPasswordReset(email: string) {
+  const state = await readState();
+  const pilot = state.pilots.find((item) => item.email === normalizeEmail(email) && item.status === "active");
+  if (!pilot) return null;
+
+  const now = Date.now();
+  removeExpiredResetTokens(state, now);
+  const latest = state.passwordResetTokens
+    .filter((item) => item.pilotId === pilot.id && item.usedAt === null)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  if (latest && now - Date.parse(latest.createdAt) < 60_000) {
+    // Avoid issuing a stream of replacement links while keeping the public
+    // endpoint response identical for known and unknown addresses.
+    return null;
+  }
+
+  state.passwordResetTokens = state.passwordResetTokens.filter((item) => item.pilotId !== pilot.id || item.usedAt !== null);
+  const token = randomBytes(32).toString("base64url");
+  state.passwordResetTokens.push({
+    pilotId: pilot.id,
+    tokenHash: hashPasswordResetToken(token),
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + 60 * 60 * 1000).toISOString(),
+    usedAt: null,
+  });
+  await writeState(state);
+  return { pilot, token };
+}
+
+export async function resetPilotPassword(token: string, newPassword: string) {
+  if (newPassword.length < 10) throw new Error("Use a password with at least 10 characters.");
+  if (!/^[A-Za-z0-9_-]{40,120}$/.test(token)) throw new Error("This password-reset link is invalid or has expired.");
+
+  const state = await readState();
+  const now = Date.now();
+  removeExpiredResetTokens(state, now);
+  const tokenHash = hashPasswordResetToken(token);
+  const reset = state.passwordResetTokens.find((item) => item.tokenHash === tokenHash && item.usedAt === null && Date.parse(item.expiresAt) > now);
+  if (!reset) {
+    await writeState(state);
+    throw new Error("This password-reset link is invalid or has expired.");
+  }
+
+  const pilot = state.pilots.find((item) => item.id === reset.pilotId && item.status === "active");
+  if (!pilot) throw new Error("This password-reset link is invalid or has expired.");
+
+  pilot.passwordHash = hashPilotPassword(newPassword);
+  pilot.authVersion += 1;
+  reset.usedAt = new Date(now).toISOString();
+  state.passwordResetTokens = state.passwordResetTokens.filter((item) => item.pilotId !== pilot.id || item === reset);
+  await writeState(state);
+  return toPublicPilot(pilot);
 }
 
 export async function setPilotStatus(id: string, status: PilotAccount["status"]) {
@@ -321,7 +430,8 @@ export async function applyApprovedPirepStats(pilotId: string, input: { blockMin
 }
 
 export function toPublicPilot(account: PilotAccount): PublicPilotAccount {
-  const { passwordHash: _passwordHash, ...pilot } = account;
+  const { passwordHash: _passwordHash, authVersion: _authVersion, ...pilot } = account;
   void _passwordHash;
+  void _authVersion;
   return pilot;
 }
