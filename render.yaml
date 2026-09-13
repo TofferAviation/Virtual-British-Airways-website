@@ -35,3 +35,5 @@ services:
         value: https://britishairwaysva.co.uk
       - key: BAV_PASSWORD_RESET_SECRET
         generateValue: true
+      - key: SIMBRIEF_API_KEY
+        sync: false

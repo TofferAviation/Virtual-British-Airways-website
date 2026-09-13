@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PilotBooking } from "@/lib/pilot-operations-store";
 
 const airportIcao: Record<string, string> = {
@@ -11,6 +12,8 @@ const aircraftIcao: Record<string, string> = {
   "Boeing 777-200ER": "B772",
   "Boeing 777-300ER": "B77W",
 };
+
+const SIMBRIEF_WORKER_URL = "https://www.simbrief.com/ofp/ofp.loader.api.php";
 
 function durationParts(duration: string) {
   const match = /(?:(\d+)h)?\s*(?:(\d+)m)?/.exec(duration);
@@ -32,15 +35,13 @@ export function getSimbriefCodes(booking: PilotBooking) {
   return { origin: airportIcao[booking.from], destination: airportIcao[booking.to], aircraft: aircraftIcao[booking.aircraft] };
 }
 
-/** Uses SimBrief's documented Dispatch Redirect mechanism; it requires the pilot's own SimBrief login. */
-export function buildSimbriefDispatchUrl(booking: PilotBooking, pilotName: string, simbriefPilotId: string) {
+function buildSimbriefDispatchFields(booking: PilotBooking, pilotName: string, simbriefPilotId: string) {
   const codes = getSimbriefCodes(booking);
   if (!codes.origin || !codes.destination || !codes.aircraft) return null;
   const departure = departureParts(booking.departure);
   const duration = durationParts(booking.duration);
   const flightNumber = booking.flightNumber.replace(/^BA/i, "");
-  const url = new URL("https://dispatch.simbrief.com/options/custom");
-  url.search = new URLSearchParams({
+  return {
     airline: "BAW",
     fltnum: flightNumber,
     callsign: `BAW${flightNumber}`,
@@ -58,8 +59,61 @@ export function buildSimbriefDispatchUrl(booking: PilotBooking, pilotName: strin
     units: "KGS",
     navlog: "1",
     maps: "detail",
-  }).toString();
+  };
+}
+
+/** Uses SimBrief's documented Dispatch Redirect mechanism; it requires the pilot's own SimBrief login. */
+export function buildSimbriefDispatchUrl(booking: PilotBooking, pilotName: string, simbriefPilotId: string) {
+  const fields = buildSimbriefDispatchFields(booking, pilotName, simbriefPilotId);
+  if (!fields) return null;
+  const url = new URL("https://dispatch.simbrief.com/options/custom");
+  url.search = new URLSearchParams(fields).toString();
   return url.toString();
+}
+
+export type OfficialSimbriefDispatch = {
+  action: string;
+  expectedOfpId: string;
+  fields: Record<string, string>;
+};
+
+/** Whether the owner has supplied the private SimBrief VA API key in the host environment. */
+export function isSimbriefApiConfigured() {
+  return Boolean(process.env.SIMBRIEF_API_KEY?.trim());
+}
+
+/**
+ * Creates the APIv1 request described in SimBrief's supplied VA integration
+ * package. The API key is used only here, on the server, to create the
+ * one-time code. It is never returned to the browser.
+ */
+export function buildOfficialSimbriefDispatch(input: {
+  booking: PilotBooking;
+  pilotName: string;
+  simbriefPilotId: string;
+  callbackUrl: string;
+}): OfficialSimbriefDispatch | null {
+  const apiKey = process.env.SIMBRIEF_API_KEY?.trim();
+  if (!apiKey) throw new Error("The SimBrief VA API key has not been configured.");
+
+  const fields = buildSimbriefDispatchFields(input.booking, input.pilotName, input.simbriefPilotId);
+  if (!fields) return null;
+
+  const callback = new URL(input.callbackUrl);
+  if (callback.protocol !== "https:" && callback.protocol !== "http:") throw new Error("The SimBrief callback URL must use HTTP or HTTPS.");
+  // APIv1 signs the callback without its protocol, following SimBrief's
+  // reference integration. This keeps the generated code tied to BAV only.
+  const outputpage = `${callback.host}${callback.pathname}${callback.search}`;
+  const timestamp = String(Math.round(Date.now() / 1000));
+  const request = `${fields.orig}${fields.dest}${fields.type}${timestamp}${outputpage}`;
+  const apiCode = createHash("md5").update(`${apiKey}${request}`, "utf8").digest("hex");
+  const token = createHash("md5").update(`${fields.orig}${fields.dest}${fields.type}`, "utf8").digest("hex").toUpperCase().slice(0, 10);
+
+  return {
+    action: SIMBRIEF_WORKER_URL,
+    expectedOfpId: `${timestamp}_${token}`,
+    fields: { ...fields, apicode: apiCode, outputpage, timestamp },
+  };
 }
 
 type SimbriefPayload = Record<string, unknown>;
@@ -87,4 +141,15 @@ export function extractSimbriefPlan(payload: SimbriefPayload): SimbriefPlanDetai
     origin: pick(payload, ["origin", "icao_code"]) ?? pick(payload, ["origin", "icao"]),
     destination: pick(payload, ["destination", "icao_code"]) ?? pick(payload, ["destination", "icao"]),
   };
+}
+
+/** Retrieves the latest generated OFP published for a pilot's own SimBrief ID. */
+export async function fetchLatestSimbriefPlan(simbriefPilotId: string) {
+  const pilotId = simbriefPilotId.trim();
+  if (!/^\d{1,12}$/.test(pilotId)) throw new Error("A numeric SimBrief Pilot ID is required.");
+  const response = await fetch(`https://www.simbrief.com/api/xml.fetcher.php?userid=${encodeURIComponent(pilotId)}&json=1`, { cache: "no-store" });
+  if (!response.ok) throw new Error("SimBrief could not find a generated flight plan for this Pilot ID yet.");
+  const payload = await response.json().catch(() => null);
+  if (!payload || typeof payload !== "object") throw new Error("SimBrief returned an unreadable flight plan.");
+  return extractSimbriefPlan(payload as SimbriefPayload);
 }

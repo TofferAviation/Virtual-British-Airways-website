@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { configureFlightPlanSimbrief, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, updateFlightPlanFromSimbrief } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
-import { buildSimbriefDispatchUrl, extractSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
+import { buildSimbriefDispatchUrl, fetchLatestSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
 import { getPilotById } from "@/lib/pilot-store";
 
 function flightPlanPath(bookingId: string) {
@@ -29,10 +29,7 @@ export async function syncSimbriefFlightPlan(formData: FormData) {
   if (!booking || !plan?.simbriefPilotId) redirect(`${flightPlanPath(bookingId)}?error=simbrief-not-configured`);
 
   try {
-    const response = await fetch(`https://www.simbrief.com/api/xml.fetcher.php?userid=${encodeURIComponent(plan.simbriefPilotId)}&json=1`, { cache: "no-store" });
-    if (!response.ok) throw new Error("SimBrief could not find a generated flight plan for this Pilot ID yet.");
-    const data = await response.json() as Record<string, unknown>;
-    const details = extractSimbriefPlan(data);
+    const details = await fetchLatestSimbriefPlan(plan.simbriefPilotId);
     const codes = getSimbriefCodes(booking);
     if (!details.origin || !details.destination || details.origin.toUpperCase() !== codes.origin || details.destination.toUpperCase() !== codes.destination) {
       throw new Error(`Your latest SimBrief plan does not match ${codes.origin ?? booking.from} → ${codes.destination ?? booking.to}. Generate this BAV flight first, then sync again.`);

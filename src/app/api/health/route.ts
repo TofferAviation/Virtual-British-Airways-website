@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { emailDeliveryHealth } from "@/lib/email";
+import { isSimbriefApiConfigured } from "@/lib/simbrief";
 
 type PersistenceCheck = {
   configured: boolean;
@@ -41,7 +42,7 @@ export async function GET() {
     // This is deliberately a source revision rather than an environment
     // value so the public health endpoint can confirm which authentication
     // release Render is actually serving, without exposing any secret.
-    revision: "profile-avatar-sync-v2",
+    revision: "simbrief-api-v1",
     staffAuthConfigured: Boolean(
       process.env.BAV_STAFF_SESSION_SECRET &&
         process.env.BAV_STAFF_SESSION_SECRET.length >= 24,
@@ -50,5 +51,6 @@ export async function GET() {
     pilotPersistence,
     staffPersistence,
     emailDelivery: emailDeliveryHealth(),
+    simbriefApiConfigured: isSimbriefApiConfigured(),
   });
 }
