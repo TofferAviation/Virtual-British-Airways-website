@@ -99,10 +99,24 @@ function verifyToken(token?: string | null): StaffSession | null {
 /** Resolve a Staff Centre session only from the separate Staff Centre cookie. */
 export async function getStaffSession(): Promise<StaffSession | null> {
   const cookieStore = await cookies();
-  const raw = verifyToken(cookieStore.get(STAFF_COOKIE_NAME)?.value);
+  const token = cookieStore.get(STAFF_COOKIE_NAME)?.value;
+  const raw = verifyToken(token);
+
+  // Temporary production diagnostics for Staff Centre tile authentication.
+  // Do not log cookie contents, emails, passwords, keys, or staff IDs.
+  console.info("[staff-session-diag]", {
+    cookiePresent: Boolean(token),
+    cookieLength: token?.length ?? 0,
+    tokenValid: Boolean(raw),
+  });
   if (!raw) return null;
+
   const state = await getStaffState();
   const account = state.users.find((user) => user.id === raw.userId && user.status === "active");
+  console.info("[staff-session-diag]", {
+    staffFound: Boolean(account),
+    emailMatches: Boolean(account && normaliseEmail(account.email) === normaliseEmail(raw.email)),
+  });
   if (!account || normaliseEmail(account.email) !== normaliseEmail(raw.email)) return null;
   return {
     ...raw,
