@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { getStaffSession } from "@/lib/staff-auth";
-import { hasStaffPasswordForEmail } from "@/lib/staff-store";
 import { isConfiguredStaffOwner } from "@/lib/staff-owner";
 import { StaffLoginForm } from "./StaffLoginForm";
 import { StaffSetupForm } from "./StaffSetupForm";
@@ -23,7 +22,7 @@ export default async function StaffLoginPage({ searchParams }: { searchParams: P
   if (session) redirect("/staff");
   const pilot = await getPilotSession();
   const returnTo = safeReturnTo((await searchParams).returnTo);
-  const canSetUpOwnerPassword = Boolean(pilot && isConfiguredStaffOwner(pilot.email) && !(await hasStaffPasswordForEmail(pilot.email)));
+  const canRecoverOwnerPassword = Boolean(pilot && isConfiguredStaffOwner(pilot.email));
 
   return (
     <main className="staff-login-page">
@@ -51,7 +50,7 @@ export default async function StaffLoginPage({ searchParams }: { searchParams: P
           <span className="section-kicker">Authorised staff only</span>
           <h2>Enter Staff Centre</h2>
           <StaffLoginForm returnTo={returnTo} />
-          {canSetUpOwnerPassword ? <div className="staff-login-setup"><span className="section-kicker">Founding administrator</span><h3>Set your first Staff password</h3><StaffSetupForm /></div> : null}
+          {canRecoverOwnerPassword ? <div className="staff-login-setup"><span className="section-kicker">Founding administrator</span><h3>Set or recover Staff password</h3><StaffSetupForm /></div> : null}
           <p className="staff-login-footnote">Flight simulation only · Independent virtual airline · Not affiliated with British Airways Plc</p>
         </div>
       </section>

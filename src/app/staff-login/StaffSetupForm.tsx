@@ -23,7 +23,7 @@ export function StaffSetupForm() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/staff/setup", {
+      const response = await fetch("/api/staff/recover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -32,22 +32,22 @@ export function StaffSetupForm() {
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        setError(body.error || "Could not set the Staff Centre password.");
+        setError(body.error || "Could not recover the Staff Centre password.");
         return;
       }
       window.location.replace("/staff");
     } catch {
-      setError("Could not reach the Staff Centre setup service.");
+      setError("Could not reach the Staff Centre recovery service.");
     } finally {
       setBusy(false);
     }
   }
 
   return <form className="staff-login-form" onSubmit={submit}>
-    <p className="staff-login-config-note">This one-time setup creates a separate Staff Centre password. It does not change your BAV pilot password.</p>
+    <p className="staff-login-config-note">This sets a new separate Staff Centre password. It does not change your BAV pilot password.</p>
     <label><span>New Staff Centre password</span><input name="password" type="password" autoComplete="new-password" minLength={10} disabled={busy} required /></label>
     <label><span>Confirm Staff Centre password</span><input name="confirmation" type="password" autoComplete="new-password" minLength={10} disabled={busy} required /></label>
     {error ? <p className="staff-login-error" role="alert">{error}</p> : null}
-    <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Setting up…" : "Set Staff Centre password"}</button>
+    <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Set Staff Centre password"}</button>
   </form>;
 }

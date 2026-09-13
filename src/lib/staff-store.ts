@@ -285,6 +285,34 @@ export async function setInitialOwnerStaffPassword(email: string, password: stri
   return user;
 }
 
+/**
+ * Recover the founding Staff Centre account from the matching authenticated
+ * founding BAV pilot identity. This intentionally does not require the old
+ * Staff password: it is the owner recovery path when a deployment or reset
+ * has left a stale password hash in persistent state.
+ */
+export async function resetFoundingStaffPassword(email: string, password: string) {
+  if (password.length < 10) throw new Error("Use a password with at least 10 characters.");
+  const state = await getStaffState();
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = state.users.find((item) => item.email.trim().toLowerCase() === normalizedEmail);
+  if (!user || !isMasterAdminAccount(user) || user.status !== "active") {
+    throw new Error("This BAV account is not authorised to recover the founding Staff Centre password.");
+  }
+
+  user.passwordHash = hashPassword(password);
+  addAudit(state, {
+    actorEmail: user.email,
+    actorName: user.name,
+    action: "staff.password.recovered",
+    targetUserId: user.id,
+    targetName: user.name,
+    details: "Recovered the founding Staff Centre password from the authenticated BAV owner account.",
+  });
+  await saveStaffState(state);
+  return user;
+}
+
 export async function hasStaffPasswordForEmail(email: string) {
   const user = await findStaffUserByEmail(email);
   return Boolean(user?.passwordHash);
