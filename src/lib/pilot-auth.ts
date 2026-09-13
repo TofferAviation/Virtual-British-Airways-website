@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 import { getPilotById, type PilotAccount } from "@/lib/pilot-store";
-import { BAV_PUBLIC_COOKIE_DOMAIN, pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
+import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
 // v5 replaces earlier releases. Cookies issued before the custom-domain scope
 // was stable can coexist as host-only and domain-scoped copies, causing the
@@ -72,20 +72,14 @@ export function createPilotSessionToken(account: PilotAccount) {
 }
 
 function expireCookie(response: NextResponse, name: string, request: NextRequest, domain?: string) {
-  // `response.cookies.set` keys cookies only by name. Calling it for a
-  // domain-scoped and host-only copy caused the second call to overwrite the
-  // first in the response, leaving the domain cookie alive. Append each raw
-  // expiry record so browsers receive—and remove—both independently.
-  const attributes = [
-    `${name}=`,
-    "Path=/",
-    "Max-Age=0",
-    "HttpOnly",
-    "SameSite=Lax",
-    ...(requestUsesHttps(request) ? ["Secure"] : []),
-    ...(domain ? [`Domain=${domain}`] : []),
-  ];
-  response.headers.append("Set-Cookie", attributes.join("; "));
+  response.cookies.set(name, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: requestUsesHttps(request),
+    path: "/",
+    maxAge: 0,
+    domain,
+  });
 }
 
 /** Issue one domain-wide pilot session and remove all older cookie variants. */
@@ -96,23 +90,18 @@ export function issuePilotSession(response: NextResponse, request: NextRequest, 
     secure: requestUsesHttps(request),
     domain,
   });
-  // A previous production build could leave the same v5 name at the other
-  // scope. Browsers then submit two tokens and Next may select the stale one.
-  // Keep the new cookie and retire only its alternate scope.
-  expireCookie(response, PILOT_COOKIE_NAME, request, domain ? undefined : BAV_PUBLIC_COOKIE_DOMAIN);
   for (const name of LEGACY_PILOT_COOKIE_NAMES) {
     expireCookie(response, name, request, domain);
     if (domain) expireCookie(response, name, request);
   }
 }
 
-/** End a pilot session from either host-only or shared-domain cookie scope. */
+/** End a pilot session and remove legacy cookie variants. */
 export function clearPilotSession(response: NextResponse, request: NextRequest) {
   const domain = pilotSessionCookieDomain(request);
-  const domains = new Set([BAV_PUBLIC_COOKIE_DOMAIN, ...(domain ? [domain] : [])]);
   for (const name of [PILOT_COOKIE_NAME, ...LEGACY_PILOT_COOKIE_NAMES]) {
-    expireCookie(response, name, request);
-    for (const cookieDomain of domains) expireCookie(response, name, request, cookieDomain);
+    expireCookie(response, name, request, domain);
+    if (domain) expireCookie(response, name, request);
   }
 }
 

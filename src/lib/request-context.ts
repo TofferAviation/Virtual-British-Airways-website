@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const BAV_PUBLIC_COOKIE_DOMAIN = "britishairwaysva.co.uk";
-
 function firstHeaderValue(value: string | null) {
   return value?.split(",", 1)[0]?.trim() ?? "";
 }
@@ -61,8 +59,9 @@ export function pilotSessionCookieDomain(request: NextRequest) {
       return "";
     }
   });
-  return hosts.some((host) => host === BAV_PUBLIC_COOKIE_DOMAIN || host.endsWith(`.${BAV_PUBLIC_COOKIE_DOMAIN}`))
-    ? BAV_PUBLIC_COOKIE_DOMAIN
+  const productionDomain = "britishairwaysva.co.uk";
+  return hosts.some((host) => host === productionDomain || host.endsWith(`.${productionDomain}`))
+    ? productionDomain
     : undefined;
 }
 

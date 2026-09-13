@@ -12,7 +12,7 @@ import {
   verifyPassword,
   type StaffAccount,
 } from "@/lib/staff-store";
-import { BAV_PUBLIC_COOKIE_DOMAIN, pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
+import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
 // v2 deliberately replaces v1. Earlier production versions could issue v1
 // as host-only and later as domain-scoped, leaving two same-named cookies for
@@ -96,16 +96,14 @@ export function createStaffSessionToken(account: StaffAccount) {
 }
 
 function expireCookie(response: NextResponse, name: string, request: NextRequest, domain?: string) {
-  const attributes = [
-    `${name}=`,
-    "Path=/",
-    "Max-Age=0",
-    "HttpOnly",
-    "SameSite=Lax",
-    ...(requestUsesHttps(request) ? ["Secure"] : []),
-    ...(domain ? [`Domain=${domain}`] : []),
-  ];
-  response.headers.append("Set-Cookie", attributes.join("; "));
+  response.cookies.set(name, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: requestUsesHttps(request),
+    path: "/",
+    maxAge: 0,
+    domain,
+  });
 }
 
 /** Issue one unambiguous Staff Centre session and retire all older variants. */
@@ -116,22 +114,18 @@ export function issueStaffSession(response: NextResponse, request: NextRequest, 
     secure: requestUsesHttps(request),
     domain,
   });
-  // Prevent an old host-only/domain-scoped v2 pair from competing with the
-  // just-issued Staff Centre session.
-  expireCookie(response, STAFF_COOKIE_NAME, request, domain ? undefined : BAV_PUBLIC_COOKIE_DOMAIN);
   for (const name of LEGACY_STAFF_COOKIE_NAMES) {
     expireCookie(response, name, request, domain);
     if (domain) expireCookie(response, name, request);
   }
 }
 
-/** End the current session and remove both host-only and domain-scoped copies. */
+/** End the current session and remove legacy cookie variants. */
 export function clearStaffSession(response: NextResponse, request: NextRequest) {
   const domain = pilotSessionCookieDomain(request);
-  const domains = new Set([BAV_PUBLIC_COOKIE_DOMAIN, ...(domain ? [domain] : [])]);
   for (const name of [STAFF_COOKIE_NAME, ...LEGACY_STAFF_COOKIE_NAMES]) {
-    expireCookie(response, name, request);
-    for (const cookieDomain of domains) expireCookie(response, name, request, cookieDomain);
+    expireCookie(response, name, request, domain);
+    if (domain) expireCookie(response, name, request);
   }
 }
 
