@@ -30,8 +30,10 @@ export async function POST(request: NextRequest) {
     secure: requestUsesHttps(request),
     domain: pilotSessionCookieDomain(request),
   });
-  // Retire the pre-reset host-only cookies on the current hostname. The new
-  // v3 cookie above is the sole source of the BAV and Staff Centre session.
+  // Retire host-only cookies from previous production releases. In particular,
+  // a host-only v3 cookie can coexist with its domain-scoped counterpart and
+  // make the server receive an unpredictable stale value.
+  response.cookies.set("bav_pilot_session_v3", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
   response.cookies.set("bav_pilot_session_v2", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
   response.cookies.set("bav_pilot_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
   response.cookies.set("bav_demo_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
