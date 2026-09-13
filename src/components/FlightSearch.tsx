@@ -58,8 +58,8 @@ export function FlightSearch() {
     <form className="flight-search" onSubmit={submit} id="flight-search">
       <div className="search-tabs" role="tablist" aria-label="Virtual flight tools">
         <button type="button" className="search-tab active">Book a virtual flight</button>
-        <button type="button" className="search-tab">Manage assignment</button>
-        <button type="button" className="search-tab">Flight status</button>
+        <button type="button" className="search-tab" onClick={() => router.push("/manage-assignment")}>Manage assignment</button>
+        <button type="button" className="search-tab" onClick={() => router.push("/flight-status")}>Flight status</button>
       </div>
       <div className="flight-search-body">
         <div className="field">
