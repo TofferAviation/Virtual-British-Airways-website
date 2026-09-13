@@ -53,39 +53,39 @@ export default async function StaffPage() {
           <div className="staff-breadcrumb-band">
             <div className="staff-shell staff-breadcrumbs">
               <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
-              {canViewRoutes ? <><span>·</span><a href="/staff/live-operations">Live Operations</a><span>·</span><a href="/staff/pireps">PIREP Centre</a></> : null}
-              {canViewNews ? <><span>·</span><a href="/staff/news">News & announcements</a></> : null}
-              {canViewSupport ? <><span>·</span><a href="/staff/tickets">Ticket Centre</a></> : null}
-              {canViewPermissions ? <><span>·</span><a href="/staff/pilots">Pilot Management</a><span>·</span><a href="/staff/permissions">User permissions</a></> : null}
-              {canViewServiceStatus ? <><span>·</span><a href="/staff/service-status">Service status</a></> : null}
-              {canViewFleet ? <><span>·</span><a href="/staff/fleet">Fleet management</a></> : null}
-              {canAccessServiceSettings ? <><span>·</span><a href="/staff/service-settings">Service settings</a></> : null}
+              {canViewRoutes ? <><span>·</span><Link href="/staff/live-operations">Live Operations</Link><span>·</span><Link href="/staff/pireps">PIREP Centre</Link></> : null}
+              {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
+              {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}
+              {canViewPermissions ? <><span>·</span><Link href="/staff/pilots">Pilot Management</Link><span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
+              {canViewServiceStatus ? <><span>·</span><Link href="/staff/service-status">Service status</Link></> : null}
+              {canViewFleet ? <><span>·</span><Link href="/staff/fleet">Fleet management</Link></> : null}
+              {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
           {canViewRoutes ? (
             <>
               <div className="staff-shell staff-permissions-launch-wrap">
-                <a className="staff-permissions-launch" href="/staff/live-operations">
+                <Link className="staff-permissions-launch" href="/staff/live-operations">
                   <span className="staff-permissions-launch-icon" aria-hidden="true">◉</span>
                   <span><strong>Live Operations</strong><small>Watch active BAV ACARS flights, simulator source, connection health and live telemetry.</small></span>
                   <b aria-hidden="true">→</b>
-                </a>
+                </Link>
               </div>
               <div className="staff-shell staff-permissions-launch-wrap">
-                <a className="staff-permissions-launch" href="/staff/pireps">
+                <Link className="staff-permissions-launch" href="/staff/pireps">
                   <span className="staff-permissions-launch-icon" aria-hidden="true">✈</span>
                   <span><strong>PIREP Centre</strong><small>Review pilot flight reports, request corrections, approve career credit and prepare for FreeFlight ACARS.</small></span>
                   <b aria-hidden="true">→</b>
-                </a>
+                </Link>
               </div>
             </>
           ) : null}
-          {canViewSupport ? <div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch" href="/staff/tickets"><span className="staff-permissions-launch-icon" aria-hidden="true">✉</span><span><strong>Ticket Centre</strong><small>Review pilot support requests, reply, assign ownership and manage ticket status.</small></span><b aria-hidden="true">→</b></a></div> : null}
-          {canViewNews ? <div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch" href="/staff/news"><span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span><span><strong>News & announcements</strong><small>Create, edit and publish the stories shown on the public What&apos;s New page.</small></span><b aria-hidden="true">→</b></a></div> : null}
-          {canViewPermissions ? <><div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch" href="/staff/pilots"><span className="staff-permissions-launch-icon" aria-hidden="true">♙</span><span><strong>Pilot Management</strong><small>Search native BAV pilot accounts, review career activity and suspend or reactivate pilots.</small></span><b aria-hidden="true">→</b></a></div><div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch" href="/staff/permissions"><span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span><span><strong>User permissions</strong><small>Manage staff roles, individual permissions and access controls.</small></span><b aria-hidden="true">→</b></a></div></> : null}
-          {canViewServiceStatus ? <div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch" href="/staff/service-status"><span className="staff-permissions-launch-icon" aria-hidden="true">◔</span><span><strong>Service status manager</strong><small>Manage system health, public incidents, maintenance and uptime information.</small></span><b aria-hidden="true">→</b></a></div> : null}
-          {canViewFleet ? <div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch" href="/staff/fleet"><span className="staff-permissions-launch-icon" aria-hidden="true">✈</span><span><strong>Fleet management</strong><small>Review the live aircraft fleet, technical condition and dispatch availability.</small></span><b aria-hidden="true">→</b></a></div> : null}
-          {canAccessServiceSettings ? <div className="staff-shell staff-permissions-launch-wrap"><a className="staff-permissions-launch staff-service-launch" href="/staff/service-settings"><span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span><span><strong>Service settings</strong><small>Open the protected website source workspace for maintenance and direct code changes.</small></span><b aria-hidden="true">→</b></a></div> : null}
+          {canViewSupport ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/tickets"><span className="staff-permissions-launch-icon" aria-hidden="true">✉</span><span><strong>Ticket Centre</strong><small>Review pilot support requests, reply, assign ownership and manage ticket status.</small></span><b aria-hidden="true">→</b></Link></div> : null}
+          {canViewNews ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/news"><span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span><span><strong>News & announcements</strong><small>Create, edit and publish the stories shown on the public What&apos;s New page.</small></span><b aria-hidden="true">→</b></Link></div> : null}
+          {canViewPermissions ? <><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/pilots"><span className="staff-permissions-launch-icon" aria-hidden="true">♙</span><span><strong>Pilot Management</strong><small>Search native BAV pilot accounts, review career activity and suspend or reactivate pilots.</small></span><b aria-hidden="true">→</b></Link></div><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/permissions"><span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span><span><strong>User permissions</strong><small>Manage staff roles, individual permissions and access controls.</small></span><b aria-hidden="true">→</b></Link></div></> : null}
+          {canViewServiceStatus ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/service-status"><span className="staff-permissions-launch-icon" aria-hidden="true">◔</span><span><strong>Service status manager</strong><small>Manage system health, public incidents, maintenance and uptime information.</small></span><b aria-hidden="true">→</b></Link></div> : null}
+          {canViewFleet ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/fleet"><span className="staff-permissions-launch-icon" aria-hidden="true">✈</span><span><strong>Fleet management</strong><small>Review the live aircraft fleet, technical condition and dispatch availability.</small></span><b aria-hidden="true">→</b></Link></div> : null}
+          {canAccessServiceSettings ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings"><span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span><span><strong>Service settings</strong><small>Open the protected website source workspace for maintenance and direct code changes.</small></span><b aria-hidden="true">→</b></Link></div> : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
           <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
         </div>

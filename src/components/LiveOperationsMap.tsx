@@ -76,11 +76,10 @@ export function LiveOperationsMap({ initialSessions }: { initialSessions: LiveFl
     };
   }, []);
 
-  useEffect(() => {
-    if (!sessions.some((session) => session.id === selectedId)) setSelectedId(sessions[0]?.id ?? "");
-  }, [sessions, selectedId]);
-
-  const selected = sessions.find((session) => session.id === selectedId) ?? null;
+  // Keep the selected id as user intent, but derive a safe visible selection
+  // when a live session ends. This avoids a synchronous state update during
+  // render synchronisation and keeps map refreshes smooth.
+  const selected = sessions.find((session) => session.id === selectedId) ?? sessions[0] ?? null;
   const healthy = sessions.filter((session) => session.connectionHealthy).length;
   const mappedSessions = useMemo(() => sessions.filter((session) => session.lastSnapshot), [sessions]);
 
@@ -104,7 +103,7 @@ export function LiveOperationsMap({ initialSessions }: { initialSessions: LiveFl
           {mappedSessions.map((session) => {
             const snapshot = session.lastSnapshot!;
             const position = mapPosition(snapshot);
-            const selectedFlight = session.id === selectedId;
+            const selectedFlight = session.id === selected?.id;
             return <button type="button" key={session.id} className={`ops-radar-flight ${selectedFlight ? "selected" : ""} ${session.connectionHealthy ? "healthy" : "stale"}`} style={position} onClick={() => setSelectedId(session.id)} aria-label={`Select ${session.flightNumber}`}>
               <i style={{ transform: `rotate(${snapshot.headingDeg}deg)` }}>▲</i><span>{session.flightNumber}</span>
             </button>;
@@ -130,7 +129,7 @@ export function LiveOperationsMap({ initialSessions }: { initialSessions: LiveFl
     </section>
 
     <section className="ops-shell ops-live-list ops-tracker-list">
-      {sessions.map((session) => <button type="button" className={`ops-tracker-row ${session.id === selectedId ? "selected" : ""}`} key={session.id} onClick={() => setSelectedId(session.id)}>
+      {sessions.map((session) => <button type="button" className={`ops-tracker-row ${session.id === selected?.id ? "selected" : ""}`} key={session.id} onClick={() => setSelectedId(session.id)}>
         <span className={`ops-tracker-dot ${session.connectionHealthy ? "healthy" : "stale"}`} /><strong>{session.flightNumber}</strong><span>{session.from} → {session.to}</span><span>{session.pilotName}</span><span>{session.lastSnapshot ? `${Math.round(session.lastSnapshot.altitudeFt).toLocaleString()} ft` : "Awaiting position"}</span><span>{formatAge(session.updatedAt)}</span>
       </button>)}
     </section>
