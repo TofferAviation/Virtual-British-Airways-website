@@ -116,6 +116,9 @@ export function issueStaffSession(response: NextResponse, request: NextRequest, 
     secure: requestUsesHttps(request),
     domain,
   });
+  // Prevent an old host-only/domain-scoped v2 pair from competing with the
+  // just-issued Staff Centre session.
+  expireCookie(response, STAFF_COOKIE_NAME, request, domain ? undefined : BAV_PUBLIC_COOKIE_DOMAIN);
   for (const name of LEGACY_STAFF_COOKIE_NAMES) {
     expireCookie(response, name, request, domain);
     if (domain) expireCookie(response, name, request);

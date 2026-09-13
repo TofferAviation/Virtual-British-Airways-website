@@ -96,6 +96,10 @@ export function issuePilotSession(response: NextResponse, request: NextRequest, 
     secure: requestUsesHttps(request),
     domain,
   });
+  // A previous production build could leave the same v5 name at the other
+  // scope. Browsers then submit two tokens and Next may select the stale one.
+  // Keep the new cookie and retire only its alternate scope.
+  expireCookie(response, PILOT_COOKIE_NAME, request, domain ? undefined : BAV_PUBLIC_COOKIE_DOMAIN);
   for (const name of LEGACY_PILOT_COOKIE_NAMES) {
     expireCookie(response, name, request, domain);
     if (domain) expireCookie(response, name, request);
