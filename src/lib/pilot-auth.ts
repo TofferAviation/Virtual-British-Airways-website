@@ -3,11 +3,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getPilotById, type PilotAccount } from "@/lib/pilot-store";
 
-// v2 is intentionally a new name. The earlier host-only cookie can coexist
-// separately on the root and www hostnames, which leaves a user signed in on
-// one hostname but unexpectedly signed out on the other. New sessions are
-// issued for the BAV domain by the login and registration routes.
-export const PILOT_COOKIE_NAME = "bav_pilot_session_v2";
+// v3 is intentionally versioned. Some reverse proxies expose their internal
+// Render hostname to server code, which can result in a host-only cookie even
+// when the browser is on the BAV custom domain. The login routes now issue v3
+// against the browser's public BAV domain.
+export const PILOT_COOKIE_NAME = "bav_pilot_session_v3";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 
 export type PilotSession = {

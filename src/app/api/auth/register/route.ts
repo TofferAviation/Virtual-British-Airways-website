@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       secure: requestUsesHttps(request),
       domain: pilotSessionCookieDomain(request),
     });
+    response.cookies.set("bav_pilot_session_v2", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
     response.cookies.set("bav_pilot_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
     response.cookies.set("bav_demo_session", "", { path: "/", maxAge: 0, secure: requestUsesHttps(request) });
     return response;

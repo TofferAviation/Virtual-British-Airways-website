@@ -20,6 +20,13 @@ export async function GET(request: NextRequest) {
     path: "/",
     maxAge: 0,
   });
+  response.cookies.set("bav_pilot_session_v2", "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: 0,
+  });
   response.cookies.set("bav_demo_session", "", {
     httpOnly: true,
     sameSite: "lax",

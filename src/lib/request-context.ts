@@ -43,10 +43,26 @@ export function requestUsesHttps(request: NextRequest) {
  * remain host-only.
  */
 export function pilotSessionCookieDomain(request: NextRequest) {
+  const browserOrigin = firstHeaderValue(request.headers.get("origin"));
+  const browserReferer = firstHeaderValue(request.headers.get("referer"));
   const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
-  const host = hostnameFromAuthority(forwardedHost || firstHeaderValue(request.headers.get("host")) || request.nextUrl.hostname);
   const productionDomain = "britishairwaysva.co.uk";
-  return host === productionDomain || host.endsWith(`.${productionDomain}`) ? productionDomain : undefined;
+  const hosts = [
+    browserOrigin,
+    browserReferer,
+    forwardedHost,
+    firstHeaderValue(request.headers.get("host")),
+    request.nextUrl.hostname,
+  ].map((value) => {
+    try {
+      return value.includes("://") ? new URL(value).hostname.toLowerCase() : hostnameFromAuthority(value);
+    } catch {
+      return "";
+    }
+  });
+  return hosts.some((host) => host === productionDomain || host.endsWith(`.${productionDomain}`))
+    ? productionDomain
+    : undefined;
 }
 
 export function relativeRedirect(location: string, status = 303) {
