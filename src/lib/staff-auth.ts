@@ -239,7 +239,13 @@ async function getPilotBackedStaffSession(): Promise<StaffSession | null> {
 }
 
 export async function getStaffSession() {
-  return (await resolveStaffSession()).session ?? getPilotBackedStaffSession();
+  // Staff Centre deliberately relies on the same BAV pilot session used by
+  // the public website and Cabin Control. Maintaining a second browser cookie
+  // created a needless second login state and could leave a valid pilot
+  // signed in while protected staff pages appeared signed out. Authorisation
+  // remains server-side: the pilot email must still belong to an active staff
+  // account, or be the configured founding owner.
+  return getPilotBackedStaffSession();
 }
 
 export async function staffHasPermission(permission: PermissionId) {
@@ -260,7 +266,7 @@ export async function requireStaffPermission(permission: PermissionId) {
 
 export async function requireStaffSession() {
   const session = await getStaffSession();
-  if (!session) redirect("/staff-login?reason=missing-cookie");
+  if (!session) redirect("/staff-login?reason=pilot-session-required");
   return session;
 }
 

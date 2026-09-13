@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 
-export function PilotLoginForm() {
+export function PilotLoginForm({ returnTo = "/account" }: { returnTo?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export function PilotLoginForm() {
         setError(body.error || "Could not sign in.");
         return;
       }
-      window.location.replace("/account");
+      window.location.replace(returnTo);
     } catch {
       setError("Could not reach the BAV login service.");
     } finally {

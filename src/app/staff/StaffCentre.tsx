@@ -270,7 +270,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
           <button><span>⚙</span><b>User permissions</b><small>Current role: Administrator</small></button>
           <a href="/api/health" target="_blank" rel="noreferrer"><span>◔</span><b>Service status</b><small>View API health</small></a>
           <button onClick={() => scrollTo("staff-events")}><span>▤</span><b>Event drafts</b><small>{draftCount} saved draft{draftCount === 1 ? "" : "s"}</small></button>
-          <a href="/api/staff/logout"><span>▯</span><b>Staff sign out</b><small>End this staff session</small></a>
+          <a href="/api/auth/logout"><span>▯</span><b>Sign out</b><small>End this BAV account session</small></a>
         </div>
       </section>
 

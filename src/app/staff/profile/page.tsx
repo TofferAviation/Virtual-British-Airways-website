@@ -7,7 +7,7 @@ import { StaffProfileForms } from "./StaffProfileForms";
 import "./staff-profile.css";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Staff Profile", description: "Manage your British Airways Virtual staff profile and password." };
+export const metadata: Metadata = { title: "Staff Profile", description: "Manage your British Airways Virtual staff profile." };
 
 export default async function StaffProfilePage() {
   const session = await requireStaffSession();
@@ -16,7 +16,7 @@ export default async function StaffProfilePage() {
     <main className="staff-profile-page">
       <div className="staff-profile-shell">
         <nav className="staff-profile-crumbs"><Link href="/">Home</Link><span>›</span><Link href="/staff">Staff Centre</Link><span>›</span><strong>My profile</strong></nav>
-        <header><span>Staff account</span><h1>My profile</h1><p>Update your display name and keep your Staff Centre password secure.</p></header>
+        <header><span>Staff account</span><h1>My profile</h1><p>Update your Staff Centre display name. Passwords are managed in your BAV account settings.</p></header>
         <StaffProfileForms initialName={session.name} email={session.email} role={session.isMasterAdmin ? "Master Admin" : session.roleId.replace(/-/g, " ")} />
       </div>
     </main>

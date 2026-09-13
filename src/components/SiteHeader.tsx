@@ -74,7 +74,7 @@ export async function SiteHeader() {
           <>
             <a className="header-user-link" href="/staff/profile"><UserIcon /><span>{staffSession.name}</span></a>
             <a className="header-admin-badge" href="/staff/permissions">{staffSession.isMasterAdmin ? "Master Admin" : staffRoleLabel(staffSession.roleId)}</a>
-            <Link className="header-logout-button" href="/api/staff/logout">Log out</Link>
+            <Link className="header-logout-button" href="/api/auth/logout">Log out</Link>
             <Link className="header-oneworld" href="/oneworld" aria-label="oneworld virtual alliance information"><OneworldBadge /></Link>
           </>
         ) : pilotSession ? (

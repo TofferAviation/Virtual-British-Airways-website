@@ -6,8 +6,19 @@ import { PilotLoginForm } from "./PilotLoginForm";
 
 export const metadata = { title: "Pilot login" };
 
-export default async function LoginPage() {
-  if (await getPilotSession()) redirect("/account");
+type LoginPageProps = {
+  searchParams: Promise<{ returnTo?: string }>;
+};
+
+function safeReturnTo(value?: string) {
+  return value && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\")
+    ? value
+    : "/account";
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const returnTo = safeReturnTo((await searchParams).returnTo);
+  if (await getPilotSession()) redirect(returnTo);
 
   return (
     <main className="login-page">
@@ -32,7 +43,7 @@ export default async function LoginPage() {
             <li>Manage PIREPs, assignments and support tickets</li>
             <li>Use the same identity with the future FreeFlight ACARS client</li>
           </ul>
-          <PilotLoginForm />
+          <PilotLoginForm returnTo={returnTo} />
           <p className="login-security-copy">Pilot authentication is now handled by British Airways Virtual. Your BAV password is stored as a salted one-way hash and is separate from any third-party virtual-airline account.</p>
           <div className="pilot-staff-login">
             <span>British Airways Virtual staff?</span>
