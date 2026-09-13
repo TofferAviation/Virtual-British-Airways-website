@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
     return loginError("invalid-credentials", 401, "Invalid staff email or password.");
   }
 
-  // Form navigation is intentional: some browsers fail to retain an HttpOnly
-  // cookie issued from a client-side fetch before an immediate route change.
-  // A 303 response makes the browser persist the cookie first, then load /staff.
+  // The native Staff Centre form remains a no-JavaScript fallback. The normal
+  // client flow uses the same-origin JSON response, matching the proven pilot
+  // sign-in path before it navigates to /staff.
   const response = formSubmission
     ? publicRedirect("/staff")
     : NextResponse.json({ ok: true, role: account.roleId });
