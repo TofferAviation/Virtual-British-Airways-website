@@ -131,7 +131,7 @@ export async function GET() {
     // This is deliberately a source revision rather than an environment
     // value so the public health endpoint can confirm which authentication
     // release Render is actually serving, without exposing any secret.
-    revision: "fleet-connection-diagnostics-v1",
+    revision: "fleet-dependency-check-v1",
     staffAuthConfigured: Boolean(
       process.env.BAV_STAFF_SESSION_SECRET &&
         process.env.BAV_STAFF_SESSION_SECRET.length >= 24,
