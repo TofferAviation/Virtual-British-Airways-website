@@ -1,22 +1,44 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 const storageKey = "bav-first-visit-welcome-dismissed";
 
+function subscribeToWelcomePreference(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+function getWelcomePreferenceSnapshot() {
+  try {
+    return window.localStorage.getItem(storageKey) === "true" ? "dismissed" : "open";
+  } catch {
+    return "open";
+  }
+}
+
+function getServerWelcomePreferenceSnapshot() {
+  return "pending";
+}
+
 export function FirstVisitWelcome() {
-  const [isOpen, setIsOpen] = useState(false);
+  const welcomePreference = useSyncExternalStore(subscribeToWelcomePreference, getWelcomePreferenceSnapshot, getServerWelcomePreferenceSnapshot);
+  const [dismissedForVisit, setDismissedForVisit] = useState(false);
   const [rememberDismissal, setRememberDismissal] = useState(false);
   const continueButton = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    try {
-      setIsOpen(window.localStorage.getItem(storageKey) !== "true");
-    } catch {
-      // Privacy settings can block storage. Show the legal notice for this visit.
-      setIsOpen(true);
+  const isOpen = welcomePreference === "open" && !dismissedForVisit;
+
+  const dismiss = useCallback(() => {
+    if (rememberDismissal) {
+      try {
+        window.localStorage.setItem(storageKey, "true");
+      } catch {
+        // The current visit may still continue even when storage is unavailable.
+      }
     }
-  }, []);
+    setDismissedForVisit(true);
+  }, [rememberDismissal]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -34,18 +56,7 @@ export function FirstVisitWelcome() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [isOpen]);
-
-  function dismiss() {
-    if (rememberDismissal) {
-      try {
-        window.localStorage.setItem(storageKey, "true");
-      } catch {
-        // The current visit may still continue even when storage is unavailable.
-      }
-    }
-    setIsOpen(false);
-  }
+  }, [dismiss, isOpen]);
 
   if (!isOpen) return null;
 
