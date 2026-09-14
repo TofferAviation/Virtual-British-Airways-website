@@ -25,6 +25,7 @@ export type StaffSession = {
   userId: string;
   email: string;
   name: string;
+  /** Loaded from the staff record after token verification; never put in a cookie. */
   profileImage?: string | null;
   roleId: StaffRoleId;
   isMasterAdmin: boolean;
@@ -66,7 +67,6 @@ function sessionFor(account: StaffAccount): StaffSession {
     userId: account.id,
     email: normaliseEmail(account.email),
     name: account.name,
-    profileImage: account.profileImage ?? null,
     roleId: account.roleId,
     isMasterAdmin: isMasterAdminAccount(account),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
@@ -171,6 +171,7 @@ export async function getStaffSession(): Promise<StaffSession | null> {
     ...raw,
     email: normaliseEmail(account.email),
     name: account.name,
+    profileImage: account.profileImage ?? null,
     roleId: account.roleId,
     isMasterAdmin: isMasterAdminAccount(account),
   } satisfies StaffSession;
