@@ -10,6 +10,11 @@ type PersistenceCheck = {
   errorCode?: string;
 };
 
+type FleetCheck = PersistenceCheck & {
+  organization: "present" | "missing" | "unknown";
+  aircraftCount?: number;
+};
+
 async function checkPersistenceTable(table: "pilot_state" | "staff_state"): Promise<PersistenceCheck> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
@@ -31,10 +36,72 @@ async function checkPersistenceTable(table: "pilot_state" | "staff_state"): Prom
     : { configured: true, keyKind, status: "ready" };
 }
 
+/**
+ * Fleet is used by Ember before a flight can start.  Keep this probe
+ * read-only: the normal Fleet API remains responsible for its one-time BAV
+ * organization bootstrap.  The public result deliberately exposes only a
+ * coarse readiness state and total aircraft count, never IDs or account data.
+ */
+async function checkFleetPersistence(): Promise<FleetCheck> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) {
+    return { configured: false, keyKind: "missing", status: "not-configured", organization: "unknown" };
+  }
+
+  const keyKind = key.startsWith("sb_secret_")
+    ? "secret"
+    : key.startsWith("eyJ")
+      ? "legacy-service-role"
+      : "public-or-unrecognised";
+  const client = createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+  const organizationResult = await client
+    .from("organizations")
+    .select("id")
+    .eq("code", "BAV")
+    .maybeSingle();
+  if (organizationResult.error) {
+    return {
+      configured: true,
+      keyKind,
+      status: "unavailable",
+      errorCode: organizationResult.error.code ?? "unknown",
+      organization: "unknown",
+    };
+  }
+  if (!organizationResult.data?.id) {
+    return { configured: true, keyKind, status: "ready", organization: "missing", aircraftCount: 0 };
+  }
+
+  const aircraftResult = await client
+    .from("aircraft")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationResult.data.id);
+  if (aircraftResult.error) {
+    return {
+      configured: true,
+      keyKind,
+      status: "unavailable",
+      errorCode: aircraftResult.error.code ?? "unknown",
+      organization: "present",
+    };
+  }
+  return {
+    configured: true,
+    keyKind,
+    status: "ready",
+    organization: "present",
+    aircraftCount: aircraftResult.count ?? 0,
+  };
+}
+
 export async function GET() {
-  const [pilotPersistence, staffPersistence] = await Promise.all([
+  const [pilotPersistence, staffPersistence, fleetPersistence] = await Promise.all([
     checkPersistenceTable("pilot_state"),
     checkPersistenceTable("staff_state"),
+    checkFleetPersistence(),
   ]);
   return NextResponse.json({
     service: "british-airways-virtual-website",
@@ -42,7 +109,7 @@ export async function GET() {
     // This is deliberately a source revision rather than an environment
     // value so the public health endpoint can confirm which authentication
     // release Render is actually serving, without exposing any secret.
-    revision: "assignment-status-v1",
+    revision: "fleet-connection-diagnostics-v1",
     staffAuthConfigured: Boolean(
       process.env.BAV_STAFF_SESSION_SECRET &&
         process.env.BAV_STAFF_SESSION_SECRET.length >= 24,
@@ -50,6 +117,7 @@ export async function GET() {
     pilotPersistenceConfigured: pilotPersistence.configured,
     pilotPersistence,
     staffPersistence,
+    fleetPersistence,
     emailDelivery: emailDeliveryHealth(),
     simbriefApiConfigured: isSimbriefApiConfigured(),
   });
