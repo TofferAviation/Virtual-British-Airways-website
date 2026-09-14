@@ -9,10 +9,11 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 3;
+  version: 4;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
+  deviceSessions: PilotDeviceSession[];
 };
 
 type PilotPasswordResetToken = {
@@ -21,6 +22,21 @@ type PilotPasswordResetToken = {
   createdAt: string;
   expiresAt: string;
   usedAt: string | null;
+};
+
+/**
+ * One revocable Ember device credential. The random credential itself is
+ * never persisted: only its HMAC is stored in the server-side pilot state.
+ */
+type PilotDeviceSession = {
+  id: string;
+  pilotId: string;
+  tokenHash: string;
+  authVersion: number;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string;
+  revokedAt: string | null;
 };
 
 type PilotStateRow = { state: unknown };
@@ -59,7 +75,7 @@ export type PilotAccount = {
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
 
 function emptyState(): PilotState {
-  return { version: 3, nextPilotNumber: 1, pilots: [], passwordResetTokens: [] };
+  return { version: 4, nextPilotNumber: 1, pilots: [], passwordResetTokens: [], deviceSessions: [] };
 }
 
 function getPilotStateClient(): SupabaseClient | null {
@@ -142,7 +158,34 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       .filter((item) => pilots.some((pilot) => pilot.id === item.pilotId))
       .slice(-1000)
     : [];
-  return { version: 3, nextPilotNumber, pilots, passwordResetTokens };
+  const now = Date.now();
+  const deviceSessions = Array.isArray(raw?.deviceSessions)
+    ? raw.deviceSessions
+      .filter((item): item is PilotDeviceSession => Boolean(
+        item &&
+          typeof item.id === "string" &&
+          typeof item.pilotId === "string" &&
+          typeof item.tokenHash === "string" &&
+          typeof item.createdAt === "string" &&
+          typeof item.expiresAt === "string",
+      ))
+      .map((item) => ({
+        id: item.id,
+        pilotId: item.pilotId,
+        tokenHash: item.tokenHash,
+        authVersion: Math.max(1, Math.floor(Number(item.authVersion) || 1)),
+        createdAt: item.createdAt,
+        expiresAt: item.expiresAt,
+        lastUsedAt: typeof item.lastUsedAt === "string" ? item.lastUsedAt : item.createdAt,
+        revokedAt: typeof item.revokedAt === "string" ? item.revokedAt : null,
+      }))
+      .filter((item) => {
+        const expiration = Date.parse(item.expiresAt);
+        return pilots.some((pilot) => pilot.id === item.pilotId) && Number.isFinite(expiration) && expiration > now;
+      })
+      .slice(-2_000)
+    : [];
+  return { version: 4, nextPilotNumber, pilots, passwordResetTokens, deviceSessions };
 }
 
 async function readLocalState(): Promise<PilotState> {
@@ -256,6 +299,98 @@ export async function getPilotById(id: string) {
   return state.pilots.find((pilot) => pilot.id === id) ?? null;
 }
 
+const ACARS_DEVICE_SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function acarsDeviceSessionSecret() {
+  const value = process.env.BAV_ACARS_SECRET || process.env.BAV_PILOT_SESSION_SECRET || process.env.BAV_STAFF_SESSION_SECRET;
+  if (!value || value.length < 24) throw new Error("BAV_ACARS_SECRET or BAV_PILOT_SESSION_SECRET must be at least 24 characters long.");
+  return value;
+}
+
+function hashAcarsDeviceSessionToken(token: string) {
+  return createHmac("sha256", acarsDeviceSessionSecret()).update(token).digest("hex");
+}
+
+function revokePilotDeviceSessions(state: PilotState, pilotId: string, now = new Date().toISOString()) {
+  for (const session of state.deviceSessions) {
+    if (session.pilotId === pilotId && session.revokedAt === null) session.revokedAt = now;
+  }
+}
+
+function activeDeviceSession(state: PilotState, token: string, now = Date.now()) {
+  const tokenHash = hashAcarsDeviceSessionToken(token);
+  return state.deviceSessions.find((session) =>
+    session.tokenHash === tokenHash &&
+    session.revokedAt === null &&
+    Date.parse(session.expiresAt) > now,
+  ) ?? null;
+}
+
+/** Creates a per-device Ember session and persists only a non-reversible HMAC. */
+export async function createAcarsDeviceSession(pilotId: string) {
+  const state = await readState();
+  const pilot = state.pilots.find((item) => item.id === pilotId && item.status === "active");
+  if (!pilot) return null;
+
+  const rawToken = randomBytes(32).toString("base64url");
+  const now = new Date();
+  const session: PilotDeviceSession = {
+    id: randomUUID(),
+    pilotId: pilot.id,
+    tokenHash: hashAcarsDeviceSessionToken(rawToken),
+    authVersion: pilot.authVersion,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + ACARS_DEVICE_SESSION_TTL_MS).toISOString(),
+    lastUsedAt: now.toISOString(),
+    revokedAt: null,
+  };
+  state.deviceSessions.push(session);
+  await writeState(state);
+  return { id: session.id, token: rawToken };
+}
+
+/** Validates and rotates a device credential, invalidating its previous value. */
+export async function renewAcarsDeviceSession(token: string) {
+  if (!/^[A-Za-z0-9_-]{40,120}$/.test(token)) return null;
+  const state = await readState();
+  const session = activeDeviceSession(state, token);
+  if (!session) return null;
+  const pilot = state.pilots.find((item) => item.id === session.pilotId && item.status === "active");
+  if (!pilot || session.authVersion !== pilot.authVersion) return null;
+
+  const nextToken = randomBytes(32).toString("base64url");
+  session.tokenHash = hashAcarsDeviceSessionToken(nextToken);
+  const now = new Date();
+  session.lastUsedAt = now.toISOString();
+  session.expiresAt = new Date(now.getTime() + ACARS_DEVICE_SESSION_TTL_MS).toISOString();
+  await writeState(state);
+  return { pilot, id: session.id, token: nextToken };
+}
+
+/** Checks that an access token's backing device session remains active. */
+export async function isAcarsDeviceSessionActive(input: { id: string; pilotId: string; authVersion: number }) {
+  const state = await readState();
+  const session = state.deviceSessions.find((item) => item.id === input.id);
+  return Boolean(
+    session &&
+    session.pilotId === input.pilotId &&
+    session.authVersion === input.authVersion &&
+    session.revokedAt === null &&
+    Date.parse(session.expiresAt) > Date.now(),
+  );
+}
+
+/** Revokes one device credential. It is safe to call repeatedly. */
+export async function revokeAcarsDeviceSession(token: string) {
+  if (!/^[A-Za-z0-9_-]{40,120}$/.test(token)) return false;
+  const state = await readState();
+  const session = activeDeviceSession(state, token);
+  if (!session) return false;
+  session.revokedAt = new Date().toISOString();
+  await writeState(state);
+  return true;
+}
+
 export async function listPilots() {
   const state = await readState();
   return state.pilots.map(toPublicPilot).sort((a, b) => a.pilotNumber.localeCompare(b.pilotNumber));
@@ -309,6 +444,7 @@ export async function changePilotPassword(id: string, currentPassword: string, n
   if (!verifyPilotPassword(currentPassword, account.passwordHash)) throw new Error("Your current password is incorrect.");
   account.passwordHash = hashPilotPassword(newPassword);
   account.authVersion += 1;
+  revokePilotDeviceSessions(state, account.id);
   await writeState(state);
 }
 
@@ -382,6 +518,7 @@ export async function resetPilotPassword(token: string, newPassword: string) {
 
   pilot.passwordHash = hashPilotPassword(newPassword);
   pilot.authVersion += 1;
+  revokePilotDeviceSessions(state, pilot.id);
   reset.usedAt = new Date(now).toISOString();
   state.passwordResetTokens = state.passwordResetTokens.filter((item) => item.pilotId !== pilot.id || item === reset);
   await writeState(state);
@@ -393,6 +530,7 @@ export async function setPilotStatus(id: string, status: PilotAccount["status"])
   const account = state.pilots.find((pilot) => pilot.id === id);
   if (!account) throw new Error("Pilot account not found.");
   account.status = status;
+  if (status === "suspended") revokePilotDeviceSessions(state, account.id);
   await writeState(state);
   return toPublicPilot(account);
 }

@@ -1,12 +1,16 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { findPilotByEmail, getPilotById, verifyPilotPassword } from "@/lib/pilot-store";
+import { findPilotByEmail, getPilotById, isAcarsDeviceSessionActive, verifyPilotPassword } from "@/lib/pilot-store";
 
-const TOKEN_TTL_SECONDS = 60 * 60 * 12;
+// Access tokens are intentionally short-lived. A remembered Ember session is
+// a separate, revocable device credential held with Windows data protection.
+export const ACARS_TOKEN_TTL_SECONDS = 60 * 60 * 12;
 
 export type AcarsAuthToken = {
   pilotId: string;
   pilotNumber: string;
   name: string;
+  authVersion: number;
+  deviceSessionId?: string;
   exp: number;
 };
 
@@ -36,12 +40,17 @@ export async function authenticateAcarsPilot(email: string, password: string) {
   return account;
 }
 
-export function createAcarsToken(input: { id: string; pilotNumber: string; name: string }) {
+export function createAcarsToken(
+  input: { id: string; pilotNumber: string; name: string; authVersion: number },
+  deviceSessionId?: string,
+) {
   const payload: AcarsAuthToken = {
     pilotId: input.id,
     pilotNumber: input.pilotNumber,
     name: input.name,
-    exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
+    authVersion: input.authVersion,
+    ...(deviceSessionId ? { deviceSessionId } : {}),
+    exp: Math.floor(Date.now() / 1000) + ACARS_TOKEN_TTL_SECONDS,
   };
   const encoded = encode(JSON.stringify(payload));
   return `${encoded}.${sign(encoded)}`;
@@ -54,9 +63,14 @@ export async function verifyAcarsToken(token?: string | null) {
   try {
     if (!safeEqual(signature, sign(payload))) return null;
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AcarsAuthToken;
-    if (!decoded.pilotId || decoded.exp <= Math.floor(Date.now() / 1000)) return null;
+    if (!decoded.pilotId || !Number.isInteger(decoded.authVersion) || decoded.exp <= Math.floor(Date.now() / 1000)) return null;
     const account = await getPilotById(decoded.pilotId);
-    if (!account || account.status !== "active") return null;
+    if (!account || account.status !== "active" || account.authVersion !== decoded.authVersion) return null;
+    if (decoded.deviceSessionId && !await isAcarsDeviceSessionActive({
+      id: decoded.deviceSessionId,
+      pilotId: account.id,
+      authVersion: account.authVersion,
+    })) return null;
     return { token: decoded, account };
   } catch {
     return null;
