@@ -998,6 +998,27 @@ export async function reserveFleetAircraftForFlight(aircraftId: string, actor: F
   return asFlightAssignment(data as FlightAssignmentRow);
 }
 
+/**
+ * Returns the single registration currently reserved or operated by a pilot.
+ * This is deliberately server-side so Cabin Control can restore a valid fleet
+ * assignment after an app restart without trusting a locally cached tail.
+ */
+export async function getActiveFleetFlightAssignmentForPilot(actor: FleetActor): Promise<FleetFlightAssignment | null> {
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const { data, error } = await client
+    .from("aircraft_flight_assignments")
+    .select("id, aircraft_id, pilot_subject, pilot_display_name, flight_reference, departure_station, arrival_station, status, reserved_at, off_block_at, on_block_at, block_minutes")
+    .eq("organization_id", organization)
+    .eq("pilot_subject", actor.subject)
+    .in("status", ["reserved", "operating"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new FleetServiceError(`Could not load your active aircraft assignment: ${error.message}`);
+  return data ? asFlightAssignment(data as FlightAssignmentRow) : null;
+}
+
 export async function startFleetAircraftFlight(aircraftId: string, actor: FleetActor, input: FleetFlightAssignmentInput) {
   const flight = flightActor(input);
   const client = getServerClient();
