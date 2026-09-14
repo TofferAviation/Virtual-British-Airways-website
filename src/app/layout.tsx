@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FirstVisitWelcome } from "@/components/FirstVisitWelcome";
 import "./globals.css";
 import "./portal.css";
 import "./pages.css";
@@ -40,6 +41,7 @@ import "./ba-radar.css";
 import "./ba-radar-home-cta.css";
 import "./ba-radar-osm.css";
 import "./ba-radar-tracker-layout.css";
+import "./first-visit-welcome.css";
 import "leaflet/dist/leaflet.css";
 
 export const metadata: Metadata = {
@@ -67,7 +69,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <FirstVisitWelcome />
+      </body>
     </html>
   );
 }
