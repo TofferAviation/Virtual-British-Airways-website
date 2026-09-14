@@ -1010,7 +1010,7 @@ export async function getActiveFleetFlightAssignmentForPilot(actor: FleetActor):
     .from("aircraft_flight_assignments")
     .select("id, aircraft_id, pilot_subject, pilot_display_name, flight_reference, departure_station, arrival_station, status, reserved_at, off_block_at, on_block_at, block_minutes")
     .eq("organization_id", organization)
-    .eq("pilot_subject", actor.subject)
+    .eq("pilot_subject", actor.subject.trim().toUpperCase())
     .in("status", ["reserved", "operating"])
     .order("updated_at", { ascending: false })
     .limit(1)
