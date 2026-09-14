@@ -13,6 +13,7 @@ type PersistenceCheck = {
 type FleetCheck = PersistenceCheck & {
   organization: "present" | "missing" | "unknown";
   aircraftCount?: number;
+  requiredTables?: Record<"memberships" | "assignments" | "acarsSessions" | "positionReports", "ready" | "unavailable">;
 };
 
 async function checkPersistenceTable(table: "pilot_state" | "staff_state"): Promise<PersistenceCheck> {
@@ -75,10 +76,22 @@ async function checkFleetPersistence(): Promise<FleetCheck> {
     return { configured: true, keyKind, status: "ready", organization: "missing", aircraftCount: 0 };
   }
 
-  const aircraftResult = await client
-    .from("aircraft")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationResult.data.id);
+  const [aircraftResult, membershipsResult, assignmentsResult, acarsSessionsResult, positionReportsResult] = await Promise.all([
+    client
+      .from("aircraft")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationResult.data.id),
+    client.from("organization_memberships").select("id").limit(1),
+    client.from("aircraft_flight_assignments").select("id").limit(1),
+    client.from("acars_sessions").select("id").limit(1),
+    client.from("acars_position_reports").select("id").limit(1),
+  ]);
+  const requiredTables = {
+    memberships: membershipsResult.error ? "unavailable" : "ready",
+    assignments: assignmentsResult.error ? "unavailable" : "ready",
+    acarsSessions: acarsSessionsResult.error ? "unavailable" : "ready",
+    positionReports: positionReportsResult.error ? "unavailable" : "ready",
+  } as const;
   if (aircraftResult.error) {
     return {
       configured: true,
@@ -86,14 +99,23 @@ async function checkFleetPersistence(): Promise<FleetCheck> {
       status: "unavailable",
       errorCode: aircraftResult.error.code ?? "unknown",
       organization: "present",
+      requiredTables,
     };
   }
+  const firstUnavailable = [
+    membershipsResult.error,
+    assignmentsResult.error,
+    acarsSessionsResult.error,
+    positionReportsResult.error,
+  ].find(Boolean);
   return {
     configured: true,
     keyKind,
-    status: "ready",
+    status: firstUnavailable ? "unavailable" : "ready",
+    ...(firstUnavailable ? { errorCode: firstUnavailable.code ?? "unknown" } : {}),
     organization: "present",
     aircraftCount: aircraftResult.count ?? 0,
+    requiredTables,
   };
 }
 
