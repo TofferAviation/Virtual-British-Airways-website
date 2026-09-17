@@ -1,0 +1,6 @@
+.handbook-ember-lifecycle{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px}
+.handbook-ember-lifecycle article{min-height:105px;padding:12px;border:1px solid rgba(165,211,255,.27);background:rgba(0,17,43,.24)}
+.handbook-ember-lifecycle strong,.handbook-ember-lifecycle span{display:block}
+.handbook-ember-lifecycle strong{color:#a7dcff;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.handbook-ember-lifecycle span{margin-top:7px;color:#d9e8f5;font-size:11px;line-height:1.5}
+@media(max-width:760px){.handbook-ember-lifecycle{grid-template-columns:1fr}.handbook-ember-lifecycle article{min-height:0}}

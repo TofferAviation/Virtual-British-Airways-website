@@ -13,14 +13,14 @@ export const metadata: Metadata = {
 const pilotSteps = [
   ["01", "Create and secure your pilot account", "Use your BAV account for the website and keep your profile, password and SimBrief Pilot ID current."],
   ["02", "Choose your virtual service", "Browse the schedule, reserve a service and use Manage Assignment to keep its briefing available."],
-  ["03", "Prepare your SimBrief briefing", "Generate and sync your OFP from the assigned flight, then review the saved plan before departure."],
-  ["04", "Fly, track and report", "Use Ember when available, monitor BA-Radar and submit your PIREP when the flight is complete."],
+  ["03", "Reserve an aircraft registration", "In Ember Fleet Management, select a dispatchable registration matching your BAV flight and reserve it. Other pilots cannot take that airframe while it is assigned to you."],
+  ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. Completing the flight updates the aircraft’s hours, cycle, station and fleet logbook before you submit your PIREP."],
 ];
 
 const staffSteps = [
   ["01", "Activate Staff Centre access", "Use the invitation sent to your staff email to set a separate Staff Centre password. It does not change your pilot password."],
   ["02", "Understand your role", "Your role and individual permissions determine which operational tools you can access. Only use systems assigned to you."],
-  ["03", "Work from the live record", "Manage pilots, fleet, routes, tickets, PIREPs and news from the Staff Centre so the whole team sees the same information."],
+  ["03", "Work from the live record", "Manage pilots, registrations, fleet logbooks, routes, tickets, PIREPs and news from the Staff Centre so the whole team sees the same information."],
   ["04", "Keep operations secure", "Never share credentials, avoid exporting personal data and escalate an access or system issue to an administrator promptly."],
 ];
 
@@ -69,7 +69,7 @@ export default function HandbookPage() {
 
         <section className="handbook-shell handbook-ember" id="ember">
           <div className="handbook-ember-mark"><Image src="/branding/ember-systems-logo.png" alt="Ember Systems" width={512} height={512} priority /></div>
-          <div><span className="handbook-kicker">Ember ACARS Systems</span><h2>Your connected BAV flight desk.</h2><p>After signing in with your BAV pilot account, Ember can refresh your selected flight, retrieve the matching airframe, connect simulator telemetry and send live position updates to BA-Radar.</p><div className="handbook-ember-links"><Link href="/account/profile">View Ember access in Account Settings →</Link><Link href="/ba-radar">Open BA-Radar →</Link></div></div>
+          <div><span className="handbook-kicker">Ember ACARS Systems</span><h2>Your connected BAV flight desk.</h2><p>After signing in with your BAV pilot account, Ember can refresh your selected flight, retrieve the matching airframe, connect simulator telemetry and send live position updates to BA-Radar.</p><div className="handbook-ember-lifecycle"><article><strong>Reserve</strong><span>Choose a dispatchable registration for your BAV service. The reservation keeps that airframe exclusively assigned to you.</span></article><article><strong>Operate</strong><span>At engine start or pushback, Ember begins the active ACARS and fleet operation for your reserved aircraft.</span></article><article><strong>Record</strong><span>When the flight is completed, aircraft hours, cycle, station and fleet logbook history are permanently updated for staff and future pilots.</span></article></div><div className="handbook-ember-links"><Link href="/account/profile">View Ember access in Account Settings →</Link><Link href="/ba-radar">Open BA-Radar →</Link></div></div>
         </section>
 
         <section className="handbook-shell handbook-support">

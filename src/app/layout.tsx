@@ -22,6 +22,7 @@ import "./help.css";
 import "./help-hero.css";
 import "./handbook.css";
 import "./handbook-ember-logo.css";
+import "./handbook-fleet-lifecycle.css";
 import "./staff.css";
 import "./staff-header.css";
 import "./staff-zoom.css";
