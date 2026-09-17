@@ -14,7 +14,7 @@ const pilotSteps = [
   ["01", "Create and secure your pilot account", "Use your BAV account for the website and keep your profile, password and SimBrief Pilot ID current."],
   ["02", "Choose your virtual service", "Browse the schedule, reserve a service and use Manage Assignment to keep its briefing available."],
   ["03", "Reserve an aircraft registration", "In Ember Fleet Management, select a dispatchable registration matching your BAV flight and reserve it. Other pilots cannot take that airframe while it is assigned to you."],
-  ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. Completing the flight updates the aircraft’s hours, cycle, station and fleet logbook before you submit your PIREP."],
+  ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. A clean completion updates the aircraft’s hours, cycle, station and fleet logbook, then automatically creates the linked PIREP for staff review."],
 ];
 
 const staffSteps = [
@@ -31,7 +31,7 @@ const pilotChecklist = [
   ["4", "Open Ember and refresh BAV flight", "Sign in to Ember with the same BAV email and password, then use Refresh BAV flight and profile. Ember should show the flight you selected on the website."],
   ["5", "Reserve the registration", "Open Fleet Management, choose a dispatchable registration and select Reserve for flight. Wait for Ember to confirm the reservation. That specific airframe is now yours for this service."],
   ["6", "Start the simulator and confirm tracking", "Connect the simulator, then start the engines or begin pushback. Ember starts the ACARS session and BA-Radar should show the live flight after its normal refresh interval."],
-  ["7", "Complete the flight cleanly", "After arrival, stop the aircraft and shut down the engines. Keep Ember open briefly while it completes the active assignment, then submit the PIREP. The reserved airframe’s hours, cycles, station and logbook are retained for the next pilot and Staff Centre."],
+  ["7", "Complete the flight cleanly", "After arrival, stop the aircraft and shut down the engines. Keep Ember open briefly while it completes the active assignment and automatically submits the linked PIREP. Check Recent flight reports in your BAV account; do not submit a second manual PIREP unless Ember failed to complete. The reserved airframe’s hours, cycles, station and logbook are retained for the next pilot and Staff Centre."],
 ];
 
 export default function HandbookPage() {
@@ -85,7 +85,7 @@ export default function HandbookPage() {
 
         <section className="handbook-shell handbook-ember" id="ember">
           <div className="handbook-ember-mark"><Image src="/branding/ember-systems-logo.png" alt="Ember Systems" width={512} height={512} priority /></div>
-          <div><span className="handbook-kicker">Ember ACARS Systems</span><h2>Your connected BAV flight desk.</h2><p>After signing in with your BAV pilot account, Ember can refresh your selected flight, retrieve the matching airframe, connect simulator telemetry and send live position updates to BA-Radar.</p><div className="handbook-ember-lifecycle"><article><strong>Reserve</strong><span>Choose a dispatchable registration for your BAV service. The reservation keeps that airframe exclusively assigned to you.</span></article><article><strong>Operate</strong><span>At engine start or pushback, Ember begins the active ACARS and fleet operation for your reserved aircraft.</span></article><article><strong>Record</strong><span>When the flight is completed, aircraft hours, cycle, station and fleet logbook history are permanently updated for staff and future pilots.</span></article></div><div className="handbook-ember-links"><Link href="/account/profile">View Ember access in Account Settings →</Link><Link href="/ba-radar">Open BA-Radar →</Link></div></div>
+          <div><span className="handbook-kicker">Ember ACARS Systems</span><h2>Your connected BAV flight desk.</h2><p>After signing in with your BAV pilot account, Ember can refresh your selected flight, retrieve the matching airframe, connect simulator telemetry and send live position updates to BA-Radar.</p><div className="handbook-ember-lifecycle"><article><strong>Reserve</strong><span>Choose a dispatchable registration for your BAV service. The reservation keeps that airframe exclusively assigned to you.</span></article><article><strong>Operate</strong><span>At engine start or pushback, Ember begins the active ACARS and fleet operation for your reserved aircraft.</span></article><article><strong>Record</strong><span>When the flight is completed, aircraft hours, cycle, station and fleet logbook history are permanently updated and Ember creates the linked PIREP for staff review.</span></article></div><div className="handbook-ember-links"><Link href="/account/profile">View Ember access in Account Settings →</Link><Link href="/ba-radar">Open BA-Radar →</Link></div></div>
         </section>
 
         <section className="handbook-shell handbook-support">

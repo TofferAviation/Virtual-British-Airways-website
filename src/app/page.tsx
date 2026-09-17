@@ -19,7 +19,7 @@ export default async function HomePage() {
             <div className="eyebrow">British Airways Virtual · London</div>
             <h1>Where your next virtual journey begins</h1>
             <p>
-              Fly a structured British Airways-inspired network in your simulator, build your pilot career and carry your progress between the website and Phoenix.
+              Fly a structured British Airways-inspired network in your simulator, build your pilot career and carry your progress between the website and Ember.
             </p>
             <div className="home-hero-actions">
               <Link className="button button-light" href="/book">Browse virtual flights</Link>
@@ -61,7 +61,7 @@ export default async function HomePage() {
             <div className="site-stat"><strong>214</strong><span>BA destinations target</span></div>
             <div className="site-stat"><strong>{fleet.length}</strong><span>Aircraft types</span></div>
             <div className="site-stat"><strong>24/7</strong><span>Pilot access</span></div>
-            <div className="site-stat"><strong>1</strong><span>Shared Phoenix identity</span></div>
+            <div className="site-stat"><strong>1</strong><span>Shared Ember identity</span></div>
           </div>
         </section>
 
@@ -83,19 +83,31 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section className="content-section split-cta">
-          <div>
-            <div className="section-kicker">Pilot career</div>
-            <h2 className="section-title">Your website account and Phoenix will share the same career</h2>
+        <section className="content-section split-cta ember-home-journey">
+          <div className="ember-home-copy">
+            <div className="section-kicker">Ember ACARS Systems</div>
+            <h2 className="section-title">Your BAV flight, connected from dispatch to PIREP.</h2>
             <p className="lead-copy">
-              The production plan is for one authoritative pilot record. Complete a flight in Phoenix and the website will be able to reflect the same hours, landing rate, points and tier progress.
+              Ember brings your BAV assignment, SimBrief briefing, chosen aircraft registration and simulator telemetry into one connected flight desk.
             </p>
+            <div className="ember-home-features" aria-label="Ember features">
+              <article><strong>Assigned flight</strong><span>Refresh the selected BAV service and SimBrief briefing in Ember.</span></article>
+              <article><strong>Registration-aware flying</strong><span>Reserve a dispatchable airframe and retain its hours, cycles and logbook history.</span></article>
+              <article><strong>Live BA-Radar telemetry</strong><span>Send live aircraft position updates after engine start or pushback.</span></article>
+              <article><strong>Automatic PIREPs</strong><span>A completed ACARS flight creates a linked PIREP for staff review.</span></article>
+            </div>
+            <div className="ember-home-roadmap">
+              <strong>Looking ahead</strong>
+              <p>Future Ember releases will add richer post-flight summaries, deeper operational views and more connected cabin workflows as BAV grows.</p>
+            </div>
           </div>
-          <div className="cta-panel">
-            <h3>{isLoggedIn ? "Welcome back, Pilot" : "Already flying with us?"}</h3>
-            <p>{isLoggedIn ? "Your pilot session is active across the website." : "Open the pilot portal foundation and preview the account experience."}</p>
-            <Link className="button button-primary" href={isLoggedIn ? "/account" : "/login"}>{isLoggedIn ? "Open pilot account" : "Pilot log in"}</Link>
-          </div>
+          <aside className="cta-panel ember-home-panel">
+            <span>British Airways Virtual × Ember</span>
+            <h3>{isLoggedIn ? "Your BAV account is ready" : "Ready when you are"}</h3>
+            <p>{isLoggedIn ? "Open your account settings to view Ember access and prepare for your next connected flight." : "Sign in with your BAV pilot account to connect Ember to your assignments and career."}</p>
+            <Link className="button button-primary" href={isLoggedIn ? "/account/profile" : "/login"}>{isLoggedIn ? "View Ember access" : "Pilot log in"}</Link>
+            <Link className="ember-home-radar-link" href="/ba-radar">Explore BA-Radar →</Link>
+          </aside>
         </section>
       </main>
       <SiteFooter />

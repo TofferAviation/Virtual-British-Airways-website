@@ -23,7 +23,7 @@ const topics: Topic[] = [
 const faqs = [
   ["How do I create an account?", "British Airways Virtual is being prepared for vAMSYS-based pilot identity. During development, the website uses its demo account flow; production authentication will not ask you to hand your vAMSYS password directly to this site."],
   ["Why can’t I log in?", "Check that you are using the current development login flow. When production authentication is connected, account status and access will be handed off through the approved vAMSYS integration."],
-  ["How do I book and log a flight?", "Use Book to browse the virtual schedule and choose a flight. The current assignment data is developmental; the future shared backend will keep website and Phoenix records aligned."],
+  ["How do I book and log a flight?", "Use Book to choose a virtual service, then open Manage Assignment to prepare the SimBrief briefing. In Ember, refresh your BAV flight, reserve a dispatchable registration and complete the flight. Ember automatically submits the linked PIREP for staff review."],
   ["What are VA Points and Tier Points?", "They are British Airways Virtual progression systems only. They are not Avios, have no cash value and are not connected to real-world British Airways customer accounts."],
   ["Do you run events?", "Yes. The Events page supports community flights, long-haul events and special challenges, with the data structure prepared for future administration tools."],
   ["How do I get support?", "Use the Help centre, community channels and future support-ticket tools. Production support links will be connected as those services are finalised."],

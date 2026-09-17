@@ -234,7 +234,7 @@ export default function DestinationsPage() {
               <article className="discover-benefit">
                 <div className="discover-benefit-icon">◉</div>
                 <h3>A shared pilot career</h3>
-                <p>Your website profile is designed to stay aligned with Phoenix and vAMSYS data as the integrations come online.</p>
+                <p>Your website profile stays aligned with Ember and your BAV flight records as you plan, fly and complete services.</p>
                 <Link href="/account">Open your pilot account</Link>
               </article>
               <article className="discover-benefit">

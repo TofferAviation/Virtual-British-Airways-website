@@ -22,7 +22,7 @@ export default async function StaffPirepsPage() {
   return <>
     <SiteHeader />
     <main className="ops-page staff-ops-page">
-      <section className="ops-hero"><div className="ops-shell"><span className="ops-kicker">Staff Operations</span><h1>PIREP Centre</h1><p>Review flight reports from BAV pilots. Manual reports and future FreeFlight ACARS submissions from X-Plane 12, MSFS 2020 and MSFS 2024 use the same queue.</p></div></section>
+      <section className="ops-hero"><div className="ops-shell"><span className="ops-kicker">Staff Operations</span><h1>PIREP Centre</h1><p>Review flight reports from BAV pilots. Manual fallback reports and automatic Ember ACARS submissions from X-Plane 12, MSFS 2020 and MSFS 2024 use the same queue.</p></div></section>
       <section className="ops-shell ops-summary"><div><strong>{pending}</strong><span>Pending</span></div><div><strong>{changes}</strong><span>Changes requested</span></div><div><strong>{accepted}</strong><span>Accepted</span></div><Link className="ops-secondary" href="/staff">Back to Staff Centre</Link></section>
       <section className="ops-shell ops-pirep-list">
         {pireps.length ? pireps.map((pirep) => {

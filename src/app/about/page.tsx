@@ -31,8 +31,8 @@ const features = [
   },
   {
     number: "05",
-    title: "Phoenix ecosystem",
-    copy: "Website assignments and career information are designed to feed into Phoenix so the same pilot journey can continue between planning, flying and post-flight review.",
+    title: "Ember ACARS Systems",
+    copy: "Website assignments, selected registrations and career records connect to Ember so the same pilot journey continues between planning, flying and post-flight review.",
   },
   {
     number: "06",
@@ -52,7 +52,7 @@ const roadmap = [
     status: "Next",
     phase: "Integration",
     title: "Connect the website to live pilot data",
-    copy: "vAMSYS sign-in and API data, live pilot statistics, schedule availability, assignment handoff and a shared data contract between the website and Phoenix.",
+    copy: "Live pilot statistics, schedule availability, assignment handoff and a shared data contract between the website and Ember.",
   },
   {
     status: "Planned",
@@ -64,12 +64,12 @@ const roadmap = [
     status: "Later",
     phase: "Expansion",
     title: "Grow the virtual airline around the community",
-    copy: "Tours, events, alliance-inspired operations, achievements, richer career milestones, member recognition and deeper Phoenix integration across the pilot experience.",
+    copy: "Tours, events, alliance-inspired operations, achievements, richer career milestones, member recognition and deeper Ember integration across the pilot experience.",
   },
 ];
 
 const futurePlans = [
-  ["Two-way Phoenix sync", "Assignments, completed flights and career data shared between the website and Phoenix."],
+  ["Connected Ember sync", "Assignments, completed flights and career data shared between the website and Ember."],
   ["Live operational fleet", "Registrations, service state, maintenance and aircraft availability driven by backend records."],
   ["Smarter flight planning", "More operational context around schedules, aircraft suitability, SimBrief and pre-flight preparation."],
   ["Community operations", "Tours, events, badges and alliance-inspired flying that adds variety without changing the core BA Virtual identity."],
@@ -95,7 +95,7 @@ export default function AboutPage() {
           aria-label="About the VA. Built around the operation, not just the flight. British Airways Virtual is being developed as a complete connected pilot experience."
         >
           <span className="about-va-visually-hidden">
-            Built around the operation, not just the flight. British Airways Virtual is being developed as a complete pilot experience combining a realistic route network, career progression, live operational data and Phoenix integration.
+            Built around the operation, not just the flight. British Airways Virtual is being developed as a complete pilot experience combining a realistic route network, career progression, live operational data and Ember integration.
           </span>
         </section>
 
@@ -118,7 +118,7 @@ export default function AboutPage() {
               </p>
               <p>
                 Pilots should be able to discover destinations, select realistic flights, review their career,
-                understand their fleet and carry the same information into Phoenix without feeling like they are
+                understand their fleet and carry the same information into Ember without feeling like they are
                 moving between unrelated tools.
               </p>
             </div>

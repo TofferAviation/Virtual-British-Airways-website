@@ -26,7 +26,7 @@ export default async function RegisterPage() {
           <div className="section-kicker">British Airways Virtual</div>
           <h1>Create your BAV pilot account</h1>
           <h2>Your account is now managed directly by British Airways Virtual.</h2>
-          <p className="pilot-auth-intro">Create one account for flight bookings, PIREPs, progression, events, support and the future FreeFlight ACARS client.</p>
+          <p className="pilot-auth-intro">Create one account for flight bookings, automatic Ember PIREPs, progression, events and support.</p>
           <PilotRegisterForm />
           <p className="login-security-copy">This is an independent flight-simulation account. It is not a British Airways Plc customer account and does not connect to real-world Executive Club credentials.</p>
         </div>

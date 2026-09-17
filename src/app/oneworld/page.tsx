@@ -121,7 +121,7 @@ export default function OneworldPage() {
               <article>
                 <span className="ow-benefit-number">03</span>
                 <h3>Shared career immersion</h3>
-                <p>Alliance activity can later feed into Phoenix events, badges and virtual pilot achievements.</p>
+                <p>Alliance activity can later feed into Ember-connected events, badges and virtual pilot achievements.</p>
               </article>
             </div>
           </div>

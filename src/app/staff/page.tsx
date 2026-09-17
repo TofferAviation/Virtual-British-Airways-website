@@ -74,7 +74,7 @@ export default async function StaffPage() {
               <div className="staff-shell staff-permissions-launch-wrap">
                 <Link className="staff-permissions-launch" href="/staff/pireps">
                   <span className="staff-permissions-launch-icon" aria-hidden="true">✈</span>
-                  <span><strong>PIREP Centre</strong><small>Review pilot flight reports, request corrections, approve career credit and prepare for FreeFlight ACARS.</small></span>
+                  <span><strong>PIREP Centre</strong><small>Review automatic Ember ACARS and manual fallback reports, request corrections and approve career credit.</small></span>
                   <b aria-hidden="true">→</b>
                 </Link>
               </div>

@@ -41,7 +41,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <li>Book flights from the BAV schedule</li>
             <li>Track VA Points, Tier Points and career progression</li>
             <li>Manage PIREPs, assignments and support tickets</li>
-            <li>Use the same identity with the future FreeFlight ACARS client</li>
+            <li>Use the same identity with Ember ACARS Systems</li>
           </ul>
           <PilotLoginForm returnTo={returnTo} />
           <p className="login-security-copy">Pilot authentication is now handled by British Airways Virtual. Your BAV password is stored as a salted one-way hash and is separate from any third-party virtual-airline account.</p>
