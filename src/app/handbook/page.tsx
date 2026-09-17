@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -67,7 +68,7 @@ export default function HandbookPage() {
         </section>
 
         <section className="handbook-shell handbook-ember" id="ember">
-          <div className="handbook-ember-mark"><span>e</span><strong>ember</strong></div>
+          <div className="handbook-ember-mark"><Image src="/branding/ember-systems-logo.png" alt="Ember Systems" width={512} height={512} priority /></div>
           <div><span className="handbook-kicker">Ember ACARS Systems</span><h2>Your connected BAV flight desk.</h2><p>After signing in with your BAV pilot account, Ember can refresh your selected flight, retrieve the matching airframe, connect simulator telemetry and send live position updates to BA-Radar.</p><div className="handbook-ember-links"><Link href="/account/profile">View Ember access in Account Settings →</Link><Link href="/ba-radar">Open BA-Radar →</Link></div></div>
         </section>
 
