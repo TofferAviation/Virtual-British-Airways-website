@@ -1,0 +1,14 @@
+.handbook-self-service{margin-top:42px;padding:28px;border:1px solid #d0ddea;background:#f8fbff}
+.handbook-self-service-heading{display:flex;justify-content:space-between;gap:30px;align-items:flex-end}
+.handbook-self-service-heading h2{margin:5px 0 7px;font-family:Georgia,'Times New Roman',serif;font-size:32px;font-weight:400;line-height:1.12}
+.handbook-self-service-heading p{max-width:720px;margin:0;color:#586e86;line-height:1.55}
+.handbook-self-service-links{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px}
+.handbook-self-service-links a{padding:9px 11px;border:1px solid #8da9c6;color:#075baa;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap}
+.handbook-checklist{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin:26px 0 0;padding:0;list-style:none;counter-reset:none}
+.handbook-checklist li{display:grid;grid-template-columns:30px 1fr;gap:11px;padding:14px 0;border-top:1px solid #d7e2ed}
+.handbook-checklist li>span{display:flex;width:25px;height:25px;align-items:center;justify-content:center;border-radius:50%;background:#075baa;color:#fff;font-size:11px;font-weight:800}
+.handbook-checklist h3{margin:2px 0 5px;color:#092b53;font-size:14px}
+.handbook-checklist p{margin:0;color:#5e728a;font-size:12px;line-height:1.55}
+.handbook-self-check{display:grid;grid-template-columns:205px 1fr;gap:22px;margin-top:8px;padding:16px;border-left:4px solid #d50b2e;background:#fff}
+.handbook-self-check>strong{color:#12385f;font-size:14px}.handbook-self-check div{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.handbook-self-check p{margin:0;color:#5c7087;font-size:11px;line-height:1.5}.handbook-self-check b{display:block;color:#0b315d;font-size:11px}
+@media(max-width:800px){.handbook-self-service-heading{align-items:flex-start;flex-direction:column}.handbook-self-service-links{justify-content:flex-start}.handbook-checklist{grid-template-columns:1fr}.handbook-self-check{grid-template-columns:1fr;gap:10px}.handbook-self-check div{grid-template-columns:1fr;gap:11px}}@media(max-width:620px){.handbook-self-service{margin-top:24px;padding:21px 18px}.handbook-self-service-heading h2{font-size:27px}}

@@ -24,6 +24,16 @@ const staffSteps = [
   ["04", "Keep operations secure", "Never share credentials, avoid exporting personal data and escalate an access or system issue to an administrator promptly."],
 ];
 
+const pilotChecklist = [
+  ["1", "Sign in and prepare your profile", "Open Account Settings and confirm your name, email and SimBrief Pilot ID. Ember uses the same BAV pilot account; it never needs your SimBrief password."],
+  ["2", "Book a BAV service", "Use Book to choose an available flight. Once saved, open Manage Assignment and verify that the flight number, route and aircraft are correct."],
+  ["3", "Generate and sync the flight plan", "From Manage Assignment, generate your official SimBrief plan, complete SimBrief’s sign-in window, then use Sync generated plan. The OFP details stay available on your BAV assignment."],
+  ["4", "Open Ember and refresh BAV flight", "Sign in to Ember with the same BAV email and password, then use Refresh BAV flight and profile. Ember should show the flight you selected on the website."],
+  ["5", "Reserve the registration", "Open Fleet Management, choose a dispatchable registration and select Reserve for flight. Wait for Ember to confirm the reservation. That specific airframe is now yours for this service."],
+  ["6", "Start the simulator and confirm tracking", "Connect the simulator, then start the engines or begin pushback. Ember starts the ACARS session and BA-Radar should show the live flight after its normal refresh interval."],
+  ["7", "Complete the flight cleanly", "After arrival, stop the aircraft and shut down the engines. Keep Ember open briefly while it completes the active assignment, then submit the PIREP. The reserved airframe’s hours, cycles, station and logbook are retained for the next pilot and Staff Centre."],
+];
+
 export default function HandbookPage() {
   return (
     <>
@@ -39,7 +49,7 @@ export default function HandbookPage() {
               <span className="handbook-kicker">British Airways Virtual</span>
               <h1>Your guide to flying and operating with BAV.</h1>
               <p>A living handbook for pilots and authorised staff. It is updated with every meaningful British Airways Virtual website and Ember release.</p>
-              <div className="handbook-hero-actions"><a href="#pilot">Pilot handbook</a><a href="#staff">Staff operations</a><a href="#ember">Ember ACARS</a></div>
+              <div className="handbook-hero-actions"><a href="#pilot-checklist">Pilot checklist</a><a href="#staff">Staff operations</a><a href="#ember">Ember ACARS</a></div>
             </div>
             <aside className="handbook-release-note"><span>Living documentation</span><strong>Built into every release</strong><p>New procedures, screenshots and troubleshooting guidance are updated when the relevant BAV system changes.</p></aside>
           </div>
@@ -59,6 +69,12 @@ export default function HandbookPage() {
         <section className="handbook-shell handbook-guide" id="pilot">
           <div className="handbook-guide-heading"><span className="handbook-kicker">Pilot handbook</span><h2>From account creation to your first completed flight.</h2><p>Use these steps in sequence if you are new to British Airways Virtual, or jump directly to the relevant area from your pilot account.</p><Link href="/account">Open pilot account →</Link></div>
           <div className="handbook-step-grid">{pilotSteps.map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p></article>)}</div>
+        </section>
+
+        <section className="handbook-shell handbook-self-service" id="pilot-checklist">
+          <div className="handbook-self-service-heading"><div><span className="handbook-kicker">Pilot self-service guide</span><h2>Complete a BAV flight without needing support.</h2><p>Follow this exact order. Each stage confirms that the previous one is working before you continue.</p></div><div className="handbook-self-service-links"><Link href="/book">Book a flight</Link><Link href="/manage-assignment">Manage assignment</Link><Link href="/account/profile">Account settings</Link></div></div>
+          <ol className="handbook-checklist">{pilotChecklist.map(([number, title, copy]) => <li key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></li>)}</ol>
+          <div className="handbook-self-check"><strong>Before opening a support ticket</strong><div><p><b>No flight in Ember?</b> Confirm the BAV flight is booked, then use Refresh BAV flight and profile.</p><p><b>Cannot reserve a registration?</b> Select another aircraft marked dispatchable; the chosen one may already be reserved or unavailable.</p><p><b>No flight on BA-Radar?</b> Check that Ember is signed in, the simulator is connected and you have started engines or pushback on an active BAV assignment.</p></div></div>
         </section>
 
         <section className="handbook-shell handbook-guide handbook-staff-guide" id="staff">
