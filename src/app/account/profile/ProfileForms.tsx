@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
+import styles from "./ember-download.module.css";
 
 async function patchProfile(payload: Record<string, string | null>) {
   const response = await fetch("/api/pilot/profile", {
@@ -124,6 +126,18 @@ export function ProfileForms({ name, email, simbriefPilotId, profileImage: initi
         <button type="submit" disabled={savingSimbrief}>{savingSimbrief ? "Saving…" : "Save SimBrief setting"}</button>
         {simbriefMessage ? <p className="pilot-profile-message">{simbriefMessage}</p> : null}
       </form>
+
+      <article className={`pilot-profile-card ${styles.card}`}>
+        <div>
+          <span className="pilot-profile-kicker">PILOT SYSTEMS</span>
+          <Image className={styles.logo} src="/branding/ember-logo-ba-blue-text.png" alt="Ember" width={560} height={256} priority />
+          <h2>Ember ACARS</h2>
+          <p>Ember connects your selected BAV flight, aircraft reservation and simulator telemetry to BA-Radar.</p>
+        </div>
+        <div className={styles.access}><strong>Included with your pilot account</strong><span>Your secure Windows download will be provided here when the installer is released.</span></div>
+        <button type="button" className={styles.downloadButton} disabled aria-describedby="ember-download-note">Download Ember ACARS — coming soon</button>
+        <p id="ember-download-note" className={styles.note}>No installer is available yet. This button will become your official Ember download link.</p>
+      </article>
     </div>
   );
 }

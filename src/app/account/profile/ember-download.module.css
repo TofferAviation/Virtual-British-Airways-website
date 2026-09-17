@@ -1,0 +1,54 @@
+.card {
+  background: linear-gradient(135deg, #f8fbff, #edf4fb) !important;
+  border-color: #bad1e9 !important;
+}
+
+.logo {
+  display: block;
+  width: min(100%, 310px);
+  height: auto;
+  margin: 12px 0 4px;
+}
+
+.access {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 14px;
+  border-left: 3px solid #d80b2f;
+  background: #fff;
+  color: #425872;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.access strong {
+  color: #092d58;
+}
+
+.downloadButton:disabled {
+  opacity: 1 !important;
+  background: #51779e !important;
+  cursor: not-allowed !important;
+}
+
+.note {
+  margin: 0;
+  color: #54708d !important;
+  font-size: 13px;
+  font-weight: 500 !important;
+}
+
+:global(html[data-theme="dark"]) .card {
+  background: linear-gradient(135deg, #101e32, #0c192a) !important;
+  border-color: #355572 !important;
+}
+
+:global(html[data-theme="dark"]) .access {
+  background: #0b1727;
+  color: #a7b5c7;
+}
+
+:global(html[data-theme="dark"]) .access strong {
+  color: #d9eaff;
+}
