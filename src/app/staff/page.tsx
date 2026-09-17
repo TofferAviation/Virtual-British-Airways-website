@@ -52,7 +52,7 @@ export default async function StaffPage() {
         <div className="staff-page-content">
           <div className="staff-breadcrumb-band">
             <div className="staff-shell staff-breadcrumbs">
-              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
+              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong><span>·</span><Link href="/handbook#staff">Staff handbook</Link>
               {canViewRoutes ? <><span>·</span><Link href="/staff/live-operations">Live Operations</Link><span>·</span><Link href="/staff/pireps">PIREP Centre</Link></> : null}
               {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
               {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}

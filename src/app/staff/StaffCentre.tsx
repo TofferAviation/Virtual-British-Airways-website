@@ -248,7 +248,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
             <Link href="/"><span>▧</span><b>Homepage</b><small>Hero, search and featured website content.</small><em>Open →</em></Link>
             <Link href="/va-points"><span>▥</span><b>VA Points page</b><small>Progression and rewards information.</small><em>Open →</em></Link>
             <Link href="/tier-points"><span>☆</span><b>Tier Points page</b><small>Status information and examples.</small><em>Open →</em></Link>
-            <Link href="/help"><span>?</span><b>Help centre</b><small>FAQs and support content.</small><em>Open →</em></Link>
+            <Link href="/handbook"><span>?</span><b>BAV Handbook</b><small>Pilot and Staff Centre procedures.</small><em>Open →</em></Link>
             <Link href="/oneworld"><span>◎</span><b>Partners page</b><small>oneworld Virtual information.</small><em>Open →</em></Link>
           </div>
         </div>
@@ -256,7 +256,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         <div className="staff-panel" id="support-tools">
           <div className="staff-panel-heading"><div><span className="staff-kicker">Pilot support and moderation</span><h2>Support our community</h2><p>Support inbox and moderation counts will become live when a support backend is connected.</p></div></div>
           <div className="staff-content-list">
-            <Link href="/help"><span>✉</span><b>Help centre</b><small>Current pilot-facing support tools.</small><em>View →</em></Link>
+            <Link href="/handbook"><span>✉</span><b>BAV Handbook</b><small>Current pilot and staff guidance.</small><em>View →</em></Link>
             <Link href="/events"><span>●</span><b>Events and community</b><small>Review published community events.</small><em>View →</em></Link>
             <Link href="/about-your-account"><span>✈</span><b>Account guidance</b><small>Review account onboarding information.</small><em>View →</em></Link>
             <Link href="/account"><span>◇</span><b>Account preview</b><small>Inspect the current pilot dashboard experience.</small><em>View →</em></Link>

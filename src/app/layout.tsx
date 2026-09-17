@@ -20,6 +20,7 @@ import "./events.css";
 import "./about-your-account.css";
 import "./help.css";
 import "./help-hero.css";
+import "./handbook.css";
 import "./staff.css";
 import "./staff-header.css";
 import "./staff-zoom.css";

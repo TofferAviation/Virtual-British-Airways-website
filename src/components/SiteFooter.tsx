@@ -31,9 +31,9 @@ export async function SiteFooter() {
         </div>
         <div>
           <h3>Support</h3>
-          <Link href="/help">Help centre</Link>
+          <Link href="/handbook">BAV Handbook</Link>
           <a href="https://discord.gg/HM76YewaWe" target="_blank" rel="noreferrer">Join our Discord ↗</a>
-          <a href="#">Operations manual</a>
+          <Link href="/handbook">Operations handbook</Link>
           <a href="#">System status</a>
         </div>
       </div>
