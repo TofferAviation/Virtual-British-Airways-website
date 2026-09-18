@@ -378,7 +378,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
       const { points, tierPoints } = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
       update.points_awarded = points;
       update.tier_points_awarded = tierPoints;
-      await applyApprovedPirepStats(current.pilotId, { blockMinutes: current.blockMinutes, distanceNm: current.distanceNm, landingFpm: current.landingFpm, points, tierPoints, firstFlightAward: firstFlightAward ? { pirepId: current.id } : undefined });
+      await applyApprovedPirepStats(current.pilotId, { blockMinutes: current.blockMinutes, distanceNm: current.distanceNm, landingFpm: current.landingFpm, points, tierPoints, sourcePirepId: current.id });
     }
     const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
     if (error) throw error;
@@ -405,7 +405,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
       landingFpm: pirep.landingFpm,
       points,
       tierPoints,
-      firstFlightAward: firstFlightAward ? { pirepId: pirep.id } : undefined,
+      sourcePirepId: pirep.id,
     });
   }
 

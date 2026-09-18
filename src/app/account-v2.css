@@ -43,7 +43,7 @@
 .account-v2-stat-value{display:block;font-size:17px;line-height:1.05;font-weight:400;color:#071d49;margin-bottom:7px;white-space:nowrap}
 .account-v2-rank-value{display:flex;align-items:center;gap:6px;font-size:13px}
 .account-v2-stat-note{display:block;font-size:7px;color:#8994a3;line-height:1.3}
-.account-v2-award{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 13px;border:1px solid #e5c778;background:linear-gradient(105deg,#fffdf7,#fff8e6);box-shadow:0 2px 5px rgba(95,67,7,.06)}.account-v2-award-mark{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#d89b1f;color:#fff;font-size:14px}.account-v2-award-kicker{display:block;color:#92640a;font-size:6.5px;font-weight:700;letter-spacing:.12em}.account-v2-award strong{display:block;color:#4e3605;font-size:12px;font-weight:400;margin:2px 0}.account-v2-award p{margin:0;color:#6b5c3a;font-size:7px;line-height:1.35}
+.account-v2-awards{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px}.account-v2-award{display:flex;align-items:center;gap:10px;padding:10px 13px;border:1px solid #e5c778;background:linear-gradient(105deg,#fffdf7,#fff8e6);box-shadow:0 2px 5px rgba(95,67,7,.06)}.account-v2-award-mark{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#d89b1f;color:#fff;font-size:14px}.account-v2-award-kicker{display:block;color:#92640a;font-size:6.5px;font-weight:700;letter-spacing:.12em}.account-v2-award strong{display:block;color:#4e3605;font-size:12px;font-weight:400;margin:2px 0}.account-v2-award p{margin:0;color:#6b5c3a;font-size:7px;line-height:1.35}
 
 .account-v2-lower{display:grid;grid-template-columns:2.15fr .95fr;gap:10px;margin-top:12px}
 .account-v2-card{background:#fff;border:1px solid #d9e0e9;border-radius:2px;box-shadow:0 2px 5px rgba(12,35,72,.06);padding:14px}
@@ -98,6 +98,7 @@
   .account-v2-points{grid-template-columns:1fr}
   .account-v2-tabs-inner{gap:8px;overflow:auto}
   .account-v2-stat-grid{grid-template-columns:1fr}
+  .account-v2-awards{grid-template-columns:1fr}
   .account-v2-flight-row{grid-template-columns:.7fr .9fr 1.3fr .7fr}
   .account-v2-flight-row span:nth-last-child(-n+2){display:none}
   .account-v2-footer{padding:42px 0 36px}
