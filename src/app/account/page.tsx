@@ -4,6 +4,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
+import { formatPilotTypeRatings, nextPilotRank } from "@/lib/pilot-ranks";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pilot account" };
@@ -21,6 +22,8 @@ export default async function AccountPage() {
   const flightPlan = assignment ? await getPilotFlightPlan(assignment.id, account.id) : null;
   const tierTarget = 3500;
   const tierProgress = Math.min(100, (account.tierPoints / tierTarget) * 100);
+  const nextRank = nextPilotRank(account.hours);
+  const typeRatingSummary = formatPilotTypeRatings(account.typeRatings);
   const stats = [
     { label: "TOTAL FLIGHTS", value: account.flights.toString(), note: "Accepted PIREPs" },
     { label: "FLIGHT TIME", value: hoursDisplay(account.hours), note: "Career block time" },
@@ -29,7 +32,8 @@ export default async function AccountPage() {
     { label: "BEST LANDING", value: account.bestLanding == null ? "—" : `${account.bestLanding} fpm`, note: "Career best" },
     { label: "ON-TIME RATE", value: `${account.onTime}%`, note: "Completed on schedule" },
     { label: "CURRENT STREAK", value: account.streak.toString(), note: "Flights completed" },
-    { label: "CURRENT RANK", value: account.rank, note: "BAV career rank" },
+    { label: "CURRENT RANK", value: account.rank, note: nextRank ? `${Math.max(0, nextRank.minimumHours - account.hours).toFixed(1)} h to ${nextRank.rank}` : "Highest automatic BAV rank" },
+    { label: "LONG-HAUL QUALIFICATIONS", value: account.typeRatings.length.toString(), note: typeRatingSummary },
   ];
 
   return (

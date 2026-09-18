@@ -5,6 +5,6 @@ import { requireAcarsBearer } from "@/lib/acars-auth";
 export async function GET(request: Request) {
   const auth = await requireAcarsBearer(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { id, pilotNumber, name, email, profileImage } = auth.account;
-  return NextResponse.json({ pilot: { id, pilotNumber, name, email, profileImage } });
+  const { id, pilotNumber, name, email, profileImage, rank, typeRatings } = auth.account;
+  return NextResponse.json({ pilot: { id, pilotNumber, name, email, profileImage, rank, typeRatings } });
 }

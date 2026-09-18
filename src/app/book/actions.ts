@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createFlightPlanForBooking, createPilotBooking } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
+import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
 
@@ -20,6 +21,13 @@ export async function bookFlight(formData: FormData) {
   const flight = flights.find((item) => item.routeId === routeId && item.number === flightNumber);
   if (!flight || flight.slots <= 0) redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=unavailable`);
 
+  const pilot = await getPilotById(session.pilotId);
+  if (!pilot) redirect("/login");
+  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: flight.aircraft });
+  if (!eligibility.eligible) {
+    redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=qualification`);
+  }
+
   const booking = await createPilotBooking({
     pilotId: session.pilotId,
     routeId: flight.routeId,
@@ -33,7 +41,6 @@ export async function bookFlight(formData: FormData) {
     date,
   });
 
-  const pilot = await getPilotById(session.pilotId);
   const simbriefPilotId = pilot?.simbriefPilotId ?? null;
   await createFlightPlanForBooking({
     bookingId: booking.id,

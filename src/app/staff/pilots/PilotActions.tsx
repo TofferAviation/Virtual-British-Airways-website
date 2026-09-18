@@ -1,21 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { PILOT_RANKS, automaticPilotRank, type PilotRank } from "@/lib/pilot-ranks";
+import { PILOT_RANKS, PILOT_TYPE_RATINGS, automaticPilotRank, type PilotRank, type PilotTypeRating } from "@/lib/pilot-ranks";
 
-export function PilotActions({ pilotId, status, canEdit, canSuspend, rankOverride, hours }: {
+export function PilotActions({ pilotId, status, canEdit, canSuspend, rankOverride, typeRatings, hours }: {
   pilotId: string;
   status: "active" | "suspended";
   canEdit: boolean;
   canSuspend: boolean;
   rankOverride: PilotRank | null;
+  typeRatings: PilotTypeRating[];
   hours: number;
 }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedRank, setSelectedRank] = useState(rankOverride ?? "automatic");
+  const [selectedRatings, setSelectedRatings] = useState<PilotTypeRating[]>(typeRatings);
 
-  async function update(payload: Record<string, string | null>) {
+  async function update(payload: Record<string, unknown>) {
     setBusy(true);
     setMessage("");
     try {
@@ -39,7 +41,7 @@ export function PilotActions({ pilotId, status, canEdit, canSuspend, rankOverrid
   return (
     <div className="staff-pilot-actions">
       {canSuspend ? <button disabled={busy} className={status === "active" ? "danger" : "success"} onClick={() => update({ status: status === "active" ? "suspended" : "active" })}>{status === "active" ? "Suspend pilot" : "Reactivate pilot"}</button> : null}
-      {canEdit ? (
+      {canEdit ? <>
         <label className="staff-pilot-rank-control">
           <span>Pilot rank</span>
           <select disabled={busy} value={selectedRank} onChange={(event) => setSelectedRank(event.target.value)}>
@@ -48,7 +50,12 @@ export function PilotActions({ pilotId, status, canEdit, canSuspend, rankOverrid
           </select>
           <button disabled={busy || selectedRank === (rankOverride ?? "automatic")} onClick={() => update({ rankOverride: selectedRank === "automatic" ? null : selectedRank })}>Save rank</button>
         </label>
-      ) : null}
+        <fieldset className="staff-pilot-ratings">
+          <legend>Long-haul type ratings</legend>
+          {PILOT_TYPE_RATINGS.map((rating) => <label key={rating.id}><input type="checkbox" disabled={busy} checked={selectedRatings.includes(rating.id)} onChange={(event) => setSelectedRatings((current) => event.target.checked ? [...current, rating.id] : current.filter((item) => item !== rating.id))} />{rating.aircraftLabel}</label>)}
+          <button type="button" disabled={busy || selectedRatings.join(",") === typeRatings.join(",")} onClick={() => update({ typeRatings: selectedRatings })}>Save type ratings</button>
+        </fieldset>
+      </> : null}
       {message ? <small>{message}</small> : null}
     </div>
   );

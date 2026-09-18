@@ -2,7 +2,7 @@ import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { automaticPilotRank, isPilotRank, type PilotRank } from "@/lib/pilot-ranks";
+import { automaticPilotRank, isPilotRank, normalizePilotTypeRatings, type PilotRank, type PilotTypeRating } from "@/lib/pilot-ranks";
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 import { normalizeBavHub } from "@/lib/hubs";
 import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
@@ -56,6 +56,8 @@ export type PilotAccount = {
   lastLoginAt: string | null;
   rank: PilotRank;
   rankOverride: PilotRank | null;
+  /** Staff-approved long-haul aircraft family qualifications. */
+  typeRatings: PilotTypeRating[];
   hub: string;
   tier: string;
   points: number;
@@ -116,6 +118,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     lastLoginAt: raw.lastLoginAt ?? null,
     rank,
     rankOverride,
+    typeRatings: normalizePilotTypeRatings(raw.typeRatings),
     hub: normalizeBavHub(raw.hub),
     tier: raw.tier ?? "Blue",
     points: Number(raw.points) || 0,
@@ -285,7 +288,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const account: PilotAccount = {
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
     authVersion: 1,
-    createdAt: now, lastLoginAt: now, rank: "Second Officer", rankOverride: null, hub: normalizeBavHub(input.hub), tier: "Blue",
+    createdAt: now, lastLoginAt: now, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub(input.hub), tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
@@ -546,7 +549,7 @@ export async function setPilotStatus(id: string, status: PilotAccount["status"])
   return toPublicPilot(account);
 }
 
-export async function updatePilotAdminFields(id: string, input: { rankOverride?: PilotRank | null; hub?: string; tier?: string }) {
+export async function updatePilotAdminFields(id: string, input: { rankOverride?: PilotRank | null; typeRatings?: PilotTypeRating[]; hub?: string; tier?: string }) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === id);
   if (!account) throw new Error("Pilot account not found.");
@@ -554,6 +557,7 @@ export async function updatePilotAdminFields(id: string, input: { rankOverride?:
     account.rankOverride = input.rankOverride;
     account.rank = input.rankOverride ?? automaticPilotRank(account.hours);
   }
+  if (input.typeRatings !== undefined) account.typeRatings = normalizePilotTypeRatings(input.typeRatings);
   if (input.hub) account.hub = normalizeBavHub(input.hub);
   if (input.tier) account.tier = input.tier.trim().slice(0, 30);
   await writeState(state);

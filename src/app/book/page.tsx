@@ -6,6 +6,8 @@ import { getTomorrowIsoDate } from "@/lib/serverDate";
 import { getFlightsForAircraft, getFlightsForRoute, getFlightsFromHub } from "@/lib/route-store";
 import { getBavHub } from "@/lib/hubs";
 import { airportByCode } from "@/data/airports";
+import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
+import { getPilotById } from "@/lib/pilot-store";
 import { bookFlight } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +32,9 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
     : hub ? await getFlightsFromHub(hub.code, date)
     : from === to ? [] : await getFlightsForRoute(from, to, date);
   const pilotSession = await getPilotSession();
+  const pilot = pilotSession ? await getPilotById(pilotSession.pilotId) : null;
   const unavailable = params.error === "unavailable";
+  const qualificationError = params.error === "qualification";
 
   return (
     <>
@@ -49,24 +53,26 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             <Link className="button button-outline" href="/#flight-search">Edit search</Link>
           </section>
           {unavailable ? <div className="integration-note"><strong>Flight no longer available:</strong> the selected BAV assignment may have filled or been disabled by Operations. Choose another available service.</div> : null}
+          {qualificationError ? <div className="integration-note"><strong>Qualification required:</strong> this service is outside your current rank or type-rating approval. Review your pilot profile or contact Operations after meeting the required criteria.</div> : null}
           <div className="booking-results-heading">
             <h2>{aircraft ? `Current routes for ${aircraft}` : hub ? `Available departures from ${hub.code}` : "Available virtual flights"}</h2>
             <p>{flights.length} BAV scheduled service{flights.length === 1 ? "" : "s"} found.</p>
           </div>
           <div className="flight-results">
-            {flights.length ? flights.map((flight) => (
-              <article className="result-flight card" key={flight.routeId}>
+            {flights.length ? flights.map((flight) => {
+              const eligibility = pilot ? getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: flight.aircraft }) : null;
+              return <article className="result-flight card" key={flight.routeId}>
                 <div className="result-times"><div><strong>{flight.departure}</strong><span>{flight.from}</span></div><div className="result-line"><span>{flight.duration}</span><i /></div><div><strong>{flight.arrival}</strong><span>{flight.to}</span></div></div>
                 <div className="result-meta"><strong>{flight.number} · British Airways Virtual</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{flight.aircraft} · Non-stop virtual service</span></div>
                 <div className="result-availability"><strong>{flight.slots > 0 ? "● Available" : "● Full"}</strong><span>{flight.slots} of {flight.capacity} pilot slots open</span></div>
-                {pilotSession ? (
-                  flight.slots > 0 ? <form action={bookFlight}>
+                {pilotSession && pilot ? (
+                  flight.slots > 0 && eligibility?.eligible ? <form action={bookFlight}>
                     <input type="hidden" name="from" value={flight.from} /><input type="hidden" name="to" value={flight.to} /><input type="hidden" name="date" value={date} /><input type="hidden" name="flightNumber" value={flight.number} /><input type="hidden" name="routeId" value={flight.routeId} />
                     <button className="button button-primary" type="submit">Select flight</button>
-                  </form> : <button className="button button-primary" type="button" disabled>Flight full</button>
+                  </form> : eligibility && !eligibility.eligible ? <div className="pilot-qualification-lock"><button className="button button-primary" type="button" disabled>Qualification required</button><span>{eligibility.reason}</span></div> : <button className="button button-primary" type="button" disabled>Flight full</button>
                 ) : <Link className="button button-primary" href="/login">Log in to book</Link>}
-              </article>
-            )) : <div className="empty-state card"><h2>{aircraft ? "No current routes published for this airframe" : "No BAV schedule published"}</h2><p>{aircraft ? `Operations has not published an active BAV service using ${aircraft} for this date.` : hub ? `There is currently no active British Airways Virtual service departing ${hub.name}. Staff can add or enable services in the Staff Centre.` : "There is currently no active British Airways Virtual service for this city pair. Staff can add or enable services in the Staff Centre."}</p><Link className="button button-primary" href="/">Return to flight search</Link></div>}
+              </article>;
+            }) : <div className="empty-state card"><h2>{aircraft ? "No current routes published for this airframe" : "No BAV schedule published"}</h2><p>{aircraft ? `Operations has not published an active BAV service using ${aircraft} for this date.` : hub ? `There is currently no active British Airways Virtual service departing ${hub.name}. Staff can add or enable services in the Staff Centre.` : "There is currently no active British Airways Virtual service for this city pair. Staff can add or enable services in the Staff Centre."}</p><Link className="button button-primary" href="/">Return to flight search</Link></div>}
           </div>
           <div className="integration-note"><strong>In-house BAV schedule:</strong> route availability comes from the staff-managed BAV schedule and live assignment capacity. After choosing a flight, reserve a dispatchable aircraft registration in Ember Fleet Management so its hours, cycles and logbook are credited to that airframe.</div>
         </div>

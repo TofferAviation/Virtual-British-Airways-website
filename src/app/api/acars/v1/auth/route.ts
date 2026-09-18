@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const deviceSession = body?.rememberDevice === true ? await createAcarsDeviceSession(account.id) : null;
   return NextResponse.json({
     token: createAcarsToken(account, deviceSession?.id),
-    pilot: { id: account.id, pilotNumber: account.pilotNumber, name: account.name, email: account.email, profileImage: account.profileImage },
+    pilot: { id: account.id, pilotNumber: account.pilotNumber, name: account.name, email: account.email, profileImage: account.profileImage, rank: account.rank, typeRatings: account.typeRatings },
     ...(deviceSession ? { deviceSessionToken: deviceSession.token } : {}),
     expiresInSeconds: ACARS_TOKEN_TTL_SECONDS,
   });

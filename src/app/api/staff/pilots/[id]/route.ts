@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireStaffPermission } from "@/lib/staff-auth";
-import { isPilotRank } from "@/lib/pilot-ranks";
+import { isPilotRank, normalizePilotTypeRatings } from "@/lib/pilot-ranks";
 import { setPilotStatus, updatePilotAdminFields } from "@/lib/pilot-store";
 
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const body = await request.json() as { status?: "active" | "suspended"; rankOverride?: string | null; hub?: string; tier?: string };
+    const body = await request.json() as { status?: "active" | "suspended"; rankOverride?: string | null; typeRatings?: unknown; hub?: string; tier?: string };
     const { id } = await context.params;
 
     if (body.status) {
@@ -24,7 +24,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       rankOverride = body.rankOverride;
     }
 
-    const pilot = await updatePilotAdminFields(id, { rankOverride, hub: body.hub, tier: body.tier });
+    const typeRatings = body.typeRatings === undefined ? undefined : normalizePilotTypeRatings(body.typeRatings);
+    const pilot = await updatePilotAdminFields(id, { rankOverride, typeRatings, hub: body.hub, tier: body.tier });
     return NextResponse.json({ ok: true, pilot });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update pilot.";
