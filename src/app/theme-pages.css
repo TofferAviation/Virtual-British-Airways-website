@@ -131,6 +131,30 @@ html[data-theme="dark"] .flight-history-head,
 html[data-theme="dark"] .flight-history-row,
 html[data-theme="dark"] .profile-list div{border-color:#26394f!important}
 
+/* Booking results use several compact span/strong elements, which do not
+   inherit the general dark-mode paragraph rules. Keep every operational
+   detail readable instead of leaving the original navy text on dark cards. */
+html[data-theme="dark"] .booking-step{color:#b9c8d9!important}
+html[data-theme="dark"] .booking-step.active{color:#f4f7fb!important}
+html[data-theme="dark"] .booking-step span{border-color:#6c8199!important;color:#d8e5f3!important}
+html[data-theme="dark"] .section-kicker{color:#83c3ff!important}
+html[data-theme="dark"] .result-times>div:not(.result-line) strong,
+html[data-theme="dark"] .result-meta strong{color:#f4f7fb!important}
+html[data-theme="dark"] .result-times>div:not(.result-line) span{color:#dbe7f3!important}
+html[data-theme="dark"] .result-line,
+html[data-theme="dark"] .result-meta span,
+html[data-theme="dark"] .result-availability span{color:#bac9da!important}
+html[data-theme="dark"] .result-line i{background:#6d8298!important}
+html[data-theme="dark"] .result-availability strong{color:#55d79a!important}
+html[data-theme="dark"] .booking-results-heading p{color:#bac9da!important}
+html[data-theme="dark"] .page-shell .button-outline{
+  background:#10233a!important;
+  border-color:#5a95cb!important;
+  color:#9bceff!important;
+}
+html[data-theme="dark"] .page-shell .button-outline:hover,
+html[data-theme="dark"] .page-shell .button-outline:focus-visible{background:#173452!important;color:#fff!important}
+
 /* Pilot login / account */
 html[data-theme="dark"] .login-main{background-color:var(--bav-dark-bg)!important}
 html[data-theme="dark"] .login-copy-block h1,
