@@ -5,6 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { automaticPilotRank, isPilotRank, type PilotRank } from "@/lib/pilot-ranks";
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 import { normalizeBavHub } from "@/lib/hubs";
+import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
@@ -71,6 +72,9 @@ export type PilotAccount = {
   simbriefPilotId: string | null;
   /** Compact, user-selected account avatar stored as a data URL. */
   profileImage: string | null;
+  /** Explicit consent captured when a pilot creates their BAV account. */
+  pilotRulesAcceptedAt: string | null;
+  pilotRulesVersion: string | null;
 };
 
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
@@ -126,6 +130,8 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     streak: Number(raw.streak) || 0,
     simbriefPilotId: normalizeSimbriefPilotId(raw.simbriefPilotId),
     profileImage: normaliseStoredProfileImage(raw.profileImage),
+    pilotRulesAcceptedAt: typeof raw.pilotRulesAcceptedAt === "string" ? raw.pilotRulesAcceptedAt : null,
+    pilotRulesVersion: typeof raw.pilotRulesVersion === "string" ? raw.pilotRulesVersion : null,
   };
 }
 
@@ -262,13 +268,14 @@ export function verifyPilotPassword(password: string, stored: string) {
   }
 }
 
-export async function registerPilot(input: { name: string; email: string; password: string; hub?: string }) {
+export async function registerPilot(input: { name: string; email: string; password: string; hub?: string; acceptPilotRules?: boolean }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   const password = input.password;
   if (name.length < 2) throw new Error("Please enter your full name.");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Please enter a valid email address.");
   if (password.length < 8) throw new Error("Password must contain at least 8 characters.");
+  if (input.acceptPilotRules !== true) throw new Error("You must accept the BAV Pilot Rules before creating an account.");
 
   const state = await readState();
   if (state.pilots.some((pilot) => pilot.email === email)) throw new Error("An account already exists for that email address.");
@@ -283,6 +290,8 @@ export async function registerPilot(input: { name: string; email: string; passwo
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
     profileImage: null,
+    pilotRulesAcceptedAt: now,
+    pilotRulesVersion: PILOT_RULES_VERSION,
   };
   state.nextPilotNumber += 1;
   state.pilots.push(account);

@@ -7,6 +7,7 @@ import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 import { BAV_HUBS } from "@/lib/hubs";
 import styles from "./ember-download.module.css";
 import hubStyles from "./hub-picker.module.css";
+import rulesStyles from "./pilot-rules.module.css";
 
 async function patchProfile(payload: Record<string, string | null>) {
   const response = await fetch("/api/pilot/profile", {
@@ -20,7 +21,7 @@ async function patchProfile(payload: Record<string, string | null>) {
   return body;
 }
 
-export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null }) {
+export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage, pilotRulesAcceptedAt, pilotRulesVersion }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -140,6 +141,19 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
         <div className={styles.access}><strong>Included with your pilot account</strong><span>Your secure Windows download will be provided here when the installer is released.</span></div>
         <button type="button" className={styles.downloadButton} disabled aria-describedby="ember-download-note">Download Ember ACARS — coming soon</button>
         <p id="ember-download-note" className={styles.note}>No installer is available yet. This button will become your official Ember download link.</p>
+      </article>
+
+      <article className={`pilot-profile-card ${rulesStyles.card}`}>
+        <div>
+          <span className="pilot-profile-kicker">PILOT MEMBERSHIP</span>
+          <h2>Pilot Rules</h2>
+          <p>The operational standards for BAV bookings, Ember, registrations, flight reporting and community conduct.</p>
+        </div>
+        <div className={`${rulesStyles.status}${pilotRulesAcceptedAt ? "" : ` ${rulesStyles.statusPending}`}`}>
+          <strong>{pilotRulesAcceptedAt ? "Accepted" : "Existing pilot account"}</strong>
+          <span>{pilotRulesAcceptedAt ? `Accepted ${new Date(pilotRulesAcceptedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}${pilotRulesVersion ? ` · Rules version ${pilotRulesVersion}` : ""}` : "New pilot accounts must accept the current Pilot Rules during registration."}</span>
+        </div>
+        <a className={rulesStyles.link} href="/pilot-rules">Read BAV Pilot Rules &amp; Operational Standards →</a>
       </article>
     </div>
   );

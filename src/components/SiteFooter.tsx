@@ -28,6 +28,7 @@ export async function SiteFooter() {
           <Link href={isLoggedIn ? "/account" : "/login"}>{isLoggedIn ? "Pilot account" : "Pilot login"}</Link>
           <Link href="/account">Account</Link>
           <Link href="/account">Membership</Link>
+          <Link href="/pilot-rules">Pilot Rules</Link>
         </div>
         <div>
           <h3>Support</h3>

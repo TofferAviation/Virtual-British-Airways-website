@@ -11,6 +11,7 @@ export function PilotRegisterForm() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [hub, setHub] = useState<BavHubCode>("LHR");
+  const [acceptPilotRules, setAcceptPilotRules] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -28,7 +29,7 @@ export function PilotRegisterForm() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         cache: "no-store",
-        body: JSON.stringify({ name, email, password, hub }),
+        body: JSON.stringify({ name, email, password, hub, acceptPilotRules }),
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
@@ -50,6 +51,7 @@ export function PilotRegisterForm() {
       <label><span>Home hub</span><select className={hubStyles.select} value={hub} onChange={(event) => setHub(event.target.value as BavHubCode)} disabled={busy}>{BAV_HUBS.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code}) — {item.role}</option>)}</select></label>
       <label><span>Password</span><input type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
       <label><span>Confirm password</span><input type="password" autoComplete="new-password" minLength={8} value={confirm} onChange={(event) => setConfirm(event.target.value)} required disabled={busy} /></label>
+      <label className="pilot-auth-rules"><input type="checkbox" checked={acceptPilotRules} onChange={(event) => setAcceptPilotRules(event.target.checked)} required disabled={busy} /><span>I have read and agree to the <Link href="/pilot-rules" target="_blank">BAV Pilot Rules &amp; Operational Standards</Link>.</span></label>
       {error ? <p className="pilot-auth-error" role="alert">{error}</p> : null}
       <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Creating account…" : "Create pilot account"}</button>
       <p className="pilot-auth-switch">Already have an account? <Link href="/login">Sign in</Link></p>
