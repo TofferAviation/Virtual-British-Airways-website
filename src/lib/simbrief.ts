@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PilotBooking, SimbriefBriefing } from "@/lib/pilot-operations-store";
+import type { PilotBooking, SimbriefBriefing, SimbriefRoutePoint } from "@/lib/pilot-operations-store";
 import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
 
 const airportIcao: Record<string, string> = {
@@ -149,6 +149,32 @@ function timestampValue(value: string | null) {
   return Number.isSafeInteger(timestamp) ? new Date(timestamp * 1000).toISOString() : value;
 }
 
+function numberPick(value: unknown) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function recordValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as SimbriefPayload : null;
+}
+
+/** SimBrief returns navlog fixes as either one object or an array, depending on the route. */
+function extractRoutePoints(payload: SimbriefPayload): SimbriefRoutePoint[] {
+  const navlog = recordValue(payload.navlog);
+  const rawFixes = navlog?.fix ?? navlog?.fixes ?? navlog?.waypoint ?? navlog?.waypoints;
+  const fixes = Array.isArray(rawFixes) ? rawFixes : rawFixes ? [rawFixes] : [];
+  const points = fixes.flatMap((entry) => {
+    const record = recordValue(entry);
+    if (!record) return [];
+    const latitude = numberPick(record.pos_lat ?? record.latitude ?? record.lat);
+    const longitude = numberPick(record.pos_long ?? record.longitude ?? record.lon);
+    if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return [];
+    const name = pickFirst(record, [["ident"], ["name"], ["via"]]) ?? "Route point";
+    return [{ name, latitude, longitude }];
+  });
+  return points.slice(0, 160);
+}
+
 export type SimbriefPlanDetails = { ofpId: string | null; ofpUrl: string | null; route: string | null; cruiseAltitude: string | null; alternate: string | null; generatedAt: string | null; origin: string | null; destination: string | null; briefing: SimbriefBriefing };
 
 export function extractSimbriefPlan(payload: SimbriefPayload): SimbriefPlanDetails {
@@ -173,9 +199,13 @@ export function extractSimbriefPlan(payload: SimbriefPayload): SimbriefPlanDetai
       aircraftIcao: pickFirst(payload, [["aircraft", "icaocode"], ["aircraft", "icao_code"], ["general", "icao_aircraft"]]),
       airac: pickFirst(payload, [["general", "airac"], ["params", "airac"]]),
       originName: pick(payload, ["origin", "name"]),
+      originLatitude: numberPick((payload.origin as SimbriefPayload | undefined)?.pos_lat ?? (payload.origin as SimbriefPayload | undefined)?.latitude),
+      originLongitude: numberPick((payload.origin as SimbriefPayload | undefined)?.pos_long ?? (payload.origin as SimbriefPayload | undefined)?.longitude),
       originRunway: pickFirst(payload, [["origin", "plan_rwy"], ["origin", "runway"]]),
       originMetar: pick(payload, ["origin", "metar"]),
       destinationName: pick(payload, ["destination", "name"]),
+      destinationLatitude: numberPick((payload.destination as SimbriefPayload | undefined)?.pos_lat ?? (payload.destination as SimbriefPayload | undefined)?.latitude),
+      destinationLongitude: numberPick((payload.destination as SimbriefPayload | undefined)?.pos_long ?? (payload.destination as SimbriefPayload | undefined)?.longitude),
       destinationRunway: pickFirst(payload, [["destination", "plan_rwy"], ["destination", "runway"]]),
       destinationMetar: pick(payload, ["destination", "metar"]),
       alternateName: pick(payload, ["alternate", "name"]),
@@ -197,6 +227,7 @@ export function extractSimbriefPlan(payload: SimbriefPayload): SimbriefPlanDetai
       reserveFuel: pick(payload, ["fuel", "reserve"]),
       extraFuel: pick(payload, ["fuel", "extra"]),
       blockFuel: pickFirst(payload, [["fuel", "plan_ramp"], ["fuel", "ramp"], ["fuel", "block"]]),
+      routePoints: extractRoutePoints(payload),
     },
   };
 }

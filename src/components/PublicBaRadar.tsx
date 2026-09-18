@@ -46,7 +46,7 @@ export type RadarLayers = {
 const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string }> = [
   { key: "vatsim", label: "VATSIM ATC", detail: "Live controller and ATIS positions" },
   { key: "precipitation", label: "Precipitation", detail: "Latest available weather radar" },
-  { key: "winds", label: "Surface winds", detail: "Global modelled wind field" },
+  { key: "winds", label: "Surface winds", detail: "Map context only — use the OFP briefing for planning" },
   { key: "advisories", label: "Aviation hazards", detail: "SIGMET advisories, including turbulence where issued" },
 ];
 

@@ -58,6 +58,12 @@ export type PilotBooking = {
 };
 
 /** A compact operational briefing copied from a generated SimBrief OFP. */
+export type SimbriefRoutePoint = {
+  name: string;
+  latitude: number;
+  longitude: number;
+};
+
 export type SimbriefBriefing = {
   airline: string | null;
   flightNumber: string | null;
@@ -66,9 +72,13 @@ export type SimbriefBriefing = {
   aircraftIcao: string | null;
   airac: string | null;
   originName: string | null;
+  originLatitude: number | null;
+  originLongitude: number | null;
   originRunway: string | null;
   originMetar: string | null;
   destinationName: string | null;
+  destinationLatitude: number | null;
+  destinationLongitude: number | null;
   destinationRunway: string | null;
   destinationMetar: string | null;
   alternateName: string | null;
@@ -90,6 +100,8 @@ export type SimbriefBriefing = {
   reserveFuel: string | null;
   extraFuel: string | null;
   blockFuel: string | null;
+  /** A compact copy of the SimBrief navlog geometry, used only for BAV route-weather sampling. */
+  routePoints: SimbriefRoutePoint[];
 };
 
 export type PilotFlightPlan = {

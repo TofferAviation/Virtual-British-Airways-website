@@ -1,4 +1,5 @@
 import type { SimbriefBriefing } from "@/lib/pilot-operations-store";
+import { RouteWindBriefing } from "./RouteWindBriefing";
 
 type Detail = { label: string; value: string | null };
 
@@ -28,12 +29,17 @@ function formatKg(value: string | null) {
   return Number.isFinite(amount) ? `${amount.toLocaleString("en-GB")} kg` : value;
 }
 
-export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate, ofpUrl }: {
+export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate, ofpUrl, originIcao, destinationIcao, date, departure, duration }: {
   briefing: SimbriefBriefing;
   route: string | null;
   cruiseAltitude: string | null;
   alternate: string | null;
   ofpUrl: string | null;
+  originIcao: string | null;
+  destinationIcao: string | null;
+  date: string;
+  departure: string;
+  duration: string;
 }) {
   const title = [briefing.airline, briefing.flightNumber].filter(Boolean).join(" ") || "SimBrief operational briefing";
 
@@ -62,6 +68,7 @@ export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate,
       ]} /></section>
     </div>
     <div className="briefing-weather"><section><h3>Departure weather</h3><p><strong>{briefing.originName ?? "Departure airport"}</strong>{briefing.originRunway ? ` · planned runway ${briefing.originRunway}` : ""}</p><code>{briefing.originMetar ?? "Weather was not included in this OFP."}</code></section><section><h3>Arrival weather</h3><p><strong>{briefing.destinationName ?? "Arrival airport"}</strong>{briefing.destinationRunway ? ` · planned runway ${briefing.destinationRunway}` : ""}</p><code>{briefing.destinationMetar ?? "Weather was not included in this OFP."}</code></section>{briefing.alternateName || briefing.alternateMetar ? <section><h3>Alternate weather</h3><p><strong>{briefing.alternateName ?? "Alternate airport"}</strong></p><code>{briefing.alternateMetar ?? "Weather was not included in this OFP."}</code></section> : null}</div>
+    <RouteWindBriefing briefing={briefing} originIcao={originIcao} destinationIcao={destinationIcao} cruiseAltitude={cruiseAltitude} date={date} departure={departure} duration={duration} />
     {ofpUrl ? <details className="briefing-document"><summary>View the complete OFP without leaving BAV</summary><iframe title="Complete SimBrief operational flight plan" src={ofpUrl} loading="lazy" /><p>If the embedded document is unavailable in your browser, <a className="ops-inline-link" href={ofpUrl} target="_blank" rel="noreferrer">open the OFP in a new tab ↗</a>.</p></details> : null}
   </section>;
 }
