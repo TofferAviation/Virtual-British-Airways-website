@@ -3,8 +3,9 @@
 import L from "leaflet";
 import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { useState } from "react";
-import type { ConvectiveRiskPoint, RadarWeatherData, VatsimStation, WindVector } from "@/lib/radar-external";
+import type { RadarWeatherData, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, RadarLayers } from "@/components/PublicBaRadar";
+import { BaRadarWeatherOverlay } from "@/components/BaRadarWeatherOverlay";
 
 type Position = [number, number];
 
@@ -29,26 +30,6 @@ function controllerIcon(controller: VatsimStation, selected: boolean) {
     html: `<span class="ba-radar-vatsim-icon ${isAtis ? "atis" : "controller"} ${selected ? "selected" : ""}" title="${escapeHtml(`${controller.callsign} · ${controller.frequency}`)}"><b>${isAtis ? "ATIS" : escapeHtml(controller.facility)}</b></span>`,
     iconSize: [34, 22],
     iconAnchor: [17, 11],
-  });
-}
-
-function windIcon(wind: WindVector) {
-  const direction = Math.round((wind.directionDeg + 180) % 360);
-  return L.divIcon({
-    className: "ba-radar-wind-icon-shell",
-    html: `<span class="ba-radar-wind-icon" title="Wind ${Math.round(wind.directionDeg)}° at ${Math.round(wind.speedKt)} kt"><b style="transform:rotate(${direction}deg)">➤</b><em>${Math.round(wind.speedKt)}</em></span>`,
-    iconSize: [32, 31],
-    iconAnchor: [16, 15],
-  });
-}
-
-function convectiveRiskIcon(point: ConvectiveRiskPoint) {
-  const severity = point.capeJkg >= 2_000 ? "severe" : point.capeJkg >= 1_000 ? "high" : "moderate";
-  return L.divIcon({
-    className: "ba-radar-convection-icon-shell",
-    html: `<span class="ba-radar-convection-icon ${severity}" title="Modelled convective risk: ${Math.round(point.capeJkg).toLocaleString()} J/kg CAPE. This is not a live lightning observation.">⚡</span>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
   });
 }
 
@@ -84,9 +65,6 @@ function MapLayers({
     if (view.zoom < 3) return isUkPriorityController(controller);
     return view.bounds.pad(0.2).contains([controller.latitude, controller.longitude]);
   });
-  const winds = (weather?.winds ?? []).filter((wind) => view.bounds.pad(0.1).contains([wind.latitude, wind.longitude]));
-  const convectiveRisk = (weather?.convectiveRisk ?? []).filter((point) => view.bounds.pad(0.1).contains([point.latitude, point.longitude]));
-
   return <>
     {layers.precipitation && weather?.precipitation ? <TileLayer
       url={weather.precipitation.tileUrl}
@@ -99,8 +77,7 @@ function MapLayers({
       data={weather.advisories as never}
       style={{ color: "#ff9f43", weight: 2, fillColor: "#e45454", fillOpacity: 0.2 }}
     /> : null}
-    {layers.winds ? winds.map((wind) => <Marker key={`${wind.latitude}:${wind.longitude}`} position={[wind.latitude, wind.longitude]} icon={windIcon(wind)} interactive={false} />) : null}
-    {layers.convection ? convectiveRisk.map((point) => <Marker key={`${point.latitude}:${point.longitude}`} position={[point.latitude, point.longitude]} icon={convectiveRiskIcon(point)} interactive={false} />) : null}
+    <BaRadarWeatherOverlay winds={weather?.winds ?? []} convectiveRisk={weather?.convectiveRisk ?? []} showWinds={layers.winds} showConvectiveOutlook={layers.convection} />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
 }

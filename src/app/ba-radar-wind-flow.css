@@ -1,0 +1,15 @@
+.ba-radar-convective-outlook,
+.ba-radar-wind-flow {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.ba-radar-convective-outlook {
+  opacity: 0.96;
+}
+
+.ba-radar-wind-flow {
+  opacity: 0.92;
+}

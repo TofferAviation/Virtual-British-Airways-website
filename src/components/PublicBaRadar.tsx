@@ -47,8 +47,8 @@ export type RadarLayers = {
 const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string }> = [
   { key: "vatsim", label: "VATSIM ATC", detail: "Live controller and ATIS positions" },
   { key: "precipitation", label: "Precipitation", detail: "Latest available weather radar" },
-  { key: "winds", label: "Wind field", detail: "Select surface or cruise-level model wind" },
-  { key: "convection", label: "Convective risk", detail: "Modelled instability — not live lightning observations" },
+  { key: "winds", label: "Animated wind", detail: "Animated model wind at the selected altitude" },
+  { key: "convection", label: "Convective outlook", detail: "Modelled atmospheric instability — not live lightning observations" },
   { key: "advisories", label: "Aviation hazards", detail: "SIGMET advisories, including turbulence where issued" },
 ];
 
@@ -180,7 +180,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
             <strong>Map layers</strong>
             {layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
             {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{RADAR_WIND_LAYERS.find((entry) => entry.id === windLayer)?.sourceLabel}</small></label> : null}
-            {layers.convection ? <p className="ba-radar-layer-note">Modelled instability only — not a live lightning feed.</p> : null}
+            {layers.convection ? <p className="ba-radar-layer-note">Modelled instability only — actual lightning needs a dedicated strike-data provider.</p> : null}
           </div>
           <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
           {!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}
