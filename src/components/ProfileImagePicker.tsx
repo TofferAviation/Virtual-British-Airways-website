@@ -107,10 +107,12 @@ export function ProfileImagePicker({ value, name, onChange }: Props) {
     <span className={styles.preview} aria-label="Profile photo preview">
       {value ? <img src={value} alt="" /> : <span>{initials(name)}</span>}
     </span>
-    <span className={styles.copy}><strong>Profile photo</strong><small>Square-cropped and stored privately with your BAV account.</small></span>
-    <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} hidden />
-    <button type="button" className={styles.choose} onClick={() => inputRef.current?.click()} disabled={busy}>{busy ? "Preparing…" : value ? "Change photo" : "Choose photo"}</button>
-    {value ? <button type="button" className={styles.remove} onClick={removeImage} disabled={busy}>Remove</button> : null}
+    <span className={styles.copy}><strong>Profile photo</strong><small>Choose a JPG, PNG or WebP image. It is square-cropped and stored privately with your BAV account.</small></span>
+    <input className={styles.input} ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} hidden />
+    <span className={styles.actions}>
+      <button type="button" className={styles.choose} onClick={() => inputRef.current?.click()} disabled={busy}>{busy ? "Preparing…" : value ? "Change photo" : "Choose photo"}</button>
+      {value ? <button type="button" className={styles.remove} onClick={removeImage} disabled={busy}>Remove</button> : null}
+    </span>
     {message ? <span className={styles.message} role="status">{message}</span> : null}
   </div>;
 }
