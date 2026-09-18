@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import type { RadarWeatherData, VatsimRadarData, VatsimStation } from "@/lib/radar-external";
+import { RADAR_WIND_LAYERS, type RadarWeatherData, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
   ssr: false,
@@ -40,13 +40,15 @@ export type RadarLayers = {
   vatsim: boolean;
   precipitation: boolean;
   winds: boolean;
+  convection: boolean;
   advisories: boolean;
 };
 
 const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string }> = [
   { key: "vatsim", label: "VATSIM ATC", detail: "Live controller and ATIS positions" },
   { key: "precipitation", label: "Precipitation", detail: "Latest available weather radar" },
-  { key: "winds", label: "Surface winds", detail: "Map context only — use the OFP briefing for planning" },
+  { key: "winds", label: "Wind field", detail: "Select surface or cruise-level model wind" },
+  { key: "convection", label: "Convective risk", detail: "Modelled instability — not live lightning observations" },
   { key: "advisories", label: "Aviation hazards", detail: "SIGMET advisories, including turbulence where issued" },
 ];
 
@@ -78,8 +80,9 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [filter, setFilter] = useState<FlightFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
-  const [checkedAt, setCheckedAt] = useState(new Date());
-  const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, advisories: false });
+  const [checkedAt, setCheckedAt] = useState(() => new Date(0));
+  const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, convection: false, advisories: false });
+  const [windLayer, setWindLayer] = useState<RadarWindLayerId>("surface");
   const [vatsim, setVatsim] = useState<VatsimRadarData | null>(null);
   const [weather, setWeather] = useState<RadarWeatherData | null>(null);
   const [selectedController, setSelectedController] = useState("");
@@ -99,6 +102,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
         // Preserve the last verified public view if a refresh is interrupted.
       }
     };
+    void refresh();
     const interval = window.setInterval(refresh, 15_000);
     return () => { mounted = false; window.clearInterval(interval); };
   }, []);
@@ -121,13 +125,13 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     return () => { mounted = false; window.clearInterval(interval); };
   }, [layers.vatsim]);
 
-  const needsWeather = layers.precipitation || layers.winds || layers.advisories;
+  const needsWeather = layers.precipitation || layers.winds || layers.convection || layers.advisories;
   useEffect(() => {
     if (!needsWeather) return;
     let mounted = true;
     const refresh = async () => {
       try {
-        const response = await fetch("/api/radar/weather", { cache: "no-store" });
+        const response = await fetch(`/api/radar/weather?windLayer=${encodeURIComponent(windLayer)}`, { cache: "no-store" });
         if (!response.ok) return;
         const payload = await response.json() as RadarWeatherData;
         if (mounted) setWeather(payload);
@@ -138,7 +142,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     void refresh();
     const interval = window.setInterval(refresh, 5 * 60_000);
     return () => { mounted = false; window.clearInterval(interval); };
-  }, [needsWeather]);
+  }, [needsWeather, windLayer]);
 
   const visibleFlights = useMemo(() => flights.filter((flight) => {
     if (filter !== "all" && (!flight.lastSnapshot || (filter === "ground" ? !flight.lastSnapshot.onGround : flight.lastSnapshot.onGround))) return false;
@@ -169,7 +173,20 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
         <div className="ba-radar-vatsim-summary"><strong>VATSIM network</strong><span>{layers.vatsim ? vatsim?.available === false ? "Live feed unavailable — BAV tracking remains online." : `${vatsim?.onlineCount ?? 0} controllers currently online` : "ATC layer is switched off."}</span></div>
         <p className="ba-radar-sidebar-note">BA-Radar is a read-only flight-simulation map, not an air traffic control service. Confirm all operational instructions in your pilot client.</p>
       </aside>
-      <div className="ba-radar-map-wrap"><div className="ba-radar-map"><BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} layers={layers} selectedController={selectedController} onSelectController={selectController} /><div className="ba-radar-layer-controls" role="group" aria-label="BA-Radar map layers"><strong>Map layers</strong>{layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}</div><div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>{!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}</div><footer className="ba-radar-map-footer"><span>{positioned.length} BAV positions live</span><span>{airborne} BAV airborne</span><span>{layers.vatsim ? "VATSIM Data" : "BAV telemetry"}{needsWeather ? " · Weather layers active" : ""}</span></footer></div>
+      <div className="ba-radar-map-wrap">
+        <div className="ba-radar-map">
+          <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} layers={layers} selectedController={selectedController} onSelectController={selectController} />
+          <div className="ba-radar-layer-controls" role="group" aria-label="BA-Radar map layers">
+            <strong>Map layers</strong>
+            {layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
+            {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{RADAR_WIND_LAYERS.find((entry) => entry.id === windLayer)?.sourceLabel}</small></label> : null}
+            {layers.convection ? <p className="ba-radar-layer-note">Modelled instability only — not a live lightning feed.</p> : null}
+          </div>
+          <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
+          {!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}
+        </div>
+        <footer className="ba-radar-map-footer"><span>{positioned.length} BAV positions live</span><span>{airborne} BAV airborne</span><span>{layers.vatsim ? "VATSIM Data" : "BAV telemetry"}{needsWeather ? " · Weather layers active" : ""}</span></footer>
+      </div>
     </section>
   </div>;
 }

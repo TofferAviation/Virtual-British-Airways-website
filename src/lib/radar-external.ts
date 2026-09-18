@@ -33,6 +33,30 @@ export type WindVector = {
   gustKt: number | null;
 };
 
+export type RadarWindLayerId = "surface" | "fl180" | "fl240" | "fl300" | "fl340" | "fl390";
+
+export type RadarWindLayer = {
+  id: RadarWindLayerId;
+  label: string;
+  sourceLabel: string;
+  hPa: number | null;
+};
+
+export const RADAR_WIND_LAYERS: RadarWindLayer[] = [
+  { id: "surface", label: "Surface", sourceLabel: "10 m model wind", hPa: null },
+  { id: "fl180", label: "FL180", sourceLabel: "Closest 500 hPa model wind", hPa: 500 },
+  { id: "fl240", label: "FL240", sourceLabel: "Closest 400 hPa model wind", hPa: 400 },
+  { id: "fl300", label: "FL300", sourceLabel: "Closest 300 hPa model wind", hPa: 300 },
+  { id: "fl340", label: "FL340", sourceLabel: "Closest 250 hPa model wind", hPa: 250 },
+  { id: "fl390", label: "FL390", sourceLabel: "Closest 200 hPa model wind", hPa: 200 },
+];
+
+export type ConvectiveRiskPoint = {
+  latitude: number;
+  longitude: number;
+  capeJkg: number;
+};
+
 type GeoPosition = [number, number] | [number, number, number];
 type AdvisoryGeometry =
   | { type: "Polygon"; coordinates: GeoPosition[][] }
@@ -56,6 +80,8 @@ export type AviationAdvisories = {
 export type RadarWeatherData = {
   precipitation: RadarPrecipitation | null;
   winds: WindVector[];
+  windLayer: RadarWindLayer;
+  convectiveRisk: ConvectiveRiskPoint[];
   advisories: AviationAdvisories;
   refreshedAt: string;
 };
@@ -63,11 +89,16 @@ export type RadarWeatherData = {
 type Cached<T> = { value: T; expiresAt: number };
 
 let vatsimCache: Cached<VatsimRadarData> | null = null;
-let weatherCache: Cached<RadarWeatherData> | null = null;
+const weatherCache = new Map<RadarWindLayerId, Cached<RadarWeatherData>>();
 
 const EMPTY_ADVISORIES: AviationAdvisories = { type: "FeatureCollection", features: [] };
-const WIND_LATITUDES = [-60, -40, -20, 0, 20, 40, 60];
-const WIND_LONGITUDES = [-165, -135, -105, -75, -45, -15, 15, 45, 75, 105, 135, 165];
+const WIND_LATITUDES = [-60, -45, -30, -15, 0, 15, 30, 45, 60];
+const WIND_LONGITUDES = [-170, -150, -130, -110, -90, -70, -50, -30, -10, 10, 30, 50, 70, 90, 110, 130, 150, 170];
+const OPEN_METEO_BATCH_SIZE = 54;
+
+export function radarWindLayer(value: string | null | undefined): RadarWindLayer {
+  return RADAR_WIND_LAYERS.find((entry) => entry.id === value) ?? RADAR_WIND_LAYERS[0];
+}
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
@@ -271,26 +302,72 @@ async function getPrecipitation(): Promise<RadarPrecipitation | null> {
   };
 }
 
-async function getWinds(): Promise<WindVector[]> {
-  const locations = WIND_LATITUDES.flatMap((latitude) => WIND_LONGITUDES.map((longitude) => ({ latitude, longitude })));
-  const query = new URLSearchParams({
-    latitude: locations.map((entry) => entry.latitude).join(","),
-    longitude: locations.map((entry) => entry.longitude).join(","),
-    current: "wind_speed_10m,wind_direction_10m,wind_gusts_10m",
-    wind_speed_unit: "kn",
-    timezone: "UTC",
-  });
-  const response = await fetchJson(`https://api.open-meteo.com/v1/forecast?${query.toString()}`);
-  const entries = Array.isArray(response) ? response : [response];
-  return entries.flatMap((entry, index) => {
-    const record = asRecord(entry);
+function nearestHourlyIndex(times: unknown, targetMs: number) {
+  if (!Array.isArray(times) || !times.length) return -1;
+  return times.reduce((closest, value, index) => {
+    if (typeof value !== "string") return closest;
+    const timestamp = Date.parse(`${value}:00Z`);
+    if (!Number.isFinite(timestamp)) return closest;
+    const currentClosest = typeof times[closest] === "string" ? Date.parse(`${times[closest]}:00Z`) : Number.POSITIVE_INFINITY;
+    return Math.abs(timestamp - targetMs) < Math.abs(currentClosest - targetMs) ? index : closest;
+  }, 0);
+}
+
+type GridLocation = { latitude: number; longitude: number };
+type GridEntry = { location: GridLocation; record: JsonRecord | null };
+
+function atmosphericGridLocations(): GridLocation[] {
+  return WIND_LATITUDES.flatMap((latitude) => WIND_LONGITUDES.map((longitude) => ({ latitude, longitude })));
+}
+
+async function getAtmosphericGrid(windLayer: RadarWindLayer): Promise<GridEntry[]> {
+  const locations = atmosphericGridLocations();
+  const batches = Array.from({ length: Math.ceil(locations.length / OPEN_METEO_BATCH_SIZE) }, (_, index) => locations.slice(index * OPEN_METEO_BATCH_SIZE, (index + 1) * OPEN_METEO_BATCH_SIZE));
+  const results = await Promise.allSettled(batches.map(async (batch) => {
+    const query = new URLSearchParams({
+      latitude: batch.map((entry) => entry.latitude).join(","),
+      longitude: batch.map((entry) => entry.longitude).join(","),
+      current: windLayer.hPa === null ? "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cape" : "cape",
+      wind_speed_unit: "kn",
+      timezone: "UTC",
+    });
+    if (windLayer.hPa !== null) {
+      query.set("hourly", `wind_speed_${windLayer.hPa}hPa,wind_direction_${windLayer.hPa}hPa`);
+      query.set("forecast_days", "1");
+    }
+    const response = await fetchJson(`https://api.open-meteo.com/v1/forecast?${query.toString()}`);
+    const entries = Array.isArray(response) ? response : [response];
+    return entries.map((entry, index) => ({ location: batch[index], record: asRecord(entry) })).filter((entry): entry is GridEntry => Boolean(entry.location));
+  }));
+  return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+}
+
+async function getAtmosphericWeather(windLayer: RadarWindLayer): Promise<{ winds: WindVector[]; convectiveRisk: ConvectiveRiskPoint[] }> {
+  const entries = await getAtmosphericGrid(windLayer);
+  const winds = entries.flatMap(({ record, location }) => {
+    if (!record) return [];
     const current = asRecord(record?.current);
-    const speedKt = asNumber(current?.wind_speed_10m);
-    const directionDeg = asNumber(current?.wind_direction_10m);
-    const location = locations[index];
-    if (!location || speedKt === null || directionDeg === null) return [];
-    return [{ latitude: asNumber(record?.latitude) ?? location.latitude, longitude: asNumber(record?.longitude) ?? location.longitude, speedKt, directionDeg, gustKt: asNumber(current?.wind_gusts_10m) }];
+    const hourly = asRecord(record?.hourly);
+    const timeIndex = nearestHourlyIndex(hourly?.time, Date.now());
+    const speedField = windLayer.hPa === null ? "wind_speed_10m" : `wind_speed_${windLayer.hPa}hPa`;
+    const directionField = windLayer.hPa === null ? "wind_direction_10m" : `wind_direction_${windLayer.hPa}hPa`;
+    const speedKt = windLayer.hPa === null
+      ? asNumber(current?.[speedField])
+      : (Array.isArray(hourly?.[speedField]) ? asNumber(hourly[speedField][timeIndex]) : null);
+    const directionDeg = windLayer.hPa === null
+      ? asNumber(current?.[directionField])
+      : (Array.isArray(hourly?.[directionField]) ? asNumber(hourly[directionField][timeIndex]) : null);
+    if (speedKt === null || directionDeg === null) return [];
+    return [{ latitude: asNumber(record?.latitude) ?? location.latitude, longitude: asNumber(record?.longitude) ?? location.longitude, speedKt, directionDeg, gustKt: windLayer.hPa === null ? asNumber(current?.wind_gusts_10m) : null }];
   });
+  const convectiveRisk = entries.flatMap(({ record, location }) => {
+    if (!record) return [];
+    const current = asRecord(record?.current);
+    const capeJkg = asNumber(current?.cape);
+    if (capeJkg === null || capeJkg < 500) return [];
+    return [{ latitude: asNumber(record?.latitude) ?? location.latitude, longitude: asNumber(record?.longitude) ?? location.longitude, capeJkg }];
+  });
+  return { winds, convectiveRisk };
 }
 
 async function getAdvisories() {
@@ -298,19 +375,23 @@ async function getAdvisories() {
   return normaliseAdvisories(source);
 }
 
-async function refreshWeather(): Promise<RadarWeatherData> {
-  const [precipitation, winds, advisories] = await Promise.allSettled([getPrecipitation(), getWinds(), getAdvisories()]);
+async function refreshWeather(windLayer: RadarWindLayer): Promise<RadarWeatherData> {
+  const [precipitation, atmosphericWeather, advisories] = await Promise.allSettled([getPrecipitation(), getAtmosphericWeather(windLayer), getAdvisories()]);
   return {
     precipitation: precipitation.status === "fulfilled" ? precipitation.value : null,
-    winds: winds.status === "fulfilled" ? winds.value : [],
+    winds: atmosphericWeather.status === "fulfilled" ? atmosphericWeather.value.winds : [],
+    windLayer,
+    convectiveRisk: atmosphericWeather.status === "fulfilled" ? atmosphericWeather.value.convectiveRisk : [],
     advisories: advisories.status === "fulfilled" ? advisories.value : EMPTY_ADVISORIES,
     refreshedAt: new Date().toISOString(),
   };
 }
 
-export async function getRadarWeatherData() {
-  if (weatherCache && weatherCache.expiresAt > Date.now()) return weatherCache.value;
-  const value = await refreshWeather();
-  weatherCache = { value, expiresAt: Date.now() + 5 * 60_000 };
+export async function getRadarWeatherData(requestedWindLayer?: string | null) {
+  const windLayer = radarWindLayer(requestedWindLayer);
+  const cached = weatherCache.get(windLayer.id);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const value = await refreshWeather(windLayer);
+  weatherCache.set(windLayer.id, { value, expiresAt: Date.now() + 5 * 60_000 });
   return value;
 }
