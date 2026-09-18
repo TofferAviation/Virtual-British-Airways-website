@@ -31,6 +31,26 @@ const starterSchedule: ManagedRoute[] = [
   { id: "ba197-lhr-iah", from: "LHR", to: "IAH", flightNumber: "BA197", departure: "13:45", arrival: "00:15", duration: "10h 30m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
   { id: "ba11-lhr-sin", from: "LHR", to: "SIN", flightNumber: "BA11", departure: "18:25", arrival: "08:05", duration: "13h 40m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
   { id: "ba55-lhr-jnb", from: "LHR", to: "JNB", flightNumber: "BA55", departure: "18:00", arrival: "05:00", duration: "11h 00m", aircraft: "Boeing 777-300ER", slots: 12, active: true },
+  { id: "ba442-lhr-ams", from: "LHR", to: "AMS", flightNumber: "BA442", departure: "07:05", arrival: "09:20", duration: "1h 15m", aircraft: "Airbus A320neo", slots: 12, active: true },
+  { id: "ba304-lhr-cdg", from: "LHR", to: "CDG", flightNumber: "BA304", departure: "08:15", arrival: "10:35", duration: "1h 20m", aircraft: "Airbus A320", slots: 12, active: true },
+  { id: "ba824-lhr-dub", from: "LHR", to: "DUB", flightNumber: "BA824", departure: "12:20", arrival: "13:45", duration: "1h 25m", aircraft: "Airbus A320neo", slots: 12, active: true },
+  { id: "ba480-lhr-bcn", from: "LHR", to: "BCN", flightNumber: "BA480", departure: "15:10", arrival: "18:25", duration: "2h 15m", aircraft: "Airbus A321neo", slots: 12, active: true },
+
+  // 2026 traffic-informed BAV virtual hub schedule. These are curated BAV
+  // services, not a claim of a live British Airways public timetable.
+  { id: "ba2702-lgw-bcn", from: "LGW", to: "BCN", flightNumber: "BA2702", departure: "06:45", arrival: "10:00", duration: "2h 15m", aircraft: "Airbus A320neo", slots: 12, active: true },
+  { id: "ba2694-lgw-fao", from: "LGW", to: "FAO", flightNumber: "BA2694", departure: "08:05", arrival: "10:50", duration: "2h 45m", aircraft: "Airbus A320", slots: 12, active: true },
+  { id: "ba2260-lgw-dub", from: "LGW", to: "DUB", flightNumber: "BA2260", departure: "10:35", arrival: "12:05", duration: "1h 30m", aircraft: "Airbus A320neo", slots: 12, active: true },
+  { id: "ba2037-lgw-mco", from: "LGW", to: "MCO", flightNumber: "BA2037", departure: "11:40", arrival: "16:25", duration: "9h 45m", aircraft: "Boeing 777-200ER", slots: 12, active: true },
+  { id: "ba2203-lgw-cun", from: "LGW", to: "CUN", flightNumber: "BA2203", departure: "13:15", arrival: "19:25", duration: "10h 10m", aircraft: "Boeing 777-200ER", slots: 12, active: true },
+
+  { id: "ba8450-lcy-ams", from: "LCY", to: "AMS", flightNumber: "BA8450", departure: "06:40", arrival: "08:50", duration: "1h 10m", aircraft: "Embraer E190", slots: 12, active: true },
+  { id: "ba8700-lcy-edi", from: "LCY", to: "EDI", flightNumber: "BA8700", departure: "07:20", arrival: "08:45", duration: "1h 25m", aircraft: "Embraer E190", slots: 12, active: true },
+  { id: "ba8722-lcy-gla", from: "LCY", to: "GLA", flightNumber: "BA8722", departure: "09:10", arrival: "10:40", duration: "1h 30m", aircraft: "Embraer E190", slots: 12, active: true },
+  { id: "ba8456-lcy-dub", from: "LCY", to: "DUB", flightNumber: "BA8456", departure: "11:35", arrival: "13:05", duration: "1h 30m", aircraft: "Embraer E190", slots: 12, active: true },
+  { id: "ba8736-lcy-fra", from: "LCY", to: "FRA", flightNumber: "BA8736", departure: "13:20", arrival: "15:55", duration: "1h 35m", aircraft: "Embraer E190", slots: 12, active: true },
+  { id: "ba8474-lcy-zrh", from: "LCY", to: "ZRH", flightNumber: "BA8474", departure: "16:25", arrival: "19:15", duration: "1h 50m", aircraft: "Embraer E190", slots: 12, active: true },
+  { id: "ba8478-lcy-lin", from: "LCY", to: "LIN", flightNumber: "BA8478", departure: "18:05", arrival: "21:00", duration: "1h 55m", aircraft: "Embraer E190", slots: 12, active: true },
 ];
 
 async function ensureDataDir() {
@@ -116,6 +136,12 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
 
 export async function getFlightsForRoute(from: string, to: string, date?: string) {
   const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to);
+  return withAvailability(managed, date);
+}
+
+/** Lists every active BAV service departing a selected BAV hub. */
+export async function getFlightsFromHub(from: string, date?: string) {
+  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from);
   return withAvailability(managed, date);
 }
 

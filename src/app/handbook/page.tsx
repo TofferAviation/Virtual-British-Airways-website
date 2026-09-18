@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 const pilotSteps = [
   ["01", "Create and secure your pilot account", "Use your BAV account for the website and keep your profile, password and SimBrief Pilot ID current."],
-  ["02", "Choose your virtual service", "Browse the schedule, reserve a service and use Manage Assignment to keep its briefing available."],
+  ["02", "Choose your BAV hub and virtual service", "Choose London Heathrow, Gatwick or London City as your home hub, then browse the services departing there. Reserve a service and use Manage Assignment to keep its briefing available."],
   ["03", "Reserve an aircraft registration", "In Ember Fleet Management, select a dispatchable registration matching your BAV flight and reserve it. Other pilots cannot take that airframe while it is assigned to you."],
   ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. A clean completion updates the aircraft’s hours, cycle, station and fleet logbook, then automatically creates the linked PIREP for staff review."],
 ];
@@ -26,7 +26,7 @@ const staffSteps = [
 
 const pilotChecklist = [
   ["1", "Sign in and prepare your profile", "Open Account Settings and confirm your name, email and SimBrief Pilot ID. Ember uses the same BAV pilot account; it never needs your SimBrief password."],
-  ["2", "Book a BAV service", "Use Book to choose an available flight. Once saved, open Manage Assignment and verify that the flight number, route and aircraft are correct."],
+  ["2", "Choose a hub and book a BAV service", "Set London Heathrow, Gatwick or London City as your home hub in Account Settings. The home page defaults to that hub; use Browse every BAV service from the selected hub to see its full schedule. Once a flight is saved, open Manage Assignment and verify the flight number, route and aircraft."],
   ["3", "Generate and sync the flight plan", "From Manage Assignment, generate your official SimBrief plan, complete SimBrief’s sign-in window, then use Sync generated plan. The OFP details stay available on your BAV assignment."],
   ["4", "Open Ember and refresh BAV flight", "Sign in to Ember with the same BAV email and password, then use Refresh BAV flight and profile. Ember should show the flight you selected on the website."],
   ["5", "Reserve the registration", "Open Fleet Management, choose a dispatchable registration and select Reserve for flight. Wait for Ember to confirm the reservation. That specific airframe is now yours for this service."],

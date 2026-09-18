@@ -3,12 +3,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { airports } from "@/data/airports";
+import { BAV_HUBS, type BavHubCode } from "@/lib/hubs";
 
-const baseAirports = [
-  { code: "LHR", name: "London Heathrow", country: "United Kingdom" },
-  { code: "LGW", name: "London Gatwick", country: "United Kingdom" },
-  { code: "LCY", name: "London City", country: "United Kingdom" },
-];
+const baseAirports = BAV_HUBS.map((hub) => ({ ...hub, country: "United Kingdom" }));
 
 const preferredAirportCodes = ["LHR", "LGW", "LCY", "OSL", "JFK", "LAX", "DXB", "SIN"];
 
@@ -26,9 +23,9 @@ const aircraftTypes = [
   "Embraer E190",
 ];
 
-export function FlightSearch() {
+export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }) {
   const router = useRouter();
-  const [from, setFrom] = useState("LHR");
+  const [from, setFrom] = useState<BavHubCode>(initialHub);
   const [to, setTo] = useState("OSL");
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [aircraft, setAircraft] = useState("Any aircraft");
@@ -64,8 +61,8 @@ export function FlightSearch() {
       <div className="flight-search-body">
         <div className="field">
           <label htmlFor="from">From</label>
-          <select id="from" value={from} onChange={(event) => setFrom(event.target.value)} disabled={aircraft !== "Any aircraft"}>
-            {orderedAirports.map((airport) => (
+          <select id="from" value={from} onChange={(event) => setFrom(event.target.value as BavHubCode)} disabled={aircraft !== "Any aircraft"}>
+            {baseAirports.map((airport) => (
               <option key={`from-${airport.code}`} value={airport.code}>
                 {airport.name} ({airport.code}) — {airport.country}
               </option>
@@ -97,7 +94,7 @@ export function FlightSearch() {
       </div>
       <div className="search-helper">
         <span><strong>{airports.length + baseAirports.length} BA destinations / bases</strong> loaded into the current network selector.</span>
-        <span>{aircraft === "Any aircraft" ? "Search a city pair or select an airframe to see its current routes" : `${aircraft} · showing routes operated by this airframe`}</span>
+        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ hub: from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : <span>{aircraft} · showing routes operated by this airframe</span>}
       </div>
     </form>
   );

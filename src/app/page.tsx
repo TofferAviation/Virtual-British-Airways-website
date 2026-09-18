@@ -1,13 +1,23 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FlightSearch } from "@/components/FlightSearch";
+import { HubTraffic } from "@/components/HubTraffic";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { featuredDestinations, fleet } from "@/lib/mockData";
 import { getPilotSession } from "@/lib/pilot-auth";
+import { getPilotById } from "@/lib/pilot-store";
+import { hubCodeForName } from "@/lib/hubs";
+import { getBavHubTraffic } from "@/lib/hub-traffic";
 
 export default async function HomePage() {
-  const isLoggedIn = Boolean(await getPilotSession());
+  const session = await getPilotSession();
+  const [pilot, hubTraffic] = await Promise.all([
+    session ? getPilotById(session.pilotId) : Promise.resolve(null),
+    getBavHubTraffic(),
+  ]);
+  const isLoggedIn = Boolean(session);
+  const selectedHub = hubCodeForName(pilot?.hub);
 
   return (
     <>
@@ -30,8 +40,10 @@ export default async function HomePage() {
         </section>
 
         <section className="search-shell" aria-label="Flight search">
-          <FlightSearch />
+          <FlightSearch initialHub={selectedHub} />
         </section>
+
+        <HubTraffic hubs={hubTraffic} selectedHub={selectedHub} />
 
         <section className="content-section">
           <div className="section-kicker">Your journey</div>

@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { BAV_HUBS, type BavHubCode } from "@/lib/hubs";
+import hubStyles from "../account/profile/hub-picker.module.css";
 
 export function PilotRegisterForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [hub, setHub] = useState<BavHubCode>("LHR");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +28,7 @@ export function PilotRegisterForm() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         cache: "no-store",
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, hub }),
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
@@ -44,6 +47,7 @@ export function PilotRegisterForm() {
     <form className="pilot-auth-form register-form" onSubmit={submit}>
       <label><span>Full name</span><input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required disabled={busy} /></label>
       <label><span>Email address</span><input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={busy} /></label>
+      <label><span>Home hub</span><select className={hubStyles.select} value={hub} onChange={(event) => setHub(event.target.value as BavHubCode)} disabled={busy}>{BAV_HUBS.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code}) — {item.role}</option>)}</select></label>
       <label><span>Password</span><input type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
       <label><span>Confirm password</span><input type="password" autoComplete="new-password" minLength={8} value={confirm} onChange={(event) => setConfirm(event.target.value)} required disabled={busy} /></label>
       {error ? <p className="pilot-auth-error" role="alert">{error}</p> : null}

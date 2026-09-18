@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(request: NextRequest) {
   try {
     const session = await requirePilotSession();
-    const body = await request.json() as { name?: string; email?: string; currentPassword?: string; newPassword?: string; simbriefPilotId?: string; profileImage?: string | null };
+    const body = await request.json() as { name?: string; email?: string; hub?: string; currentPassword?: string; newPassword?: string; simbriefPilotId?: string; profileImage?: string | null };
 
     if (body.newPassword != null || body.currentPassword != null) {
       await changePilotPassword(session.pilotId, body.currentPassword ?? "", body.newPassword ?? "");
@@ -28,6 +28,7 @@ export async function PATCH(request: NextRequest) {
     const pilot = await updatePilotProfile(session.pilotId, {
       name: body.name ?? session.name,
       email: body.email ?? session.email,
+      hub: body.hub,
       profileImage: body.profileImage,
     });
     return NextResponse.json({ ok: true, pilot });

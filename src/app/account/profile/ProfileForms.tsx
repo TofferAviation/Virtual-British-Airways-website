@@ -4,7 +4,9 @@ import { FormEvent, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
+import { BAV_HUBS } from "@/lib/hubs";
 import styles from "./ember-download.module.css";
+import hubStyles from "./hub-picker.module.css";
 
 async function patchProfile(payload: Record<string, string | null>) {
   const response = await fetch("/api/pilot/profile", {
@@ -18,7 +20,7 @@ async function patchProfile(payload: Record<string, string | null>) {
   return body;
 }
 
-export function ProfileForms({ name, email, simbriefPilotId, profileImage: initialProfileImage }: { name: string; email: string; simbriefPilotId: string; profileImage: string | null }) {
+export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -52,7 +54,7 @@ export function ProfileForms({ name, email, simbriefPilotId, profileImage: initi
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), profileImage });
+      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), profileImage });
       setProfileMessage("Profile updated successfully.");
       router.refresh();
     } catch (error) {
@@ -106,6 +108,7 @@ export function ProfileForms({ name, email, simbriefPilotId, profileImage: initi
         <div><span className="pilot-profile-kicker">PERSONAL DETAILS</span><h2>Your profile</h2><p>Keep the details used by British Airways Virtual up to date.</p></div>
         <label>Full name<input name="name" defaultValue={name} autoComplete="name" required /></label>
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
+        <label>Home hub<select className={hubStyles.select} name="hub" defaultValue={hub}>{BAV_HUBS.map((item) => <option key={item.code} value={item.name}>{item.name} ({item.code}) — {item.role}</option>)}</select><small className={hubStyles.hint}>This sets the default departure hub on the BAV flight search. You can change it whenever you like.</small></label>
         <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
         {profileMessage ? <p className="pilot-profile-message">{profileMessage}</p> : null}

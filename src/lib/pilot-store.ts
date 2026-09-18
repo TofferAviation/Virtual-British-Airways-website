@@ -4,6 +4,7 @@ import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { automaticPilotRank, isPilotRank, type PilotRank } from "@/lib/pilot-ranks";
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
+import { normalizeBavHub } from "@/lib/hubs";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
@@ -111,7 +112,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     lastLoginAt: raw.lastLoginAt ?? null,
     rank,
     rankOverride,
-    hub: raw.hub ?? "London Heathrow",
+    hub: normalizeBavHub(raw.hub),
     tier: raw.tier ?? "Blue",
     points: Number(raw.points) || 0,
     tierPoints: Number(raw.tierPoints) || 0,
@@ -261,7 +262,7 @@ export function verifyPilotPassword(password: string, stored: string) {
   }
 }
 
-export async function registerPilot(input: { name: string; email: string; password: string }) {
+export async function registerPilot(input: { name: string; email: string; password: string; hub?: string }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   const password = input.password;
@@ -277,7 +278,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const account: PilotAccount = {
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
     authVersion: 1,
-    createdAt: now, lastLoginAt: now, rank: "Second Officer", rankOverride: null, hub: "London Heathrow", tier: "Blue",
+    createdAt: now, lastLoginAt: now, rank: "Second Officer", rankOverride: null, hub: normalizeBavHub(input.hub), tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
@@ -404,7 +405,7 @@ export async function markPilotLogin(id: string) {
   await writeState(state);
 }
 
-export async function updatePilotProfile(id: string, input: { name: string; email: string; profileImage?: string | null }) {
+export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; profileImage?: string | null }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   if (name.length < 2) throw new Error("Please enter your full name.");
@@ -415,6 +416,7 @@ export async function updatePilotProfile(id: string, input: { name: string; emai
   if (state.pilots.some((pilot) => pilot.id !== id && pilot.email === email)) throw new Error("That email address is already in use.");
   account.name = name;
   account.email = email;
+  if (input.hub !== undefined) account.hub = normalizeBavHub(input.hub);
   if (input.profileImage !== undefined) account.profileImage = validateProfileImage(input.profileImage);
   await writeState(state);
   return toPublicPilot(account);
@@ -543,7 +545,7 @@ export async function updatePilotAdminFields(id: string, input: { rankOverride?:
     account.rankOverride = input.rankOverride;
     account.rank = input.rankOverride ?? automaticPilotRank(account.hours);
   }
-  if (input.hub) account.hub = input.hub.trim().slice(0, 60);
+  if (input.hub) account.hub = normalizeBavHub(input.hub);
   if (input.tier) account.tier = input.tier.trim().slice(0, 30);
   await writeState(state);
   return toPublicPilot(account);

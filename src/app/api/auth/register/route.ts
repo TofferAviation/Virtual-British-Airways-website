@@ -4,12 +4,13 @@ import { issuePilotSession } from "@/lib/pilot-auth";
 import { registerPilot } from "@/lib/pilot-store";
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string } | null;
+  const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string; hub?: string } | null;
   try {
     const account = await registerPilot({
       name: body?.name ?? "",
       email: body?.email ?? "",
       password: body?.password ?? "",
+      hub: body?.hub,
     });
     // A delivery outage must never prevent a pilot from creating an account.
     await sendPilotWelcomeEmail(account);
