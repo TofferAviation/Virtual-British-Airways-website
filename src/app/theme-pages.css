@@ -409,3 +409,151 @@ html[data-theme="dark"] :where(.button-outline,.button-light):hover{background:#
 html[data-theme="dark"] .about-va-banner,
 html[data-theme="dark"] .aya-banner-frame,
 html[data-theme="dark"] .ow-hero-art{background-color:#0d1826!important}
+
+/* Documentation and staff records use the same dark surfaces as the rest of BAV.
+   These pages intentionally have light-mode card backgrounds, so they need an
+   explicit theme treatment rather than inheriting light colours under dark text. */
+html[data-theme="dark"] .handbook-page,
+html[data-theme="dark"] .staff-sop-page,
+html[data-theme="dark"] .staff-profile-page {
+  background:var(--bav-dark-bg)!important;
+  color:var(--bav-dark-text)!important;
+}
+
+html[data-theme="dark"] .handbook-path-card,
+html[data-theme="dark"] .handbook-guide,
+html[data-theme="dark"] .handbook-self-service,
+html[data-theme="dark"] .handbook-self-check,
+html[data-theme="dark"] .handbook-support,
+html[data-theme="dark"] .staff-sop-principles,
+html[data-theme="dark"] .staff-sop-procedures,
+html[data-theme="dark"] .staff-sop-procedure-list article,
+html[data-theme="dark"] .staff-sop-escalation,
+html[data-theme="dark"] .staff-profile-card {
+  background:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+  color:var(--bav-dark-text)!important;
+}
+
+html[data-theme="dark"] .handbook-self-check {
+  background:var(--bav-dark-surface-2)!important;
+}
+
+html[data-theme="dark"] .handbook-staff-note {
+  background:#102944!important;
+  border-color:#2d5f89!important;
+  color:#cfe1f3!important;
+}
+
+html[data-theme="dark"] .handbook-page :where(h2, h3, strong),
+html[data-theme="dark"] .staff-sop-page :where(h2, h3, strong),
+html[data-theme="dark"] .staff-profile-page :where(h1, h2, h3, strong, label) {
+  color:var(--bav-dark-heading)!important;
+}
+
+html[data-theme="dark"] .staff-profile-card :where(input, select, textarea) {
+  background:var(--bav-dark-surface-2)!important;
+  border-color:var(--bav-dark-line)!important;
+  color:var(--bav-dark-text)!important;
+}
+
+html[data-theme="dark"] .staff-profile-card :where(input, select, textarea)::placeholder {
+  color:var(--bav-dark-muted)!important;
+  opacity:1;
+}
+
+/* Preserve the deliberate high-contrast treatment of dark documentation banners
+   and their calls to action; the general link rule above is for normal content. */
+html[data-theme="dark"] .handbook-hero :where(h1, h2, h3, p, strong),
+html[data-theme="dark"] .handbook-hero-actions a,
+html[data-theme="dark"] .handbook-ember :where(h2, h3, p, strong),
+html[data-theme="dark"] .handbook-ember a,
+html[data-theme="dark"] .handbook-guide-heading > a,
+html[data-theme="dark"] .staff-sop-hero :where(h1, h2, h3, p, strong),
+html[data-theme="dark"] .staff-sop-actions a,
+html[data-theme="dark"] .staff-sop-control-card :where(h2, h3, p, strong) {
+  color:#fff!important;
+}
+
+html[data-theme="dark"] .handbook-guide-heading > a {
+  background:#075baa!important;
+}
+
+html[data-theme="dark"] .handbook-page :where(p, small),
+html[data-theme="dark"] .staff-sop-page :where(p, small, dt),
+html[data-theme="dark"] .staff-profile-page :where(p, small) {
+  color:var(--bav-dark-muted)!important;
+}
+
+html[data-theme="dark"] .handbook-staff-note :where(p, strong),
+html[data-theme="dark"] .staff-sop-control-card :where(p, dt, dd),
+html[data-theme="dark"] .staff-profile-shell > header p {
+  color:#cfe1f3!important;
+}
+
+html[data-theme="dark"] .staff-profile-card > div > span {
+  color:#71b8ff!important;
+}
+
+/* Fleet control has its own operational record layout, including dialogs and
+   technical tables, so cover the non-card surface names used by that module. */
+html[data-theme="dark"] .fleet-hero,
+html[data-theme="dark"] .fleet-record-header {
+  background:linear-gradient(115deg,#0b1726 0%,#10233a 58%,#15334f 100%)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+
+html[data-theme="dark"] .fleet-hero-status,
+html[data-theme="dark"] .fleet-board,
+html[data-theme="dark"] .fleet-record-nav,
+html[data-theme="dark"] .fleet-action-bar,
+html[data-theme="dark"] .fleet-record-section,
+html[data-theme="dark"] .fleet-dialog,
+html[data-theme="dark"] .fleet-dialog-head,
+html[data-theme="dark"] .fleet-empty,
+html[data-theme="dark"] .fleet-section-empty,
+html[data-theme="dark"] .fleet-list article {
+  background:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+  color:var(--bav-dark-text)!important;
+}
+
+html[data-theme="dark"] .fleet-dialog-head,
+html[data-theme="dark"] .fleet-empty,
+html[data-theme="dark"] .fleet-section-empty,
+html[data-theme="dark"] .fleet-list article {
+  background:var(--bav-dark-surface-2)!important;
+}
+
+html[data-theme="dark"] .fleet-page :where(h1, h2, h3, strong, label),
+html[data-theme="dark"] .fleet-table td strong {
+  color:var(--bav-dark-heading)!important;
+}
+
+html[data-theme="dark"] .fleet-page :where(p, small, time, th, td),
+html[data-theme="dark"] .fleet-page .fleet-list article span:not(.fleet-status),
+html[data-theme="dark"] .fleet-page .fleet-facts span,
+html[data-theme="dark"] .fleet-page .fleet-hero-status > span {
+  color:var(--bav-dark-muted)!important;
+}
+
+html[data-theme="dark"] .fleet-page :where(.fleet-facts, .fleet-facts div, .fleet-table th, .fleet-table td, .fleet-timeline article, .fleet-record-nav, .fleet-action-bar) {
+  border-color:var(--bav-dark-line)!important;
+}
+
+html[data-theme="dark"] .fleet-page .fleet-alert {
+  background:#2b2615!important;
+  border-color:#80631d!important;
+  color:#ffe8a3!important;
+}
+
+html[data-theme="dark"] .fleet-page .fleet-alert :where(p, strong) {
+  color:#ffe8a3!important;
+}
+
+html[data-theme="dark"] .fleet-page .fleet-dialog-actions button:not(.fleet-primary-action):not(.fleet-danger-action),
+html[data-theme="dark"] .fleet-page .fleet-action-bar button:not(.fleet-primary-action):not(.fleet-danger-action) {
+  background:var(--bav-dark-surface-2)!important;
+  border-color:#45617f!important;
+  color:#8fc7ff!important;
+}
