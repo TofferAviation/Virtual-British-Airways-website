@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RankInsignia } from "@/components/RankInsignia";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { listAllPireps } from "@/lib/pilot-operations-store";
@@ -62,7 +63,7 @@ export default async function StaffPilotsPage({ searchParams }: { searchParams: 
               return (
                 <article className={styles.row} key={pilot.id}>
                   <div className={styles.identity}><strong>{pilot.name}</strong><span>{pilot.pilotNumber} · {pilot.email}</span><small>{pilot.hub}</small></div>
-                  <div><strong>{pilot.rank}</strong><span>{pilot.rankOverride ? "Manual rank override" : "Automatic by accepted flight hours"}</span><small>{pilot.flights} flights · {pilot.hours.toFixed(1)} h{nextRank && !pilot.rankOverride ? ` · ${Math.max(0, nextRank.minimumHours - pilot.hours).toFixed(1)} h to ${nextRank.rank}` : ""}</small><small>{formatPilotTypeRatings(pilot.typeRatings)}</small><small>{pilot.points.toLocaleString()} VA Points · {pilot.tierPoints.toLocaleString()} Tier Points</small></div>
+                  <div><strong style={{ alignItems: "center", display: "inline-flex", gap: "6px" }}><RankInsignia rank={pilot.rank} size="compact" />{pilot.rank}</strong><span>{pilot.rankOverride ? "Manual rank override" : "Automatic by accepted flight hours"}</span><small>{pilot.flights} flights · {pilot.hours.toFixed(1)} h{nextRank && !pilot.rankOverride ? ` · ${Math.max(0, nextRank.minimumHours - pilot.hours).toFixed(1)} h to ${nextRank.rank}` : ""}</small><small>{formatPilotTypeRatings(pilot.typeRatings)}</small><small>{pilot.points.toLocaleString()} VA Points · {pilot.tierPoints.toLocaleString()} Tier Points</small></div>
                   <div><strong>{pendingPirepCount(pilot.id)} PIREPs awaiting action</strong><span>{openTicketCount(pilot.id)} open support tickets</span><small>{pilot.lastLoginAt ? `Last sign in ${new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Never signed in"}</small></div>
                   <div><span className={`${styles.status} ${pilot.status === "active" ? styles.active : styles.suspended}`}>{pilot.status}</span><small>Joined {new Date(pilot.createdAt).toLocaleDateString("en-GB", { dateStyle: "medium" })}</small><small>{pilot.tier} member</small></div>
                   <PilotActions pilotId={pilot.id} status={pilot.status} canEdit={canEdit} canSuspend={canSuspend} rankOverride={pilot.rankOverride} typeRatings={pilot.typeRatings} hours={pilot.hours} />

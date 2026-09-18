@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RankInsignia } from "@/components/RankInsignia";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { ProfileForms } from "./ProfileForms";
@@ -18,7 +19,7 @@ export default async function PilotProfilePage() {
         <nav className={styles.breadcrumbs}><Link href="/account">Pilot account</Link><span>›</span><strong>Account settings</strong></nav>
         <section className={styles.hero}>
           <div><span className={styles.eyebrow}>BRITISH AIRWAYS VIRTUAL</span><h1>Account settings</h1><p>Manage your in-house BAV pilot identity, security and flight-planning connections.</p></div>
-          <div className={styles.identity}><span>{pilot.pilotNumber}</span><strong>{pilot.name}</strong><small>{pilot.rank} · {pilot.tier} member</small></div>
+          <div className={styles.identity}><span>{pilot.pilotNumber}</span><strong>{pilot.name}</strong><small><RankInsignia rank={pilot.rank} size="compact" /> {pilot.rank} · {pilot.tier} member</small></div>
         </section>
         <section className={styles.statusRow}>
           <article><span>ACCOUNT STATUS</span><strong className={pilot.status === "active" ? styles.active : styles.suspended}>{pilot.status}</strong></article>
