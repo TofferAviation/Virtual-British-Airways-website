@@ -6,16 +6,18 @@ import { automaticPilotRank, isPilotRank, normalizePilotTypeRatings, type PilotR
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 import { normalizeBavHub } from "@/lib/hubs";
 import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
+import { DEFAULT_REWARD_SETTINGS, normalizeRewardSettings, validateRewardSettings, type RewardSettings } from "@/lib/reward-settings";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 4;
+  version: 5;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
   deviceSessions: PilotDeviceSession[];
+  rewardSettings: RewardSettings;
 };
 
 type PilotPasswordResetToken = {
@@ -82,7 +84,7 @@ export type PilotAccount = {
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
 
 function emptyState(): PilotState {
-  return { version: 4, nextPilotNumber: 1, pilots: [], passwordResetTokens: [], deviceSessions: [] };
+  return { version: 5, nextPilotNumber: 1, pilots: [], passwordResetTokens: [], deviceSessions: [], rewardSettings: { ...DEFAULT_REWARD_SETTINGS } };
 }
 
 function getPilotStateClient(): SupabaseClient | null {
@@ -195,7 +197,7 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       })
       .slice(-2_000)
     : [];
-  return { version: 4, nextPilotNumber, pilots, passwordResetTokens, deviceSessions };
+  return { version: 5, nextPilotNumber, pilots, passwordResetTokens, deviceSessions, rewardSettings: normalizeRewardSettings(raw?.rewardSettings) };
 }
 
 async function readLocalState(): Promise<PilotState> {
@@ -247,6 +249,27 @@ async function writeState(state: PilotState) {
     throw new Error("Pilot account persistence is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY on the website host.");
   }
   await writeLocalState(normalized);
+}
+
+/** Returns the live reward framework used for newly accepted BAV PIREPs. */
+export async function getRewardSettings() {
+  const state = await readState();
+  return state.rewardSettings;
+}
+
+/** Updates future PIREP rewards. Existing approved flight records are never recalculated. */
+export async function updateRewardSettings(input: unknown) {
+  const settings = validateRewardSettings(input);
+  const state = await readState();
+  state.rewardSettings = settings;
+  for (const account of state.pilots) {
+    if (account.tierPoints >= settings.tierGoldThreshold) account.tier = "Gold";
+    else if (account.tierPoints >= settings.tierSilverThreshold) account.tier = "Silver";
+    else if (account.tierPoints >= settings.tierBronzeThreshold) account.tier = "Bronze";
+    else account.tier = "Blue";
+  }
+  await writeState(state);
+  return settings;
 }
 
 function normalizeEmail(email: string) {
@@ -581,9 +604,10 @@ export async function applyApprovedPirepStats(pilotId: string, input: { blockMin
     account.bestLanding = account.bestLanding == null ? input.landingFpm : Math.max(account.bestLanding, input.landingFpm);
   }
   account.rank = account.rankOverride ?? automaticPilotRank(account.hours);
-  if (account.tierPoints >= 3500) account.tier = "Gold";
-  else if (account.tierPoints >= 1500) account.tier = "Silver";
-  else if (account.tierPoints >= 500) account.tier = "Bronze";
+  if (account.tierPoints >= state.rewardSettings.tierGoldThreshold) account.tier = "Gold";
+  else if (account.tierPoints >= state.rewardSettings.tierSilverThreshold) account.tier = "Silver";
+  else if (account.tierPoints >= state.rewardSettings.tierBronzeThreshold) account.tier = "Bronze";
+  else account.tier = "Blue";
   await writeState(state);
   return account;
 }

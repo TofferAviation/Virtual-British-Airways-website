@@ -4,7 +4,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { RankInsignia } from "@/components/RankInsignia";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
-import { getPilotById } from "@/lib/pilot-store";
+import { getPilotById, getRewardSettings } from "@/lib/pilot-store";
 import { formatPilotTypeRatings, nextPilotRank } from "@/lib/pilot-ranks";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +19,9 @@ export default async function AccountPage() {
   const session = await requirePilotSession();
   const account = await getPilotById(session.pilotId);
   if (!account) redirect("/login");
-  const [assignment, pireps] = await Promise.all([getActivePilotBooking(account.id), listPilotPireps(account.id)]);
+  const [assignment, pireps, rewardSettings] = await Promise.all([getActivePilotBooking(account.id), listPilotPireps(account.id), getRewardSettings()]);
   const flightPlan = assignment ? await getPilotFlightPlan(assignment.id, account.id) : null;
-  const tierTarget = 3500;
+  const tierTarget = rewardSettings.tierGoldThreshold;
   const tierProgress = Math.min(100, (account.tierPoints / tierTarget) * 100);
   const nextRank = nextPilotRank(account.hours);
   const typeRatingSummary = formatPilotTypeRatings(account.typeRatings);

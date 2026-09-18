@@ -46,6 +46,7 @@ import "./pilot-auth.css";
 import "./pilot-rules.css";
 import "./pilot-progression.css";
 import "./rank-insignia.css";
+import "./reward-settings.css";
 import "./ba-radar.css";
 import "./ba-radar-home-cta.css";
 import "./ba-radar-osm.css";

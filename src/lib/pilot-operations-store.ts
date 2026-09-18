@@ -3,7 +3,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
-import { applyApprovedPirepStats } from "@/lib/pilot-store";
+import { applyApprovedPirepStats, getRewardSettings } from "@/lib/pilot-store";
+import { calculatePirepReward } from "@/lib/reward-settings";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
@@ -373,8 +374,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const reviewedAt = new Date().toISOString();
     const update: Record<string, unknown> = { status: input.decision, staff_comments: input.comments.trim().slice(0, 2000), reviewed_at: reviewedAt, reviewed_by: input.staffName };
     if (input.decision === "accepted") {
-      const points = Math.max(25, Math.round(current.blockMinutes / 5 + current.distanceNm / 50));
-      const tierPoints = Math.max(5, Math.round(points * 0.4));
+      const { points, tierPoints } = calculatePirepReward(current, await getRewardSettings());
       update.points_awarded = points;
       update.tier_points_awarded = tierPoints;
       await applyApprovedPirepStats(current.pilotId, { blockMinutes: current.blockMinutes, distanceNm: current.distanceNm, landingFpm: current.landingFpm, points, tierPoints });
@@ -394,8 +394,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
   pirep.reviewedBy = input.staffName;
 
   if (input.decision === "accepted") {
-    const points = Math.max(25, Math.round(pirep.blockMinutes / 5 + pirep.distanceNm / 50));
-    const tierPoints = Math.max(5, Math.round(points * 0.4));
+    const { points, tierPoints } = calculatePirepReward(pirep, await getRewardSettings());
     pirep.pointsAwarded = points;
     pirep.tierPointsAwarded = tierPoints;
     await applyApprovedPirepStats(pirep.pilotId, {
