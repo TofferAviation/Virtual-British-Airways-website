@@ -53,7 +53,7 @@ export default async function StaffPage() {
         <div className="staff-page-content">
           <div className="staff-breadcrumb-band">
             <div className="staff-shell staff-breadcrumbs">
-              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong><span>·</span><Link href="/handbook#staff">Staff handbook</Link>
+              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong><span>·</span><Link href="/staff/sop">Staff SOP</Link><span>·</span><Link href="/handbook#staff">Staff handbook</Link>
               {canViewRoutes ? <><span>·</span><Link href="/staff/live-operations">Live Operations</Link><span>·</span><Link href="/staff/pireps">PIREP Centre</Link></> : null}
               {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
               {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}
@@ -63,6 +63,13 @@ export default async function StaffPage() {
               {canEditSettings ? <><span>·</span><Link href="/staff/rewards">Reward settings</Link></> : null}
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
+          </div>
+          <div className="staff-shell staff-permissions-launch-wrap">
+            <Link className="staff-permissions-launch" href="/staff/sop">
+              <span className="staff-permissions-launch-icon" aria-hidden="true">▤</span>
+              <span><strong>Staff Centre Standard Operating Procedure</strong><small>Start here for secure, consistent procedures for PIREPs, pilots, fleet, events, support and shift handover.</small></span>
+              <b aria-hidden="true">→</b>
+            </Link>
           </div>
           {canViewRoutes ? (
             <>

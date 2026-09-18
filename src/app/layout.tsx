@@ -31,6 +31,7 @@ import "./staff-header.css";
 import "./staff-zoom.css";
 import "./staff-permissions.css";
 import "./staff-access.css";
+import "./staff-sop.css";
 import "./service-settings.css";
 import "./service-status.css";
 import "./news.css";
