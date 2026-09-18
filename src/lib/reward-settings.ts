@@ -4,6 +4,8 @@ export type RewardSettings = {
   vaPointsPerFiftyNm: number;
   minimumTierPoints: number;
   tierPointsPercent: number;
+  firstFlightBonusVaPoints: number;
+  firstFlightBonusTierPoints: number;
   tierBronzeThreshold: number;
   tierSilverThreshold: number;
   tierGoldThreshold: number;
@@ -15,6 +17,8 @@ export const DEFAULT_REWARD_SETTINGS: RewardSettings = {
   vaPointsPerFiftyNm: 1,
   minimumTierPoints: 5,
   tierPointsPercent: 40,
+  firstFlightBonusVaPoints: 100,
+  firstFlightBonusTierPoints: 25,
   tierBronzeThreshold: 500,
   tierSilverThreshold: 1_500,
   tierGoldThreshold: 3_500,
@@ -34,6 +38,8 @@ export function normalizeRewardSettings(value: unknown): RewardSettings {
     vaPointsPerFiftyNm: finiteInteger(raw.vaPointsPerFiftyNm, DEFAULT_REWARD_SETTINGS.vaPointsPerFiftyNm, 0, 1_000),
     minimumTierPoints: finiteInteger(raw.minimumTierPoints, DEFAULT_REWARD_SETTINGS.minimumTierPoints, 0, 10_000),
     tierPointsPercent: finiteInteger(raw.tierPointsPercent, DEFAULT_REWARD_SETTINGS.tierPointsPercent, 0, 100),
+    firstFlightBonusVaPoints: finiteInteger(raw.firstFlightBonusVaPoints, DEFAULT_REWARD_SETTINGS.firstFlightBonusVaPoints, 0, 10_000),
+    firstFlightBonusTierPoints: finiteInteger(raw.firstFlightBonusTierPoints, DEFAULT_REWARD_SETTINGS.firstFlightBonusTierPoints, 0, 10_000),
     tierBronzeThreshold: finiteInteger(raw.tierBronzeThreshold, DEFAULT_REWARD_SETTINGS.tierBronzeThreshold, 1, 1_000_000),
     tierSilverThreshold: finiteInteger(raw.tierSilverThreshold, DEFAULT_REWARD_SETTINGS.tierSilverThreshold, 2, 1_000_000),
     tierGoldThreshold: finiteInteger(raw.tierGoldThreshold, DEFAULT_REWARD_SETTINGS.tierGoldThreshold, 3, 1_000_000),
@@ -53,6 +59,8 @@ export function validateRewardSettings(value: unknown) {
     "vaPointsPerFiftyNm",
     "minimumTierPoints",
     "tierPointsPercent",
+    "firstFlightBonusVaPoints",
+    "firstFlightBonusTierPoints",
     "tierBronzeThreshold",
     "tierSilverThreshold",
     "tierGoldThreshold",
@@ -65,12 +73,12 @@ export function validateRewardSettings(value: unknown) {
   return settings;
 }
 
-export function calculatePirepReward(input: { blockMinutes: number; distanceNm: number }, settings: RewardSettings) {
+export function calculatePirepReward(input: { blockMinutes: number; distanceNm: number }, settings: RewardSettings, firstFlightAward = false) {
   const basePoints = Math.round(
     Math.max(0, input.blockMinutes) / 5 * settings.vaPointsPerFiveBlockMinutes +
     Math.max(0, input.distanceNm) / 50 * settings.vaPointsPerFiftyNm,
   );
-  const points = Math.max(settings.minimumVaPoints, basePoints);
-  const tierPoints = Math.max(settings.minimumTierPoints, Math.round(points * settings.tierPointsPercent / 100));
+  const points = Math.max(settings.minimumVaPoints, basePoints) + (firstFlightAward ? settings.firstFlightBonusVaPoints : 0);
+  const tierPoints = Math.max(settings.minimumTierPoints, Math.round(points * settings.tierPointsPercent / 100)) + (firstFlightAward ? settings.firstFlightBonusTierPoints : 0);
   return { points, tierPoints };
 }

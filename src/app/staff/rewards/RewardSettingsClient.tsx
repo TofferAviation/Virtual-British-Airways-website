@@ -20,6 +20,11 @@ const tierFields: Array<{ key: "tierBronzeThreshold" | "tierSilverThreshold" | "
   { key: "tierGoldThreshold", label: "Gold threshold", help: "Tier Points required for Gold." },
 ];
 
+const firstFlightFields: Array<{ key: "firstFlightBonusVaPoints" | "firstFlightBonusTierPoints"; label: string; help: string }> = [
+  { key: "firstFlightBonusVaPoints", label: "First Flight bonus VA Points", help: "Added once when a pilot's first BAV PIREP is accepted." },
+  { key: "firstFlightBonusTierPoints", label: "First Flight bonus Tier Points", help: "Added once alongside the First Flight award." },
+];
+
 export function RewardSettingsClient({ initialSettings }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [status, setStatus] = useState("");
@@ -58,6 +63,10 @@ export function RewardSettingsClient({ initialSettings }: Props) {
         <section className="reward-settings-card">
           <div className="reward-settings-heading"><div><span>FLIGHT REWARDS</span><h2>Accepted PIREP calculation</h2><p>VA Points are calculated from block time and distance; Tier Points are a percentage of the final VA Point award.</p></div><div className="reward-settings-formula">VA = max(minimum, block-time + distance)<br />TP = max(minimum, VA × percentage)</div></div>
           <div className="reward-settings-grid">{rewardFields.map((field) => <label key={field.key}><span>{field.label}</span><input type="number" min={field.min} max={field.max} step="1" value={settings[field.key]} onChange={(event) => setNumber(field.key, event.target.value)} /><small>{field.help}</small></label>)}</div>
+        </section>
+        <section className="reward-settings-card reward-settings-first-flight">
+          <div className="reward-settings-heading"><div><span>CAREER AWARD</span><h2>First Flight</h2><p>A permanent First Flight badge is added to a pilot&apos;s profile when staff accepts their first BAV PIREP. It cannot be earned twice.</p></div><div className="reward-settings-award-mark" aria-hidden="true">★</div></div>
+          <div className="reward-settings-grid reward-settings-first-grid">{firstFlightFields.map((field) => <label key={field.key}><span>{field.label}</span><input type="number" min="0" max="10000" step="1" value={settings[field.key]} onChange={(event) => setNumber(field.key, event.target.value)} /><small>{field.help}</small></label>)}</div>
         </section>
         <section className="reward-settings-card">
           <div className="reward-settings-heading"><div><span>MEMBERSHIP STATUS</span><h2>Tier thresholds</h2><p>Pilots earn Blue, Bronze, Silver and Gold status from their accumulated Tier Points.</p></div></div>

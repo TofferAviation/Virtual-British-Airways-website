@@ -43,6 +43,12 @@ type PilotDeviceSession = {
   revokedAt: string | null;
 };
 
+export type PilotAward = {
+  id: "first-flight";
+  awardedAt: string;
+  sourcePirepId: string;
+};
+
 type PilotStateRow = { state: unknown };
 
 export type PilotAccount = {
@@ -79,6 +85,8 @@ export type PilotAccount = {
   /** Explicit consent captured when a pilot creates their BAV account. */
   pilotRulesAcceptedAt: string | null;
   pilotRulesVersion: string | null;
+  /** Permanent BAV career awards earned through accepted flight activity. */
+  awards: PilotAward[];
 };
 
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
@@ -137,6 +145,9 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     profileImage: normaliseStoredProfileImage(raw.profileImage),
     pilotRulesAcceptedAt: typeof raw.pilotRulesAcceptedAt === "string" ? raw.pilotRulesAcceptedAt : null,
     pilotRulesVersion: typeof raw.pilotRulesVersion === "string" ? raw.pilotRulesVersion : null,
+    awards: Array.isArray(raw.awards) ? raw.awards.filter((award): award is PilotAward => Boolean(
+      award && award.id === "first-flight" && typeof award.awardedAt === "string" && typeof award.sourcePirepId === "string",
+    )).slice(0, 1) : [],
   };
 }
 
@@ -318,6 +329,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
     profileImage: null,
     pilotRulesAcceptedAt: now,
     pilotRulesVersion: PILOT_RULES_VERSION,
+    awards: [],
   };
   state.nextPilotNumber += 1;
   state.pilots.push(account);
@@ -587,11 +599,16 @@ export async function updatePilotAdminFields(id: string, input: { rankOverride?:
   return toPublicPilot(account);
 }
 
-export async function applyApprovedPirepStats(pilotId: string, input: { blockMinutes: number; distanceNm: number; landingFpm: number | null; points: number; tierPoints: number }) {
+export function isFirstFlightAwardEligible(account: Pick<PilotAccount, "flights" | "awards"> | null | undefined) {
+  return Boolean(account && account.flights === 0 && !account.awards.some((award) => award.id === "first-flight"));
+}
+
+export async function applyApprovedPirepStats(pilotId: string, input: { blockMinutes: number; distanceNm: number; landingFpm: number | null; points: number; tierPoints: number; firstFlightAward?: { pirepId: string } }) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === pilotId);
   if (!account) throw new Error("Pilot not found.");
   const previousFlights = account.flights;
+  const shouldAwardFirstFlight = Boolean(input.firstFlightAward && isFirstFlightAwardEligible(account));
   account.flights += 1;
   account.hours = Math.round((account.hours + input.blockMinutes / 60) * 100) / 100;
   account.distanceNm += Math.max(0, Math.round(input.distanceNm));
@@ -599,6 +616,9 @@ export async function applyApprovedPirepStats(pilotId: string, input: { blockMin
   account.tierPoints += Math.max(0, input.tierPoints);
   account.lifetimeTierPoints += Math.max(0, input.tierPoints);
   account.streak += 1;
+  if (shouldAwardFirstFlight && input.firstFlightAward) {
+    account.awards.push({ id: "first-flight", awardedAt: new Date().toISOString(), sourcePirepId: input.firstFlightAward.pirepId });
+  }
   if (input.landingFpm != null) {
     account.averageLanding = account.averageLanding == null ? input.landingFpm : Math.round((account.averageLanding * previousFlights + input.landingFpm) / Math.max(1, account.flights));
     account.bestLanding = account.bestLanding == null ? input.landingFpm : Math.max(account.bestLanding, input.landingFpm);

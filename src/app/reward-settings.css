@@ -20,6 +20,8 @@
 .reward-settings-grid input{width:100%;box-sizing:border-box;border:1px solid #a9bed2;background:#fff;padding:10px 11px;color:#071d49;font:600 17px Arial,sans-serif}
 .reward-settings-grid small{color:#62748b;font-size:11px;line-height:1.35}
 .reward-settings-tier-grid{grid-template-columns:repeat(3,1fr)}
+.reward-settings-first-grid{grid-template-columns:repeat(2,1fr)}
+.reward-settings-award-mark{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#f6edd3;color:#a66c00;font-size:24px}
 .reward-settings-note{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-left:4px solid #d7a209;background:#fff9e8;color:#5f4f20;font-size:12px;line-height:1.5}
 .reward-settings-note strong{white-space:nowrap}
 .reward-settings-actions{display:flex;align-items:center;justify-content:space-between;gap:18px}
