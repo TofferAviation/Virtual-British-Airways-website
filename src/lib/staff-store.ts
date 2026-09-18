@@ -12,6 +12,7 @@ import {
 } from "@/lib/permissions";
 import { getMasterAdminEmail } from "@/lib/staff-owner";
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
+import type { ManagedRoute } from "@/lib/route-store";
 
 export type StaffAccountStatus = "active" | "invited" | "inactive";
 
@@ -60,6 +61,8 @@ export type StaffState = {
   roles: StaffRoleTemplate[];
   invitations: StaffInvitation[];
   audit: StaffAuditEntry[];
+  /** Persistent BAV virtual schedule, shared by every website instance. */
+  routeSchedule: ManagedRoute[];
 };
 
 const dataDir = path.join(process.cwd(), ".bav-data");
@@ -114,6 +117,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     : [];
   const invitations = Array.isArray(input?.invitations) ? input!.invitations! : [];
   const audit = Array.isArray(input?.audit) ? input!.audit! : [];
+  const routeSchedule = Array.isArray(input?.routeSchedule) ? input!.routeSchedule! : [];
 
   const admin = envAdmin();
   if (admin) {
@@ -142,7 +146,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     }
   }
 
-  return { users, roles, invitations, audit: audit.slice(0, 300) };
+  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule };
 }
 
 async function ensureDataDir() {

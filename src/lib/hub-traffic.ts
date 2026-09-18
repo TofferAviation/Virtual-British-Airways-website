@@ -1,7 +1,7 @@
 import { listLiveAcarsSessions } from "@/lib/acars-store";
 import { BAV_HUBS } from "@/lib/hubs";
 import { listAllPireps } from "@/lib/pilot-operations-store";
-import { getManagedRoutes } from "@/lib/route-store";
+import { getManagedRoutes, routeOperatesOn } from "@/lib/route-store";
 
 export type BavHubTraffic = {
   code: (typeof BAV_HUBS)[number]["code"];
@@ -31,6 +31,7 @@ export async function getBavHubTraffic(): Promise<BavHubTraffic[]> {
     }),
     listLiveAcarsSessions(),
   ]);
+  const today = new Date().toISOString().slice(0, 10);
 
   return BAV_HUBS.map((hub) => {
     const completedDepartures = pireps.filter((pirep) => pirep.from === hub.code && pirep.status !== "rejected").length;
@@ -39,7 +40,7 @@ export async function getBavHubTraffic(): Promise<BavHubTraffic[]> {
     ).size;
     return {
       ...hub,
-      activeRoutes: routes.filter((route) => route.active && route.from === hub.code).length,
+      activeRoutes: routes.filter((route) => route.active && route.from === hub.code && routeOperatesOn(route, today)).length,
       completedDepartures,
       pilotsFlying,
       activityScore: completedDepartures + pilotsFlying,

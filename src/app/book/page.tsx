@@ -46,7 +46,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             <div>
               <div className="section-kicker">BAV scheduled flights</div>
               <h1>{aircraft ? `${aircraft} routes` : hub ? `Flights departing ${hub.name} (${hub.code})` : `${airportName(from)} (${from}) → ${airportName(to)} (${to})`}</h1>
-              <p>{date} · British Airways Virtual operational schedule · In-house system</p>
+              <p>{date} · BAV operational schedule · 2026 London-hub network</p>
               {aircraft ? <p>Showing active BAV services scheduled with this airframe type. Reserve the specific registration in Ember after choosing a service.</p> : null}
               {hub ? <p>{hub.role}. Showing every active BAV service currently scheduled from this hub.</p> : null}
             </div>
@@ -74,7 +74,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
               </article>;
             }) : <div className="empty-state card"><h2>{aircraft ? "No current routes published for this airframe" : "No BAV schedule published"}</h2><p>{aircraft ? `Operations has not published an active BAV service using ${aircraft} for this date.` : hub ? `There is currently no active British Airways Virtual service departing ${hub.name}. Staff can add or enable services in the Staff Centre.` : "There is currently no active British Airways Virtual service for this city pair. Staff can add or enable services in the Staff Centre."}</p><Link className="button button-primary" href="/">Return to flight search</Link></div>}
           </div>
-          <div className="integration-note"><strong>In-house BAV schedule:</strong> route availability comes from the staff-managed BAV schedule and live assignment capacity. After choosing a flight, reserve a dispatchable aircraft registration in Ember Fleet Management so its hours, cycles and logbook are credited to that airframe.</div>
+          <div className="integration-note"><strong>Validated BAV network:</strong> the published city pairs are based on British Airways&apos; current London hub network. BAV service identifiers and dispatch times are our own virtual operational settings, maintained by Operations alongside live assignment capacity. After choosing a flight, reserve a dispatchable aircraft registration in Ember Fleet Management so its hours, cycles and logbook are credited to that airframe.</div>
         </div>
       </main>
       <SiteFooter />

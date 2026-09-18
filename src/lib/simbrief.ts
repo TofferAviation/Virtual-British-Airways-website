@@ -1,16 +1,23 @@
 import { createHash } from "node:crypto";
 import type { PilotBooking, SimbriefBriefing } from "@/lib/pilot-operations-store";
+import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
 
 const airportIcao: Record<string, string> = {
+  ...BAV_NETWORK_ICAO_BY_IATA,
   LHR: "EGLL", LGW: "EGKK", LCY: "EGLC", OSL: "ENGM", JFK: "KJFK", LAX: "KLAX", PDX: "KPDX", DXB: "OMDB", SIN: "WSSS", HND: "RJTT", CPT: "FACT", SYD: "YSSY", SFO: "KSFO", SEA: "KSEA", IAH: "KIAH", JNB: "FAOR",
 };
 
 const aircraftIcao: Record<string, string> = {
   "Airbus A320": "A320",
   "Airbus A320neo": "A20N",
+  "Airbus A321neo": "A21N",
   "Airbus A350-1000": "A35K",
   "Boeing 777-200ER": "B772",
   "Boeing 777-300ER": "B77W",
+  "Boeing 787-8": "B788",
+  "Boeing 787-9": "B789",
+  "Boeing 787-10": "B78X",
+  "Embraer E190": "E190",
 };
 
 const SIMBRIEF_WORKER_URL = "https://www.simbrief.com/ofp/ofp.loader.api.php";
@@ -40,7 +47,7 @@ function buildSimbriefDispatchFields(booking: PilotBooking, pilotName: string, s
   if (!codes.origin || !codes.destination || !codes.aircraft) return null;
   const departure = departureParts(booking.departure);
   const duration = durationParts(booking.duration);
-  const flightNumber = booking.flightNumber.replace(/^BA/i, "");
+  const flightNumber = booking.flightNumber.replace(/^(?:BAV|BAW|BA)/i, "");
   return {
     airline: "BAW",
     fltnum: flightNumber,
