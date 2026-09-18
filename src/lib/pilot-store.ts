@@ -7,7 +7,7 @@ import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile
 import { normalizeBavHub } from "@/lib/hubs";
 import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
 import { DEFAULT_REWARD_SETTINGS, normalizeRewardSettings, validateRewardSettings, type RewardSettings } from "@/lib/reward-settings";
-import { awardsForAcceptedFlightCount, isPilotCareerAwardId, type PilotCareerAwardId } from "@/lib/pilot-awards";
+import { awardsForAcceptedPirep, isHeathrowStation, isPilotCareerAwardId, type PilotCareerAwardId } from "@/lib/pilot-awards";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
@@ -48,6 +48,9 @@ export type PilotAward = {
   id: PilotCareerAwardId;
   awardedAt: string;
   sourcePirepId: string;
+  /** Present only on event awards, allowing a pilot to earn one for each official event. */
+  eventId: string | null;
+  eventTitle: string | null;
 };
 
 type PilotStateRow = { state: unknown };
@@ -75,6 +78,8 @@ export type PilotAccount = {
   flights: number;
   hours: number;
   distanceNm: number;
+  /** Accepted-flight departures from London Heathrow, used for the specialist award. */
+  heathrowDepartures: number;
   averageLanding: number | null;
   bestLanding: number | null;
   onTime: number;
@@ -138,6 +143,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     flights: Number(raw.flights) || 0,
     hours,
     distanceNm: Number(raw.distanceNm) || 0,
+    heathrowDepartures: Math.max(0, Math.floor(Number(raw.heathrowDepartures) || 0)),
     averageLanding: raw.averageLanding ?? null,
     bestLanding: raw.bestLanding ?? null,
     onTime: Number.isFinite(raw.onTime) ? Number(raw.onTime) : 100,
@@ -146,9 +152,15 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     profileImage: normaliseStoredProfileImage(raw.profileImage),
     pilotRulesAcceptedAt: typeof raw.pilotRulesAcceptedAt === "string" ? raw.pilotRulesAcceptedAt : null,
     pilotRulesVersion: typeof raw.pilotRulesVersion === "string" ? raw.pilotRulesVersion : null,
-    awards: Array.isArray(raw.awards) ? raw.awards.filter((award): award is PilotAward => Boolean(
+    awards: Array.isArray(raw.awards) ? raw.awards.filter((award) => Boolean(
       award && isPilotCareerAwardId(award.id) && typeof award.awardedAt === "string" && typeof award.sourcePirepId === "string",
-    )).filter((award, index, items) => items.findIndex((item) => item.id === award.id) === index) : [],
+    )).map((award) => ({
+      ...award,
+      eventId: typeof award.eventId === "string" ? award.eventId : null,
+      eventTitle: typeof award.eventTitle === "string" ? award.eventTitle : null,
+    })).filter((award, index, items) => items.findIndex((item) => (
+      item.id === award.id && (item.id !== "event-flyer" || item.eventId === award.eventId)
+    )) === index) : [],
   };
 }
 
@@ -324,7 +336,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
     authVersion: 1,
     createdAt: now, lastLoginAt: now, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub(input.hub), tier: "Blue",
-    points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0,
+    points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0, heathrowDepartures: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
     profileImage: null,
@@ -604,7 +616,17 @@ export function isFirstFlightAwardEligible(account: Pick<PilotAccount, "flights"
   return Boolean(account && account.flights === 0 && !account.awards.some((award) => award.id === "first-flight"));
 }
 
-export async function applyApprovedPirepStats(pilotId: string, input: { blockMinutes: number; distanceNm: number; landingFpm: number | null; points: number; tierPoints: number; sourcePirepId: string }) {
+export async function applyApprovedPirepStats(pilotId: string, input: {
+  blockMinutes: number;
+  distanceNm: number;
+  landingFpm: number | null;
+  points: number;
+  tierPoints: number;
+  sourcePirepId: string;
+  from: string;
+  aircraft: string;
+  eventAward?: { eventId: string; eventTitle: string };
+}) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === pilotId);
   if (!account) throw new Error("Pilot not found.");
@@ -612,12 +634,31 @@ export async function applyApprovedPirepStats(pilotId: string, input: { blockMin
   account.flights += 1;
   account.hours = Math.round((account.hours + input.blockMinutes / 60) * 100) / 100;
   account.distanceNm += Math.max(0, Math.round(input.distanceNm));
+  if (isHeathrowStation(input.from)) account.heathrowDepartures += 1;
   account.points += Math.max(0, input.points);
   account.tierPoints += Math.max(0, input.tierPoints);
   account.lifetimeTierPoints += Math.max(0, input.tierPoints);
   account.streak += 1;
-  const earnedAwards = awardsForAcceptedFlightCount(account.flights, account.awards);
-  for (const award of earnedAwards) account.awards.push({ id: award.id, awardedAt: new Date().toISOString(), sourcePirepId: input.sourcePirepId });
+  const awardedAt = new Date().toISOString();
+  const earnedAwards = awardsForAcceptedPirep({
+    flights: account.flights,
+    totalDistanceNm: account.distanceNm,
+    heathrowDepartures: account.heathrowDepartures,
+    aircraft: input.aircraft,
+    distanceNm: input.distanceNm,
+  }, account.awards);
+  for (const award of earnedAwards) {
+    account.awards.push({ id: award.id, awardedAt, sourcePirepId: input.sourcePirepId, eventId: null, eventTitle: null });
+  }
+  if (input.eventAward && !account.awards.some((award) => award.id === "event-flyer" && award.eventId === input.eventAward?.eventId)) {
+    account.awards.push({
+      id: "event-flyer",
+      awardedAt,
+      sourcePirepId: input.sourcePirepId,
+      eventId: input.eventAward.eventId,
+      eventTitle: input.eventAward.eventTitle,
+    });
+  }
   if (input.landingFpm != null) {
     account.averageLanding = account.averageLanding == null ? input.landingFpm : Math.round((account.averageLanding * previousFlights + input.landingFpm) / Math.max(1, account.flights));
     account.bestLanding = account.bestLanding == null ? input.landingFpm : Math.max(account.bestLanding, input.landingFpm);

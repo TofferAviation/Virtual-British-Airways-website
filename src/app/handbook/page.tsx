@@ -14,7 +14,7 @@ const pilotSteps = [
   ["01", "Create and secure your pilot account", "Use your BAV account for the website and keep your profile, password and SimBrief Pilot ID current."],
   ["02", "Choose your BAV hub and virtual service", "Choose London Heathrow, Gatwick or London City as your home hub, then browse the services departing there. Reserve a service and use Manage Assignment to keep its briefing available."],
   ["03", "Reserve an aircraft registration", "In Ember Fleet Management, select a dispatchable registration matching your BAV flight and reserve it. Other pilots cannot take that airframe while it is assigned to you."],
-  ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. A clean completion updates the aircraft’s hours, cycle, station and fleet logbook, then automatically creates the linked PIREP for staff review."],
+  ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. A clean completion updates the aircraft’s hours, cycle, station and fleet logbook, then automatically creates the linked PIREP for staff review and career credit."],
 ];
 
 const staffSteps = [
@@ -33,6 +33,7 @@ const pilotChecklist = [
   ["6", "Reserve the registration", "Open Fleet Management, choose a dispatchable registration and select Reserve for flight. Ember checks your BAV rank and required type rating before confirming the reservation."],
   ["7", "Start the simulator and confirm tracking", "Connect the simulator, then start the engines or begin pushback. Ember starts the ACARS session and BA-Radar should show the live flight after its normal refresh interval."],
   ["8", "Complete the flight cleanly", "After arrival, stop the aircraft and shut down the engines. Keep Ember open briefly while it completes the active assignment and automatically submits the linked PIREP. Check Recent flight reports in your BAV account; do not submit a second manual PIREP unless Ember failed to complete. The reserved airframe’s hours, cycles, station and logbook are retained for the next pilot and Staff Centre."],
+  ["9", "Watch your career awards", "Once Staff Centre accepts the PIREP, BAV applies flight credit, points and any qualifying career or event achievement automatically. View every earned award in your pilot dashboard."],
 ];
 
 export default function HandbookPage() {
@@ -50,7 +51,7 @@ export default function HandbookPage() {
               <span className="handbook-kicker">British Airways Virtual</span>
               <h1>Your guide to flying and operating with BAV.</h1>
               <p>A living handbook for pilots and authorised staff. It is updated with every meaningful British Airways Virtual website and Ember release.</p>
-              <div className="handbook-hero-actions"><a href="#pilot-checklist">Pilot checklist</a><a href="#staff">Staff operations</a><a href="#ember">Ember ACARS</a></div>
+              <div className="handbook-hero-actions"><a href="#pilot-checklist">Pilot checklist</a><a href="#achievements">Career awards</a><a href="#staff">Staff operations</a><a href="#ember">Ember ACARS</a></div>
             </div>
             <aside className="handbook-release-note"><span>Living documentation</span><strong>Built into every release</strong><p>New procedures, screenshots and troubleshooting guidance are updated when the relevant BAV system changes.</p></aside>
           </div>
@@ -76,6 +77,11 @@ export default function HandbookPage() {
           <div className="handbook-self-service-heading"><div><span className="handbook-kicker">Pilot self-service guide</span><h2>Complete a BAV flight without needing support.</h2><p>Follow this exact order. Each stage confirms that the previous one is working before you continue.</p></div><div className="handbook-self-service-links"><Link href="/book">Book a flight</Link><Link href="/manage-assignment">Manage assignment</Link><Link href="/account/profile">Account settings</Link></div></div>
           <ol className="handbook-checklist">{pilotChecklist.map(([number, title, copy]) => <li key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></li>)}</ol>
           <div className="handbook-self-check"><strong>Before opening a support ticket</strong><div><p><b>No flight in Ember?</b> Confirm the BAV flight is booked, then use Refresh BAV flight and profile.</p><p><b>Cannot reserve a registration?</b> Select another aircraft marked dispatchable; the chosen one may already be reserved or unavailable.</p><p><b>No flight on BA-Radar?</b> Check that Ember is signed in, the simulator is connected and you have started engines or pushback on an active BAV assignment.</p></div></div>
+        </section>
+
+        <section className="handbook-shell handbook-guide" id="achievements">
+          <div className="handbook-guide-heading"><span className="handbook-kicker">Pilot career awards</span><h2>Recognition is earned from accepted BAV flights.</h2><p>There is nothing to claim manually. Once Staff Centre accepts a PIREP, eligible awards appear in your pilot dashboard alongside the flight&apos;s VA and Tier Points.</p><Link href="/account">View pilot dashboard →</Link></div>
+          <div className="handbook-step-grid"><article><span>◎</span><h3>Career distance and sectors</h3><p>Earn Around the World after 21,639 NM in accepted BAV flights and Long-Haul Flyer after one accepted sector of 3,000 NM or more.</p></article><article><span>◉</span><h3>Hub and fleet experience</h3><p>Twenty-five accepted departures from Heathrow earn Heathrow Specialist. First accepted flights in the A320 family, Embraer, A350, Boeing 777 and Boeing 787 each earn a fleet achievement.</p></article><article><span>★</span><h3>Official BAV events</h3><p>Fly an event&apos;s published route on its published date. When the matching PIREP is accepted, BAV adds its event badge and the VA and Tier Point bonus set for that event.</p></article><article><span>✓</span><h3>Keep it simple</h3><p>Use Ember for normal operations and wait for PIREP acceptance. Only use the manual PIREP page if Ember was unable to submit the flight.</p></article></div>
         </section>
 
         <section className="handbook-shell handbook-guide handbook-staff-guide" id="staff">

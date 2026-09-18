@@ -3,6 +3,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
+import { getEvents } from "@/lib/event-store";
+import { getMatchingBavEvent } from "@/lib/pilot-awards";
 import { applyApprovedPirepStats, getPilotById, getRewardSettings, isFirstFlightAwardEligible } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 
@@ -375,10 +377,23 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const update: Record<string, unknown> = { status: input.decision, staff_comments: input.comments.trim().slice(0, 2000), reviewed_at: reviewedAt, reviewed_by: input.staffName };
     if (input.decision === "accepted") {
       const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(current.pilotId));
-      const { points, tierPoints } = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
+      const event = getMatchingBavEvent(current, await getEvents());
+      const baseReward = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
+      const points = baseReward.points + (event?.rewards.vaPoints ?? 0);
+      const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
       update.points_awarded = points;
       update.tier_points_awarded = tierPoints;
-      await applyApprovedPirepStats(current.pilotId, { blockMinutes: current.blockMinutes, distanceNm: current.distanceNm, landingFpm: current.landingFpm, points, tierPoints, sourcePirepId: current.id });
+      await applyApprovedPirepStats(current.pilotId, {
+        blockMinutes: current.blockMinutes,
+        distanceNm: current.distanceNm,
+        landingFpm: current.landingFpm,
+        points,
+        tierPoints,
+        sourcePirepId: current.id,
+        from: current.from,
+        aircraft: current.aircraft,
+        eventAward: event ? { eventId: event.id, eventTitle: event.rewards.badge ?? event.title } : undefined,
+      });
     }
     const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
     if (error) throw error;
@@ -396,7 +411,10 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
 
   if (input.decision === "accepted") {
     const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(pirep.pilotId));
-    const { points, tierPoints } = calculatePirepReward(pirep, await getRewardSettings(), firstFlightAward);
+    const event = getMatchingBavEvent(pirep, await getEvents());
+    const baseReward = calculatePirepReward(pirep, await getRewardSettings(), firstFlightAward);
+    const points = baseReward.points + (event?.rewards.vaPoints ?? 0);
+    const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
     pirep.pointsAwarded = points;
     pirep.tierPointsAwarded = tierPoints;
     await applyApprovedPirepStats(pirep.pilotId, {
@@ -406,6 +424,9 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
       points,
       tierPoints,
       sourcePirepId: pirep.id,
+      from: pirep.from,
+      aircraft: pirep.aircraft,
+      eventAward: event ? { eventId: event.id, eventTitle: event.rewards.badge ?? event.title } : undefined,
     });
   }
 
