@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
 import { requireStaffPermission } from "@/lib/staff-auth";
 import { isPilotRank, normalizePilotTypeRatings } from "@/lib/pilot-ranks";
-import { setPilotStatus, updatePilotAdminFields } from "@/lib/pilot-store";
+import { addManualPilotHours, setPilotStatus, updatePilotAdminFields } from "@/lib/pilot-store";
 
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const body = await request.json() as { status?: "active" | "suspended"; rankOverride?: string | null; typeRatings?: unknown; hub?: string; tier?: string };
+    const body = await request.json() as {
+      status?: "active" | "suspended";
+      rankOverride?: string | null;
+      typeRatings?: unknown;
+      hub?: string;
+      tier?: string;
+      hoursToAdd?: unknown;
+      adjustmentReason?: unknown;
+      requestId?: unknown;
+    };
     const { id } = await context.params;
 
     if (body.status) {
@@ -16,7 +25,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return NextResponse.json({ ok: true, pilot });
     }
 
-    await requireStaffPermission("users.edit");
+    const session = await requireStaffPermission("users.edit");
+    if (body.hoursToAdd !== undefined || body.adjustmentReason !== undefined) {
+      const pilot = await addManualPilotHours(id, {
+        hoursToAdd: body.hoursToAdd,
+        reason: body.adjustmentReason,
+        addedBy: session.name,
+        requestId: body.requestId,
+      });
+      return NextResponse.json({ ok: true, pilot });
+    }
     let rankOverride = undefined as Parameters<typeof updatePilotAdminFields>[1]["rankOverride"] | undefined;
     if (body.rankOverride === null || body.rankOverride === "automatic") rankOverride = null;
     else if (body.rankOverride !== undefined) {

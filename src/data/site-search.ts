@@ -150,6 +150,13 @@ export const siteSearchItems: SiteSearchItem[] = [
     keywords: "profile photo picture avatar home hub SimBrief ID settings account edit change image",
   },
   {
+    title: "Request transfer credit from a former virtual airline",
+    summary: "In Account Settings, submit your former VA hours with an evidence link or reference. BAV Operations reviews every request manually before any career time is credited.",
+    href: "/account/profile#transfer-credit",
+    section: "Pilot career",
+    keywords: "transfer hours former VA virtual airline logbook credit previous airline career hours request evidence manual review rank",
+  },
+  {
     title: "Pilot sign-in and password help",
     summary: "Sign in with your BAV pilot account. If you cannot access it, use the password-reset journey and check the Help Centre for common fixes.",
     href: "/login",
@@ -218,5 +225,12 @@ export const siteSearchItems: SiteSearchItem[] = [
     href: "/handbook#staff",
     section: "Staff",
     keywords: "staff onboarding invite invitation roles permissions staff account login security SOP",
+  },
+  {
+    title: "Review former VA transfer-credit requests",
+    summary: "Authorised Operations staff can verify pilot evidence, approve eligible career hours or decline with a clear review note. Exceptional manual credit is available in Pilot Management.",
+    href: "/staff/hour-transfers",
+    section: "Staff",
+    keywords: "staff transfer credit former VA hours review approve decline manual hours pilot management career audit",
   },
 ];

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { RankInsignia } from "@/components/RankInsignia";
 import { requirePilotSession } from "@/lib/pilot-auth";
-import { getPilotById } from "@/lib/pilot-store";
+import { getPilotById, listPilotHourTransferRequests } from "@/lib/pilot-store";
+import { HourTransferCard } from "./HourTransferCard";
 import { ProfileForms } from "./ProfileForms";
 import styles from "./profile.module.css";
 
@@ -12,6 +13,7 @@ export default async function PilotProfilePage() {
   const session = await requirePilotSession();
   const pilot = await getPilotById(session.pilotId);
   if (!pilot) return null;
+  const transferRequests = await listPilotHourTransferRequests(pilot.id);
 
   return (
     <main className={styles.page}>
@@ -28,6 +30,7 @@ export default async function PilotProfilePage() {
           <article><span>LAST SIGN IN</span><strong>{pilot.lastLoginAt ? new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</strong></article>
         </section>
         <ProfileForms name={pilot.name} email={pilot.email} hub={pilot.hub} simbriefPilotId={pilot.simbriefPilotId ?? ""} profileImage={pilot.profileImage} pilotRulesAcceptedAt={pilot.pilotRulesAcceptedAt} pilotRulesVersion={pilot.pilotRulesVersion} />
+        <HourTransferCard requests={transferRequests} />
         <div className={styles.back}><Link href="/account">← Back to pilot dashboard</Link></div>
       </div>
     </main>

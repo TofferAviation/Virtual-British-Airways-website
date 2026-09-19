@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 const pilotSteps = [
-  ["01", "Create and secure your pilot account", "Use your BAV account for the website and keep your profile, password and SimBrief Pilot ID current."],
+  ["01", "Create and secure your pilot account", "Use your BAV account for the website and keep your profile, password and SimBrief Pilot ID current. If you have verified career time from a former virtual airline, request transfer credit in Account Settings; Operations reviews it manually before it can affect your BAV career time or automatic rank."],
   ["02", "Choose your BAV hub and virtual service", "Choose London Heathrow, Gatwick or London City as your home hub, then browse the services departing there. Reserve a service and use Manage Assignment to keep its briefing available."],
   ["03", "Reserve an aircraft registration", "In Ember Fleet Management, select a dispatchable registration matching your BAV flight and reserve it. Other pilots cannot take that airframe while it is assigned to you."],
   ["04", "Plan, fly and credit the airframe", "Generate and sync your SimBrief OFP, then fly with Ember. A clean completion updates the aircraft’s hours, cycle, station and fleet logbook, then automatically creates the linked PIREP for staff review and career credit."],
@@ -25,7 +25,7 @@ const staffSteps = [
 ];
 
 const pilotChecklist = [
-  ["1", "Sign in and prepare your profile", "Open Account Settings and confirm your name, email and SimBrief Pilot ID. Ember uses the same BAV pilot account; it never needs your SimBrief password."],
+  ["1", "Sign in and prepare your profile", "Open Account Settings and confirm your name, email and SimBrief Pilot ID. Ember uses the same BAV pilot account; it never needs your SimBrief password. Former VA time can be submitted there with a public logbook link, pilot ID or other evidence reference; every transfer-credit request is manually reviewed by Operations."],
   ["2", "Choose a hub and book a BAV service", "Set London Heathrow, Gatwick or London City as your home hub in Account Settings. The home page defaults to that hub; use Browse every BAV service from the selected hub to see its full schedule. A bookable service always shows its checked BA flight number and BAW / SPEEDBIRD callsign. A published time is a realism reference, not a gate: use a virtual-flexible assignment when the real timetable does not suit your simulator session. Once a flight is saved, open Manage Assignment and verify the flight number, route and aircraft."],
   ["3", "Confirm rank and aircraft eligibility", "Cadets begin on regional and A320-family sectors. A321 operations unlock at Second Officer; long-haul A350, 777 and 787 flights require Senior First Officer rank plus a staff-approved type rating. Your current approvals appear in the pilot dashboard."],
   ["4", "Generate and sync the flight plan", "From Manage Assignment, generate your official SimBrief plan, complete SimBrief’s sign-in window, then use Sync generated plan. The OFP details stay available on your BAV assignment."],

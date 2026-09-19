@@ -56,6 +56,8 @@ import "./ba-radar-weather-layers.css";
 import "./ba-radar-wind-flow.css";
 import "./site-search.css";
 import "./first-visit-welcome.css";
+import "./hour-transfer.css";
+import "./hour-transfer-links.css";
 import "leaflet/dist/leaflet.css";
 
 export const metadata: Metadata = {

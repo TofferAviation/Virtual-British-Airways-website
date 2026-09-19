@@ -13,12 +13,14 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 5;
+  version: 6;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
   deviceSessions: PilotDeviceSession[];
   rewardSettings: RewardSettings;
+  hourTransferRequests: PilotHourTransferRequest[];
+  hourAdjustments: PilotHourAdjustment[];
 };
 
 type PilotPasswordResetToken = {
@@ -51,6 +53,35 @@ export type PilotAward = {
   /** Present only on event awards, allowing a pilot to earn one for each official event. */
   eventId: string | null;
   eventTitle: string | null;
+};
+
+/** A pilot-submitted request to recognise time from a previous virtual airline. */
+export type PilotHourTransferRequest = {
+  id: string;
+  pilotId: string;
+  formerVaName: string;
+  requestedHours: number;
+  /** Link, pilot ID, or other staff-reviewable evidence reference. */
+  evidenceReference: string;
+  pilotNote: string | null;
+  status: "pending" | "approved" | "declined";
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+  creditedHours: number | null;
+};
+
+/** Immutable audit entry for non-PIREP career-hour credit. */
+export type PilotHourAdjustment = {
+  id: string;
+  pilotId: string;
+  hours: number;
+  reason: string;
+  source: "transfer-review" | "manual";
+  actorName: string;
+  requestId: string | null;
+  createdAt: string;
 };
 
 type PilotStateRow = { state: unknown };
@@ -98,7 +129,16 @@ export type PilotAccount = {
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
 
 function emptyState(): PilotState {
-  return { version: 5, nextPilotNumber: 1, pilots: [], passwordResetTokens: [], deviceSessions: [], rewardSettings: { ...DEFAULT_REWARD_SETTINGS } };
+  return {
+    version: 6,
+    nextPilotNumber: 1,
+    pilots: [],
+    passwordResetTokens: [],
+    deviceSessions: [],
+    rewardSettings: { ...DEFAULT_REWARD_SETTINGS },
+    hourTransferRequests: [],
+    hourAdjustments: [],
+  };
 }
 
 function getPilotStateClient(): SupabaseClient | null {
@@ -221,7 +261,70 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       })
       .slice(-2_000)
     : [];
-  return { version: 5, nextPilotNumber, pilots, passwordResetTokens, deviceSessions, rewardSettings: normalizeRewardSettings(raw?.rewardSettings) };
+  const hourTransferRequests = Array.isArray(raw?.hourTransferRequests)
+    ? raw.hourTransferRequests
+      .filter((item): item is PilotHourTransferRequest => Boolean(
+        item &&
+          typeof item.id === "string" &&
+          typeof item.pilotId === "string" &&
+          typeof item.formerVaName === "string" &&
+          Number.isFinite(item.requestedHours) &&
+          typeof item.evidenceReference === "string" &&
+          (item.status === "pending" || item.status === "approved" || item.status === "declined") &&
+          typeof item.createdAt === "string",
+      ))
+      .map((item) => ({
+        id: item.id,
+        pilotId: item.pilotId,
+        formerVaName: item.formerVaName.trim().slice(0, 90),
+        requestedHours: Math.round(Math.max(0.1, Number(item.requestedHours)) * 100) / 100,
+        evidenceReference: item.evidenceReference.trim().slice(0, 500),
+        pilotNote: typeof item.pilotNote === "string" ? item.pilotNote.trim().slice(0, 1_500) || null : null,
+        status: item.status,
+        createdAt: item.createdAt,
+        reviewedAt: typeof item.reviewedAt === "string" ? item.reviewedAt : null,
+        reviewedBy: typeof item.reviewedBy === "string" ? item.reviewedBy.trim().slice(0, 100) || null : null,
+        reviewNote: typeof item.reviewNote === "string" ? item.reviewNote.trim().slice(0, 1_500) || null : null,
+        creditedHours: Number.isFinite(item.creditedHours) ? Math.round(Math.max(0, Number(item.creditedHours)) * 100) / 100 : null,
+      }))
+      .filter((item) => pilots.some((pilot) => pilot.id === item.pilotId))
+      .slice(-2_000)
+    : [];
+  const hourAdjustments = Array.isArray(raw?.hourAdjustments)
+    ? raw.hourAdjustments
+      .filter((item): item is PilotHourAdjustment => Boolean(
+        item &&
+          typeof item.id === "string" &&
+          typeof item.pilotId === "string" &&
+          Number.isFinite(item.hours) &&
+          typeof item.reason === "string" &&
+          (item.source === "transfer-review" || item.source === "manual") &&
+          typeof item.actorName === "string" &&
+          typeof item.createdAt === "string",
+      ))
+      .map((item) => ({
+        id: item.id,
+        pilotId: item.pilotId,
+        hours: Math.round(Math.max(0.1, Number(item.hours)) * 100) / 100,
+        reason: item.reason.trim().slice(0, 1_500),
+        source: item.source,
+        actorName: item.actorName.trim().slice(0, 100),
+        requestId: typeof item.requestId === "string" ? item.requestId : null,
+        createdAt: item.createdAt,
+      }))
+      .filter((item) => pilots.some((pilot) => pilot.id === item.pilotId))
+      .slice(-5_000)
+    : [];
+  return {
+    version: 6,
+    nextPilotNumber,
+    pilots,
+    passwordResetTokens,
+    deviceSessions,
+    rewardSettings: normalizeRewardSettings(raw?.rewardSettings),
+    hourTransferRequests,
+    hourAdjustments,
+  };
 }
 
 async function readLocalState(): Promise<PilotState> {
@@ -455,6 +558,165 @@ export async function revokeAcarsDeviceSession(token: string) {
 export async function listPilots() {
   const state = await readState();
   return state.pilots.map(toPublicPilot).sort((a, b) => a.pilotNumber.localeCompare(b.pilotNumber));
+}
+
+export async function listPilotHourTransferRequests(pilotId: string) {
+  const state = await readState();
+  return state.hourTransferRequests
+    .filter((request) => request.pilotId === pilotId)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+export async function listAllPilotHourTransferRequests() {
+  const state = await readState();
+  const sortOrder = { pending: 0, approved: 1, declined: 2 } as const;
+  return state.hourTransferRequests
+    .slice()
+    .sort((a, b) => sortOrder[a.status] - sortOrder[b.status] || Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+export async function listPilotHourAdjustments(pilotId: string) {
+  const state = await readState();
+  return state.hourAdjustments
+    .filter((adjustment) => adjustment.pilotId === pilotId)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+function transferText(value: unknown, label: string, minimum: number, maximum: number) {
+  const text = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  if (text.length < minimum) throw new Error(`${label} must contain at least ${minimum} characters.`);
+  return text.slice(0, maximum);
+}
+
+function transferHours(value: unknown, label: string) {
+  const hours = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 50_000) throw new Error(`${label} must be between 0.1 and 50,000 hours.`);
+  return Math.round(hours * 100) / 100;
+}
+
+/** Submit a single pending request for former-VA time. It always requires staff review. */
+export async function createPilotHourTransferRequest(pilotId: string, input: {
+  formerVaName?: unknown;
+  requestedHours?: unknown;
+  evidenceReference?: unknown;
+  pilotNote?: unknown;
+}) {
+  const formerVaName = transferText(input.formerVaName, "Former virtual airline", 2, 90);
+  const requestedHours = transferHours(input.requestedHours, "Requested career time");
+  const evidenceReference = transferText(input.evidenceReference, "Evidence link or reference", 4, 500);
+  const pilotNote = typeof input.pilotNote === "string" ? input.pilotNote.trim().slice(0, 1_500) || null : null;
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === pilotId);
+  if (!account) throw new Error("Pilot account not found.");
+  if (state.hourTransferRequests.some((request) => request.pilotId === pilotId && request.status === "pending")) {
+    throw new Error("You already have a transfer-credit request under review. Please wait for staff to respond.");
+  }
+  const request: PilotHourTransferRequest = {
+    id: randomUUID(),
+    pilotId,
+    formerVaName,
+    requestedHours,
+    evidenceReference,
+    pilotNote,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewNote: null,
+    creditedHours: null,
+  };
+  state.hourTransferRequests.push(request);
+  await writeState(state);
+  return request;
+}
+
+function addCareerHours(state: PilotState, account: PilotAccount, input: {
+  hours: number;
+  reason: string;
+  source: PilotHourAdjustment["source"];
+  actorName: string;
+  requestId?: string | null;
+}) {
+  account.hours = Math.round((account.hours + input.hours) * 100) / 100;
+  account.rank = account.rankOverride ?? automaticPilotRank(account.hours);
+  const adjustment: PilotHourAdjustment = {
+    id: randomUUID(),
+    pilotId: account.id,
+    hours: input.hours,
+    reason: input.reason,
+    source: input.source,
+    actorName: input.actorName,
+    requestId: input.requestId ?? null,
+    createdAt: new Date().toISOString(),
+  };
+  state.hourAdjustments.push(adjustment);
+  return adjustment;
+}
+
+/** Approve all or part of a pilot's submitted transfer request, or decline it with a staff note. */
+export async function reviewPilotHourTransferRequest(input: {
+  requestId?: unknown;
+  decision?: unknown;
+  creditedHours?: unknown;
+  reviewNote?: unknown;
+  reviewedBy: string;
+}) {
+  const requestId = transferText(input.requestId, "Transfer request", 8, 100);
+  if (input.decision !== "approved" && input.decision !== "declined") throw new Error("Choose whether to approve or decline this request.");
+  const reviewedBy = transferText(input.reviewedBy, "Reviewing staff member", 1, 100);
+  const reviewNote = typeof input.reviewNote === "string" ? input.reviewNote.trim().slice(0, 1_500) || null : null;
+  if (input.decision === "declined" && !reviewNote) throw new Error("Please add a clear note when declining a transfer-credit request.");
+
+  const state = await readState();
+  const request = state.hourTransferRequests.find((item) => item.id === requestId);
+  if (!request) throw new Error("Transfer-credit request not found.");
+  if (request.status !== "pending") throw new Error("This transfer-credit request has already been reviewed.");
+  const account = state.pilots.find((pilot) => pilot.id === request.pilotId);
+  if (!account) throw new Error("Pilot account not found.");
+
+  const reviewedAt = new Date().toISOString();
+  request.status = input.decision;
+  request.reviewedAt = reviewedAt;
+  request.reviewedBy = reviewedBy;
+  request.reviewNote = reviewNote;
+  if (input.decision === "approved") {
+    const creditedHours = transferHours(input.creditedHours, "Approved career time");
+    if (creditedHours > request.requestedHours) throw new Error("Approved career time cannot exceed the pilot's requested amount.");
+    request.creditedHours = creditedHours;
+    addCareerHours(state, account, {
+      hours: creditedHours,
+      reason: `Former VA transfer approved: ${request.formerVaName}${reviewNote ? ` — ${reviewNote}` : ""}`,
+      source: "transfer-review",
+      actorName: reviewedBy,
+      requestId: request.id,
+    });
+  } else {
+    request.creditedHours = null;
+  }
+  await writeState(state);
+  return { request, pilot: toPublicPilot(account) };
+}
+
+/** Add exceptional career time without creating a flight, PIREP, points, or awards. */
+export async function addManualPilotHours(pilotId: string, input: {
+  hoursToAdd: unknown;
+  reason: unknown;
+  addedBy: string;
+  requestId?: unknown;
+}) {
+  const hours = transferHours(input.hoursToAdd, "Career time to add");
+  const reason = transferText(input.reason, "Adjustment reason", 3, 1_500);
+  const addedBy = transferText(input.addedBy, "Authorising staff member", 1, 100);
+  const requestId = typeof input.requestId === "string" && input.requestId.trim() ? input.requestId.trim().slice(0, 100) : null;
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === pilotId);
+  if (!account) throw new Error("Pilot account not found.");
+  if (requestId && !state.hourTransferRequests.some((request) => request.id === requestId && request.pilotId === pilotId)) {
+    throw new Error("The selected transfer request does not belong to this pilot.");
+  }
+  addCareerHours(state, account, { hours, reason, source: "manual", actorName: addedBy, requestId });
+  await writeState(state);
+  return toPublicPilot(account);
 }
 
 export async function markPilotLogin(id: string) {
