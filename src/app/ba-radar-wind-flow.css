@@ -1,9 +1,15 @@
+.ba-radar-wind-tint,
 .ba-radar-convective-outlook,
 .ba-radar-wind-flow {
   position: absolute;
   inset: 0;
   display: block;
   pointer-events: none;
+}
+
+.ba-radar-wind-tint {
+  opacity: 0.46;
+  mix-blend-mode: multiply;
 }
 
 .ba-radar-convective-outlook {

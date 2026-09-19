@@ -95,6 +95,7 @@ const EMPTY_ADVISORIES: AviationAdvisories = { type: "FeatureCollection", featur
 const WIND_LATITUDES = [-60, -45, -30, -15, 0, 15, 30, 45, 60];
 const WIND_LONGITUDES = [-170, -150, -130, -110, -90, -70, -50, -30, -10, 10, 30, 50, 70, 90, 110, 130, 150, 170];
 const OPEN_METEO_BATCH_SIZE = 54;
+const OPEN_METEO_BATCH_CONCURRENCY = 3;
 
 export function radarWindLayer(value: string | null | undefined): RadarWindLayer {
   return RADAR_WIND_LAYERS.find((entry) => entry.id === value) ?? RADAR_WIND_LAYERS[0];
@@ -323,7 +324,7 @@ function atmosphericGridLocations(): GridLocation[] {
 async function getAtmosphericGrid(windLayer: RadarWindLayer): Promise<GridEntry[]> {
   const locations = atmosphericGridLocations();
   const batches = Array.from({ length: Math.ceil(locations.length / OPEN_METEO_BATCH_SIZE) }, (_, index) => locations.slice(index * OPEN_METEO_BATCH_SIZE, (index + 1) * OPEN_METEO_BATCH_SIZE));
-  const results = await Promise.allSettled(batches.map(async (batch) => {
+  const fetchBatch = async (batch: GridLocation[]) => {
     const query = new URLSearchParams({
       latitude: batch.map((entry) => entry.latitude).join(","),
       longitude: batch.map((entry) => entry.longitude).join(","),
@@ -338,7 +339,11 @@ async function getAtmosphericGrid(windLayer: RadarWindLayer): Promise<GridEntry[
     const response = await fetchJson(`https://api.open-meteo.com/v1/forecast?${query.toString()}`);
     const entries = Array.isArray(response) ? response : [response];
     return entries.map((entry, index) => ({ location: batch[index], record: asRecord(entry) })).filter((entry): entry is GridEntry => Boolean(entry.location));
-  }));
+  };
+  const results: PromiseSettledResult<GridEntry[]>[] = [];
+  for (let index = 0; index < batches.length; index += OPEN_METEO_BATCH_CONCURRENCY) {
+    results.push(...await Promise.allSettled(batches.slice(index, index + OPEN_METEO_BATCH_CONCURRENCY).map(fetchBatch)));
+  }
   return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
 }
 
@@ -358,14 +363,16 @@ async function getAtmosphericWeather(windLayer: RadarWindLayer): Promise<{ winds
       ? asNumber(current?.[directionField])
       : (Array.isArray(hourly?.[directionField]) ? asNumber(hourly[directionField][timeIndex]) : null);
     if (speedKt === null || directionDeg === null) return [];
-    return [{ latitude: asNumber(record?.latitude) ?? location.latitude, longitude: asNumber(record?.longitude) ?? location.longitude, speedKt, directionDeg, gustKt: windLayer.hPa === null ? asNumber(current?.wind_gusts_10m) : null }];
+    // Preserve the known regular query lattice. The display layer uses it for
+    // continuous interpolation, while Open-Meteo still supplies each value.
+    return [{ latitude: location.latitude, longitude: location.longitude, speedKt, directionDeg, gustKt: windLayer.hPa === null ? asNumber(current?.wind_gusts_10m) : null }];
   });
   const convectiveRisk = entries.flatMap(({ record, location }) => {
     if (!record) return [];
     const current = asRecord(record?.current);
     const capeJkg = asNumber(current?.cape);
     if (capeJkg === null || capeJkg < 500) return [];
-    return [{ latitude: asNumber(record?.latitude) ?? location.latitude, longitude: asNumber(record?.longitude) ?? location.longitude, capeJkg }];
+    return [{ latitude: location.latitude, longitude: location.longitude, capeJkg }];
   });
   return { winds, convectiveRisk };
 }
