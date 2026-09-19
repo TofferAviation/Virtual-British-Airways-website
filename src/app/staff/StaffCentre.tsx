@@ -50,8 +50,13 @@ function emptyRoute(): ManagedRoute {
     arrival: "10:00",
     duration: "2h 00m",
     aircraft: "Airbus A320neo",
+    aircraftOptions: [],
     slots: 10,
     active: true,
+    validFrom: isoToday(),
+    operatingDays: [],
+    sourceUrl: "https://www.britishairways.com/travel/schedules/public/en_gb",
+    validatedAt: isoToday(),
   };
 }
 
@@ -227,7 +232,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         </div>
 
         <div className="staff-panel" id="route-tools">
-          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>The BA airport-pair catalogue is published to pilots. Add or edit a verified service here to make its flight number, UTC times and aircraft bookable.</p></div></div>
+          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>The BA airport-pair catalogue is published to pilots. Add or edit an official-timetable service here to make its flight number, local airport times and aircraft bookable.</p></div></div>
           <div className="staff-tool-list">
             <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add route</b><small>Create a route override and flight details.</small><i>›</i></button>
             <button onClick={() => setRouteDraft(routes[0] ?? emptyRoute())}><span>⚙</span><b>Edit aircraft assignment</b><small>Change the aircraft on an existing route.</small><i>›</i></button>
@@ -321,7 +326,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         <div className="staff-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setRouteDraft(null); }}>
           <div className="staff-modal staff-route-modal" role="dialog" aria-modal="true" aria-label={routeDraft.id ? "Edit route" : "Create route"}>
             <div className="staff-modal-heading"><div><span className="staff-kicker">Route editor</span><h2>{routeDraft.id ? "Edit route override" : "Add route override"}</h2></div><button onClick={() => setRouteDraft(null)} disabled={saving}>×</button></div>
-            <p className="staff-modal-lead">Publish a verified BA service with its real flight number, UTC times and scheduled aircraft. It replaces the route-catalogue card for this city pair on the Book page.</p>
+            <p className="staff-modal-lead">Publish an official-timetable BA service with its real flight number, local airport times and scheduled aircraft. Add the source and verification date so staff can audit it later. It replaces the route-catalogue card for this city pair on the Book page.</p>
             <div className="staff-form-grid">
               <label><span>From IATA</span><input value={routeDraft.from} onChange={(e) => setRouteDraft({ ...routeDraft, from: e.target.value.toUpperCase() })} /></label>
               <label><span>To IATA</span><input value={routeDraft.to} onChange={(e) => setRouteDraft({ ...routeDraft, to: e.target.value.toUpperCase() })} /></label>
@@ -331,6 +336,12 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
               <label><span>Arrival</span><input type="time" value={routeDraft.arrival} onChange={(e) => setRouteDraft({ ...routeDraft, arrival: e.target.value })} /></label>
               <label><span>Duration</span><input value={routeDraft.duration} onChange={(e) => setRouteDraft({ ...routeDraft, duration: e.target.value })} placeholder="2h 10m" /></label>
               <label><span>Pilot slots</span><input type="number" min="0" value={routeDraft.slots} onChange={(e) => setRouteDraft({ ...routeDraft, slots: Number(e.target.value) })} /></label>
+              <label><span>Approved virtual substitutes</span><input value={(routeDraft.aircraftOptions ?? []).join(", ")} onChange={(e) => setRouteDraft({ ...routeDraft, aircraftOptions: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Airbus A320, Airbus A319" /></label>
+              <label><span>Official timetable source</span><input type="url" value={routeDraft.sourceUrl ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, sourceUrl: e.target.value })} placeholder="https://…" /></label>
+              <label><span>Verified on</span><input type="date" value={routeDraft.validatedAt ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validatedAt: e.target.value })} /></label>
+              <label><span>Valid from</span><input type="date" value={routeDraft.validFrom ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validFrom: e.target.value })} /></label>
+              <label><span>Valid until (optional)</span><input type="date" value={routeDraft.validUntil ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validUntil: e.target.value })} /></label>
+              <label><span>Operating days</span><input value={(routeDraft.operatingDays ?? []).join(", ")} onChange={(e) => setRouteDraft({ ...routeDraft, operatingDays: e.target.value.split(",").map((item) => Number(item.trim())).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) })} placeholder="0 Sun, 1 Mon … 6 Sat" /></label>
             </div>
             <div className="staff-check-row"><label><input type="checkbox" checked={routeDraft.active} onChange={(e) => setRouteDraft({ ...routeDraft, active: e.target.checked })} /> Route active</label></div>
             <div className="staff-modal-actions">

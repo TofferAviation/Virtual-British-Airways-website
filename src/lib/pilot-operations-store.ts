@@ -249,6 +249,37 @@ export async function createFlightPlanForBooking(input: { bookingId: string; pil
   return flightPlan;
 }
 
+/**
+ * Changes the virtual aircraft before the flight starts. A SimBrief OFP is
+ * tied to aircraft performance, so any previously synced plan is cleared and
+ * must be generated again for the newly selected approved aircraft.
+ */
+export async function updatePilotBookingAircraft(input: { bookingId: string; pilotId: string; aircraft: string }) {
+  const state = await readState();
+  const booking = state.bookings.find((item) => item.id === input.bookingId && item.pilotId === input.pilotId);
+  if (!booking) throw new Error("Flight assignment not found.");
+  if (booking.status !== "booked") throw new Error("Aircraft can only be changed before the Ember flight begins.");
+
+  booking.aircraft = input.aircraft;
+  const flightPlan = state.flightPlans.find((item) => item.bookingId === input.bookingId && item.pilotId === input.pilotId);
+  if (flightPlan) {
+    const now = new Date().toISOString();
+    flightPlan.status = "draft";
+    flightPlan.simbriefOfpId = null;
+    flightPlan.simbriefOfpUrl = null;
+    flightPlan.route = null;
+    flightPlan.cruiseAltitude = null;
+    flightPlan.alternate = null;
+    flightPlan.simbriefBriefing = null;
+    flightPlan.generatedAt = null;
+    flightPlan.lastSyncedAt = null;
+    flightPlan.updatedAt = now;
+  }
+
+  await writeState(state);
+  return booking;
+}
+
 export async function getPilotFlightPlan(bookingId: string, pilotId: string) {
   const state = await readState();
   return state.flightPlans.find((item) => item.bookingId === bookingId && item.pilotId === pilotId) ?? null;

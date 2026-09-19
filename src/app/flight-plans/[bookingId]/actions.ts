@@ -1,13 +1,38 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { configureFlightPlanSimbrief, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, updateFlightPlanFromSimbrief } from "@/lib/pilot-operations-store";
+import { configureFlightPlanSimbrief, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { buildSimbriefDispatchUrl, fetchLatestSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
 import { getPilotById } from "@/lib/pilot-store";
+import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
+import { getManagedRoutes } from "@/lib/route-store";
 
 function flightPlanPath(bookingId: string) {
   return `/flight-plans/${encodeURIComponent(bookingId)}`;
+}
+
+export async function changeBookingAircraft(formData: FormData) {
+  const session = await requirePilotSession();
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const requestedAircraft = String(formData.get("aircraft") ?? "").trim();
+  const [booking, pilot, routes] = await Promise.all([
+    getPilotBooking(bookingId, session.pilotId),
+    getPilotById(session.pilotId),
+    getManagedRoutes(),
+  ]);
+  if (!booking || !pilot || !requestedAircraft) redirect(`${flightPlanPath(bookingId)}?error=aircraft-change`);
+  if (booking.status !== "booked") redirect(`${flightPlanPath(bookingId)}?error=aircraft-started`);
+
+  const route = booking.routeId ? routes.find((item) => item.id === booking.routeId && item.active && !item.catalogueOnly) : null;
+  const approvedAircraft = new Set(route ? [route.aircraft, ...(route.aircraftOptions ?? [])] : [booking.aircraft]);
+  if (!approvedAircraft.has(requestedAircraft)) redirect(`${flightPlanPath(bookingId)}?error=aircraft-change`);
+
+  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: requestedAircraft });
+  if (!eligibility.eligible) redirect(`${flightPlanPath(bookingId)}?error=aircraft-qualification`);
+
+  await updatePilotBookingAircraft({ bookingId, pilotId: session.pilotId, aircraft: requestedAircraft });
+  redirect(`${flightPlanPath(bookingId)}?aircraftUpdated=1`);
 }
 
 export async function openSimbriefDispatch(formData: FormData) {

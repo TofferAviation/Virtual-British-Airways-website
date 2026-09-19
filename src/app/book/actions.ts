@@ -15,6 +15,7 @@ export async function bookFlight(formData: FormData) {
   const date = String(formData.get("date") ?? "");
   const flightNumber = String(formData.get("flightNumber") ?? "");
   const routeId = String(formData.get("routeId") ?? "");
+  const requestedAircraft = String(formData.get("aircraft") ?? "").trim();
   const flexible = String(formData.get("flexible") ?? "") === "1";
   if (!from || !to || !date || !flightNumber || !routeId) redirect("/book");
 
@@ -24,7 +25,12 @@ export async function bookFlight(formData: FormData) {
 
   const pilot = await getPilotById(session.pilotId);
   if (!pilot) redirect("/login");
-  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: flight.aircraft });
+  const approvedAircraft = new Set([flight.aircraft, ...(flight.aircraftOptions ?? [])]);
+  const selectedAircraft = requestedAircraft || flight.aircraft;
+  if (!approvedAircraft.has(selectedAircraft)) {
+    redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=aircraft`);
+  }
+  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: selectedAircraft });
   if (!eligibility.eligible) {
     redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=qualification`);
   }
@@ -35,7 +41,7 @@ export async function bookFlight(formData: FormData) {
     flightNumber: flight.number,
     from,
     to,
-    aircraft: flight.aircraft,
+    aircraft: selectedAircraft,
     departure: flight.departure,
     arrival: flight.arrival,
     duration: flight.duration,

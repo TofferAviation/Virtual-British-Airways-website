@@ -23,6 +23,23 @@ function bool(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function date(value: unknown) {
+  const candidate = text(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : undefined;
+}
+
+function aircraftList(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
+  return items.length ? Array.from(new Set(items)) : undefined;
+}
+
+function operatingDays(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const days = value.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6);
+  return days.length ? Array.from(new Set(days)) : undefined;
+}
+
 function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   if (!input || typeof input !== "object") throw new Error("Invalid route payload.");
   const raw = input as Record<string, unknown>;
@@ -49,6 +66,13 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     aircraft,
     slots: Math.max(0, Math.round(numberValue(raw.slots, 10))),
     active: bool(raw.active, true),
+    validFrom: date(raw.validFrom),
+    validUntil: date(raw.validUntil),
+    operatingDays: operatingDays(raw.operatingDays),
+    aircraftOptions: aircraftList(raw.aircraftOptions),
+    sourceUrl: /^https:\/\//.test(text(raw.sourceUrl)) ? text(raw.sourceUrl) : undefined,
+    validatedAt: date(raw.validatedAt),
+    catalogueOnly: false,
   };
 }
 

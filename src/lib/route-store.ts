@@ -117,8 +117,6 @@ export async function updateManagedRoute(id: string, route: ManagedRoute) {
     ...existing,
     ...route,
     id,
-    validFrom: route.validFrom ?? existing.validFrom,
-    operatingDays: route.operatingDays ?? existing.operatingDays,
   };
   await saveManagedRoutes(next);
   return next[index];

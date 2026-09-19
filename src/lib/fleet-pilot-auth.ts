@@ -1,6 +1,7 @@
 import { requireAcarsBearer } from "@/lib/acars-auth";
 import { ensureFleetMembership, FleetServiceError, getFleetAircraft, type FleetActor } from "@/lib/fleet-service";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
+import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { getPilotById } from "@/lib/pilot-store";
 
 export type FleetPilotActor = FleetActor & { pilotId: string };
@@ -35,4 +36,22 @@ export async function requireFleetPilotAircraftEligibility(actor: FleetPilotActo
   const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: aircraft.aircraftModel });
   if (!eligibility.eligible) throw new FleetServiceError(eligibility.reason, 403);
   return { pilot, aircraft, eligibility };
+}
+
+/**
+ * Fleet reservations and starts must use the same type as the pilot's current
+ * BAV assignment. This makes the selected registration, Ember cabin profile,
+ * aircraft hours and PIREP all refer to one actual virtual airframe.
+ */
+export async function requireFleetPilotAircraftForActiveBooking(actor: FleetPilotActor, aircraftId: string) {
+  const [result, booking] = await Promise.all([
+    requireFleetPilotAircraftEligibility(actor, aircraftId),
+    getActivePilotBooking(actor.pilotId),
+  ]);
+  if (!booking) throw new FleetServiceError("Choose a BAV flight before reserving an aircraft registration.", 409);
+  const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normalise(result.aircraft.aircraftModel) !== normalise(booking.aircraft)) {
+    throw new FleetServiceError(`This assignment is for ${booking.aircraft}. Reserve a matching registration, or update the virtual aircraft in Flight Planning before you start Ember.`, 409);
+  }
+  return { ...result, booking };
 }

@@ -3,7 +3,7 @@
  *
  * City-pair availability and a detailed operating timetable are deliberately
  * separate. A route is useful to pilots as soon as BA publishes the city pair;
- * a BA flight number, UTC time and aircraft are shown only after that individual
+ * a BA flight number, local airport time and aircraft are shown only after that individual
  * service has been verified. This prevents a broad route map from accidentally
  * presenting guessed operational details as fact.
  */
