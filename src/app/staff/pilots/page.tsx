@@ -39,33 +39,35 @@ export default async function StaffPilotsPage({ searchParams }: { searchParams: 
         <div className={styles.shell}>
           <nav className={styles.breadcrumbs}><Link href="/staff">Staff Centre</Link><span>›</span><strong>Pilot Management</strong></nav>
           <header className={styles.hero}>
-            <div><span className={styles.eyebrow}>BAV OPERATIONS</span><h1>Pilot Management</h1><p>Pilot rank is normally driven by accepted BAV career hours. Admins can apply a manual override when operationally necessary.</p></div>
-            <div className={styles.summary}><article><span>TOTAL PILOTS</span><strong>{pilots.length}</strong></article><article><span>ACTIVE</span><strong>{pilots.filter((pilot) => pilot.status === "active").length}</strong></article><article><span>SUSPENDED</span><strong>{pilots.filter((pilot) => pilot.status === "suspended").length}</strong></article></div>
+            <div><span className={styles.eyebrow}>BAV OPERATIONS</span><h1>Pilot Management</h1><p>Review each pilot&apos;s live career, qualifications and operational queue from one clear record. Rank normally follows accepted BAV hours; an override is reserved for genuine operational need.</p></div>
+            <div className={styles.summary} aria-label="Pilot account summary"><article><em aria-hidden="true">◉</em><span>Total pilots</span><strong>{pilots.length}</strong></article><article><em aria-hidden="true">✓</em><span>Active</span><strong>{pilots.filter((pilot) => pilot.status === "active").length}</strong></article><article><em aria-hidden="true">—</em><span>Suspended</span><strong>{pilots.filter((pilot) => pilot.status === "suspended").length}</strong></article></div>
           </header>
 
           <div className={styles.rankPolicy}>
-            <strong>BAV flight-deck progression</strong>
-            {PILOT_RANK_THRESHOLDS.map((level) => <span key={level.rank}>{level.rank} · {level.minimumHours.toLocaleString()} h</span>)}
-            <small>Senior Captain and Training Captain are staff-appointed. A350, 777 and 787 operations also require the relevant staff-approved type rating.</small>
+            <div><span className={styles.policyKicker}>Career framework</span><strong>BAV flight-deck progression</strong></div>
+            <div className={styles.rankLadder}>{PILOT_RANK_THRESHOLDS.map((level) => <span key={level.rank}><b>{level.rank}</b><small>{level.minimumHours.toLocaleString()} accepted h</small></span>)}</div>
+            <p>Senior Captain and Training Captain are staff-appointed. A350, 777 and 787 operations also need the relevant staff-approved type rating.</p>
           </div>
 
           <form className={styles.filters} method="get">
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search pilot name, ID, email, rank or hub" />
+            <label><span className={styles.searchIcon} aria-hidden="true" /><input name="q" defaultValue={params.q ?? ""} placeholder="Search name, BAV number, email, rank or hub" aria-label="Search pilots" /></label>
             <select name="status" defaultValue={status}><option value="all">All statuses</option><option value="active">Active</option><option value="suspended">Suspended</option></select>
             <button type="submit">Search pilots</button>
             {(q || status !== "all") ? <Link href="/staff/pilots">Clear</Link> : null}
           </form>
 
           <section className={styles.tableWrap}>
-            <div className={styles.tableHead}><span>Pilot</span><span>Career</span><span>Activity</span><span>Account</span><span>Actions</span></div>
+            <div className={styles.directoryHead}><div><span className={styles.eyebrow}>Pilot directory</span><h2>{q || status !== "all" ? `${filtered.length} matching pilot${filtered.length === 1 ? "" : "s"}` : "Live pilot records"}</h2></div><p>Career status, qualifications and support activity update from the current BAV record.</p></div>
+            <div className={styles.tableHead}><span>Pilot</span><span>Career and qualifications</span><span>Operational activity</span><span>Account</span><span>Controls</span></div>
             {filtered.length ? filtered.map((pilot) => {
               const nextRank = nextPilotRank(pilot.hours);
+              const initials = pilot.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "BA";
               return (
                 <article className={styles.row} key={pilot.id}>
-                  <div className={styles.identity}><strong>{pilot.name}</strong><span>{pilot.pilotNumber} · {pilot.email}</span><small>{pilot.hub}</small></div>
-                  <div><strong style={{ alignItems: "center", display: "inline-flex", gap: "6px" }}><RankInsignia rank={pilot.rank} size="compact" />{pilot.rank}</strong><span>{pilot.rankOverride ? "Manual rank override" : "Automatic by accepted flight hours"}</span><small>{pilot.flights} flights · {pilot.hours.toFixed(1)} h{nextRank && !pilot.rankOverride ? ` · ${Math.max(0, nextRank.minimumHours - pilot.hours).toFixed(1)} h to ${nextRank.rank}` : ""}</small><small>{formatPilotTypeRatings(pilot.typeRatings)}</small><small>{pilot.points.toLocaleString()} VA Points · {pilot.tierPoints.toLocaleString()} Tier Points</small></div>
-                  <div><strong>{pendingPirepCount(pilot.id)} PIREPs awaiting action</strong><span>{openTicketCount(pilot.id)} open support tickets</span><small>{pilot.lastLoginAt ? `Last sign in ${new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Never signed in"}</small></div>
-                  <div><span className={`${styles.status} ${pilot.status === "active" ? styles.active : styles.suspended}`}>{pilot.status}</span><small>Joined {new Date(pilot.createdAt).toLocaleDateString("en-GB", { dateStyle: "medium" })}</small><small>{pilot.tier} member</small></div>
+                  <div className={styles.identity}><span className={styles.avatar} style={pilot.profileImage ? { backgroundImage: `url("${pilot.profileImage}")` } : undefined}>{pilot.profileImage ? null : initials}</span><div><strong>{pilot.name}</strong><span>{pilot.pilotNumber}</span><small>{pilot.email}</small><small className={styles.hub}>{pilot.hub}</small></div></div>
+                  <div className={styles.career}><strong><RankInsignia rank={pilot.rank} size="compact" />{pilot.rank}</strong><span className={styles.rankMode}>{pilot.rankOverride ? "Manual rank override" : "Automatic rank"}</span><div className={styles.metrics}><span><b>{pilot.flights}</b><small>Flights</small></span><span><b>{pilot.hours.toFixed(1)} h</b><small>Career time</small></span></div><small>{nextRank && !pilot.rankOverride ? `${Math.max(0, nextRank.minimumHours - pilot.hours).toFixed(1)} h until ${nextRank.rank}` : "Career rank confirmed"}</small><small className={styles.ratings}>{formatPilotTypeRatings(pilot.typeRatings)}</small></div>
+                  <div className={styles.activity}><span className={pendingPirepCount(pilot.id) ? styles.waiting : styles.clear}>{pendingPirepCount(pilot.id)} <small>PIREP{pendingPirepCount(pilot.id) === 1 ? "" : "s"} waiting</small></span><span className={openTicketCount(pilot.id) ? styles.waiting : styles.clear}>{openTicketCount(pilot.id)} <small>open ticket{openTicketCount(pilot.id) === 1 ? "" : "s"}</small></span><small>{pilot.lastLoginAt ? `Last sign in ${new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "No recorded sign-in"}</small></div>
+                  <div className={styles.account}><span className={`${styles.status} ${pilot.status === "active" ? styles.active : styles.suspended}`}>{pilot.status}</span><small>Joined {new Date(pilot.createdAt).toLocaleDateString("en-GB", { dateStyle: "medium" })}</small><small>{pilot.tier} member</small><strong>{pilot.points.toLocaleString()} <small>VA Points</small></strong><span>{pilot.tierPoints.toLocaleString()} Tier Points</span></div>
                   <PilotActions pilotId={pilot.id} status={pilot.status} canEdit={canEdit} canSuspend={canSuspend} rankOverride={pilot.rankOverride} typeRatings={pilot.typeRatings} hours={pilot.hours} />
                 </article>
               );
