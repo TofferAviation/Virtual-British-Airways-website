@@ -121,36 +121,17 @@ export function StaffBackgroundControl({ initialBackground }: Props) {
   return (
     <div className="staff-shell" style={{ display: "flex", justifyContent: "flex-end", paddingTop: 10 }}>
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-          padding: "8px 10px",
-          background: "rgba(255,255,255,.94)",
-          border: "1px solid #d8e1ea",
-          borderRadius: 4,
-          boxShadow: "0 4px 14px rgba(15,44,79,.05)",
-        }}
+        className="staff-background-control"
       >
         <span
           aria-hidden="true"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            display: "grid",
-            placeItems: "center",
-            background: "#edf5fc",
-            color: "#075aaa",
-            fontSize: 15,
-          }}
+          className="staff-background-control-icon"
         >
           ▧
         </span>
-        <span style={{ display: "grid", gap: 1, minWidth: 150 }}>
-          <strong style={{ fontSize: 10, color: "#071d49" }}>Staff page background</strong>
-          <small style={{ fontSize: 8, color: "#67798f" }}>Personal to your account only</small>
+        <span className="staff-background-control-copy">
+          <strong>Staff page background</strong>
+          <small>Personal to your account only</small>
         </span>
         <input
           ref={inputRef}
@@ -179,7 +160,7 @@ export function StaffBackgroundControl({ initialBackground }: Props) {
             Reset
           </button>
         ) : null}
-        {message ? <span role="status" style={{ fontSize: 8, color: "#45617f", maxWidth: 260 }}>{message}</span> : null}
+        {message ? <span className="staff-background-control-message" role="status">{message}</span> : null}
       </div>
     </div>
   );
