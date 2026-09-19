@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       name: account.name,
       email: account.email,
       profileImage: account.profileImage,
+      rank: account.rank,
     },
     deviceSessionToken: renewed.token,
     expiresInSeconds: ACARS_TOKEN_TTL_SECONDS,
