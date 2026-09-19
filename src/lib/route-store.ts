@@ -7,6 +7,8 @@ export type ManagedRoute = {
   from: string;
   to: string;
   flightNumber: string;
+  /** ICAO flight identifier, for example BAW267.  Voice callsign is SPEEDBIRD. */
+  callsign?: string;
   departure: string;
   arrival: string;
   duration: string;
@@ -41,7 +43,9 @@ function normalizedRoutes(routes: unknown[]) {
   return routes.filter(validRoute).map((route) => ({
     ...route,
     id: route.id.trim(), from: route.from.trim().toUpperCase(), to: route.to.trim().toUpperCase(),
-    flightNumber: route.flightNumber.trim().toUpperCase(), departure: route.departure.trim(), arrival: route.arrival.trim(),
+    flightNumber: route.flightNumber.trim().toUpperCase(),
+    callsign: typeof route.callsign === "string" && route.callsign.trim() ? route.callsign.trim().toUpperCase() : undefined,
+    departure: route.departure.trim(), arrival: route.arrival.trim(),
     duration: route.duration.trim(), aircraft: route.aircraft.trim(), slots: Math.max(0, Math.round(route.slots)),
     validFrom: typeof route.validFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validFrom) ? route.validFrom : undefined,
     validUntil: typeof route.validUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validUntil) ? route.validUntil : undefined,
@@ -82,10 +86,13 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
   const baseline = BAV_NETWORK_2026.map((route) => ({ ...route }));
   if (state.routeScheduleVersion === BAV_NETWORK_SCHEDULE_VERSION) return stored.length ? stored : baseline;
 
-  // The catalogue is shipped by BAV, but Operations may edit any timetable
-  // record. Overlay the saved records onto the latest baseline so a catalogue
-  // correction adds missing city pairs without deleting a staff amendment.
-  const migrated = normalizedRoutes([...baseline, ...stored]);
+  // Staff changes are the authoritative operational record.  Merge by ID so
+  // an updated shipped service never overwrites a timetable correction made
+  // in Staff Centre during a later baseline release.
+  const byId = new Map<string, ManagedRoute>();
+  for (const route of baseline) byId.set(route.id, route);
+  for (const route of stored) byId.set(route.id, route);
+  const migrated = normalizedRoutes([...byId.values()]);
   state.routeSchedule = migrated;
   state.routeScheduleVersion = BAV_NETWORK_SCHEDULE_VERSION;
   await saveStaffState(state);
@@ -136,6 +143,7 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
     return {
       routeId: route.id,
       number: route.flightNumber,
+      callsign: route.callsign,
       from: route.from,
       to: route.to,
       departure: route.departure,

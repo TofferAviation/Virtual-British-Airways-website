@@ -13,6 +13,8 @@ export type BavNetworkRouteSeed = {
   from: "LHR" | "LGW" | "LCY";
   to: string;
   flightNumber: string;
+  /** ICAO identifier used by trackers and SimBrief, e.g. BAW267. */
+  callsign?: string;
   departure: string;
   arrival: string;
   duration: string;
@@ -36,7 +38,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19-r3";
+export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19-r4";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -108,6 +110,7 @@ const sources = {
   hannover: "https://www.flight.info/BA894",
   belfastCity: "https://www.flightconnections.com/flights-from-lhr-to-bhd",
   newcastle: "https://www.directflights.com/LHR-NCL",
+  portland: "https://www.flight.info/BA267",
 } as const;
 
 /**
@@ -115,6 +118,10 @@ const sources = {
  * More can be added through the Staff Centre route editor as they are audited.
  */
 const verifiedSchedules: BavNetworkRouteSeed[] = [
+  // Portland: current published schedule independently corroborated on 19 September 2026.
+  // Operations can amend this record in Staff Centre when BA changes the season.
+  { id: "ba-s26-lhr-pdx-ba267", from: "LHR", to: "PDX", flightNumber: "BA267", callsign: "BAW267", departure: "15:40", arrival: "17:40", duration: "10h 00m", aircraft: "Boeing 787-10", aircraftOptions: ["Boeing 787-10"], slots: 12, active: true, validFrom: "2026-09-01", validUntil: "2026-09-30", operatingDays: [0, 1, 2, 3, 4, 5, 6], sourceUrl: sources.portland, validatedAt: checked },
+
   // Luxembourg and Hannover were missing from the previous generated schedule.
   { id: "ba-s26-lhr-lux-ba416", from: "LHR", to: "LUX", flightNumber: "BA416", departure: "06:05", arrival: "07:25", duration: "1h 20m", aircraft: "Airbus A320", aircraftOptions: ["Airbus A320", "Airbus A319", "Airbus A320neo"], slots: 12, active: true, validFrom: "2026-09-14", validUntil: "2026-10-24", operatingDays: [1, 2, 3, 4, 5, 6], sourceUrl: sources.lux, validatedAt: checked },
   { id: "ba-s26-lhr-jer-ba1346", from: "LHR", to: "JER", flightNumber: "BA1346", departure: "07:40", arrival: "08:40", duration: "1h 00m", aircraft: "Airbus A320", aircraftOptions: ["Airbus A320", "Airbus A319", "Airbus A320neo"], slots: 12, active: true, validFrom: "2026-09-14", validUntil: "2026-10-24", operatingDays: [0, 1, 2, 3, 4, 5, 6], sourceUrl: sources.jersey, validatedAt: checked },

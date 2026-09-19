@@ -45,7 +45,8 @@ function emptyRoute(): ManagedRoute {
     id: "",
     from: "LHR",
     to: "",
-    flightNumber: "BA",
+    flightNumber: "",
+    callsign: "",
     departure: "08:00",
     arrival: "10:00",
     duration: "2h 00m",
@@ -77,6 +78,8 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
   const [routes, setRoutes] = useState(initialRoutes);
   const [eventDraft, setEventDraft] = useState<VirtualEvent | null>(null);
   const [routeDraft, setRouteDraft] = useState<ManagedRoute | null>(null);
+  const [timetableImportOpen, setTimetableImportOpen] = useState(false);
+  const [timetableCsv, setTimetableCsv] = useState("");
   const [routeSearch, setRouteSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -93,7 +96,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
   const matchingTimetableRecords = useMemo(() => {
     const search = routeSearch.trim().toLowerCase();
     if (!search) return timetableRecords;
-    return timetableRecords.filter((route) => `${route.flightNumber} ${route.from} ${route.to} ${route.aircraft}`.toLowerCase().includes(search));
+    return timetableRecords.filter((route) => `${route.flightNumber} ${route.callsign ?? ""} ${route.from} ${route.to} ${route.aircraft}`.toLowerCase().includes(search));
   }, [routeSearch, timetableRecords]);
   const draftCount = events.filter((event) => !event.published).length;
 
@@ -181,6 +184,28 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
     }
   }
 
+  async function importTimetable() {
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/staff/routes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timetableCsv }),
+      });
+      const body = (await response.json()) as { routes?: ManagedRoute[]; created?: number; updated?: number; error?: string };
+      if (!response.ok || !body.routes) throw new Error(body.error || "Could not import the timetable.");
+      setRoutes(body.routes);
+      setTimetableImportOpen(false);
+      setTimetableCsv("");
+      setMessage(`Verified timetable imported: ${body.created ?? 0} new service record${body.created === 1 ? "" : "s"}, ${body.updated ?? 0} updated.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not import the timetable.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       <section className="staff-shell staff-hero">
@@ -240,9 +265,10 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         </div>
 
         <div className="staff-panel" id="route-tools">
-          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>The BA airport-pair catalogue is published to pilots. Add or edit an official-timetable service here to make its flight number, local airport times and aircraft bookable.</p></div></div>
+          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>Only a verified BA service is bookable. Each record carries the real BA flight number, BAW callsign, local airport times and scheduled aircraft.</p></div></div>
           <div className="staff-tool-list">
-            <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add route</b><small>Create a route override and flight details.</small><i>›</i></button>
+            <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add verified service</b><small>Enter a confirmed BA flight manually.</small><i>›</i></button>
+            <button onClick={() => setTimetableImportOpen(true)}><span>↥</span><b>Import timetable CSV</b><small>Publish many verified BA services safely.</small><i>›</i></button>
             <button onClick={() => setRouteDraft(timetableRecords[0] ?? emptyRoute())}><span>⚙</span><b>Manage timetable records</b><small>Correct service times, aircraft or scoring rules.</small><i>›</i></button>
             <Link href="/book"><span>□</span><b>Preview availability</b><small>Open the public flight search.</small><i>›</i></Link>
             <a href="/api/health" target="_blank" rel="noreferrer"><span>↥</span><b>Service health</b><small>Check the current website API status.</small><i>›</i></a>
@@ -251,7 +277,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
             <strong>{activeRouteCount} active BAV city pair{activeRouteCount === 1 ? "" : "s"} · {verifiedScheduleCount} verified service record{verifiedScheduleCount === 1 ? "" : "s"}</strong>
             <span>Catalogue cards remain visible until a verified service is published for that city pair on the selected date.</span>
           </div>
-          {verifiedScheduleCount ? <div className="staff-timetable-records"><label><span>Find a timetable record</span><input value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} placeholder="Flight number, airport or aircraft" /></label><div className="staff-mini-routes">{matchingTimetableRecords.slice(0, 20).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}</strong><span>{route.from} → {route.to} · {route.departure}–{route.arrival} local</span><small>{route.aircraft}{route.scheduleScoringEnabled ? " · schedule scoring on" : " · timetable reference"}</small></button>)}</div>{matchingTimetableRecords.length > 20 ? <small className="staff-timetable-limit">Showing the first 20 matching records. Narrow the search to edit a specific service.</small> : null}</div> : null}
+          {verifiedScheduleCount ? <div className="staff-timetable-records"><label><span>Find a timetable record</span><input value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} placeholder="Flight number, callsign, airport or aircraft" /></label><div className="staff-mini-routes">{matchingTimetableRecords.slice(0, 20).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}{route.callsign ? ` · ${route.callsign}` : ""}</strong><span>{route.from} → {route.to} · {route.departure}–{route.arrival} local</span><small>{route.aircraft}{route.scheduleScoringEnabled ? " · schedule scoring on" : " · timetable reference"}</small></button>)}</div>{matchingTimetableRecords.length > 20 ? <small className="staff-timetable-limit">Showing the first 20 matching records. Narrow the search to edit a specific service.</small> : null}</div> : null}
         </div>
       </section>
 
@@ -334,11 +360,12 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         <div className="staff-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setRouteDraft(null); }}>
           <div className="staff-modal staff-route-modal" role="dialog" aria-modal="true" aria-label={routeDraft.id ? "Edit route" : "Create route"}>
             <div className="staff-modal-heading"><div><span className="staff-kicker">Route editor</span><h2>{routeDraft.id ? "Edit route override" : "Add route override"}</h2></div><button onClick={() => setRouteDraft(null)} disabled={saving}>×</button></div>
-            <p className="staff-modal-lead">Publish an official-timetable BA service with its real flight number, local airport times and scheduled aircraft. Add the source and verification date so staff can audit it later. Times are a pilot reference by default, not a points penalty. It replaces the route-catalogue card for this city pair on the Book page.</p>
+            <p className="staff-modal-lead">Publish a verified BA service with its real BA flight number, BAW callsign, local airport times and scheduled aircraft. Add the source and verification date so staff can audit it later. Times are a pilot reference by default, not a points penalty. It replaces the route-catalogue card for this city pair on the Book page.</p>
             <div className="staff-form-grid">
               <label><span>From IATA</span><input value={routeDraft.from} onChange={(e) => setRouteDraft({ ...routeDraft, from: e.target.value.toUpperCase() })} /></label>
               <label><span>To IATA</span><input value={routeDraft.to} onChange={(e) => setRouteDraft({ ...routeDraft, to: e.target.value.toUpperCase() })} /></label>
-              <label><span>Flight number</span><input value={routeDraft.flightNumber} onChange={(e) => setRouteDraft({ ...routeDraft, flightNumber: e.target.value.toUpperCase() })} /></label>
+              <label><span>BA flight number</span><input value={routeDraft.flightNumber} onChange={(e) => setRouteDraft({ ...routeDraft, flightNumber: e.target.value.toUpperCase() })} placeholder="BA267" /></label>
+              <label><span>ICAO callsign</span><input value={routeDraft.callsign ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, callsign: e.target.value.toUpperCase() })} placeholder="BAW267" /></label>
               <label><span>Aircraft</span><input value={routeDraft.aircraft} onChange={(e) => setRouteDraft({ ...routeDraft, aircraft: e.target.value })} /></label>
               <label><span>Departure</span><input type="time" value={routeDraft.departure} onChange={(e) => setRouteDraft({ ...routeDraft, departure: e.target.value })} /></label>
               <label><span>Arrival</span><input type="time" value={routeDraft.arrival} onChange={(e) => setRouteDraft({ ...routeDraft, arrival: e.target.value })} /></label>
@@ -356,6 +383,18 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
               {routeDraft.id ? <button className="staff-danger-button" onClick={removeRoute} disabled={saving}>Delete route</button> : <span />}
               <div><button className="staff-secondary-button" onClick={() => setRouteDraft(null)} disabled={saving}>Cancel</button><button className="staff-primary-button" onClick={saveRoute} disabled={saving}>{saving ? "Saving…" : "Save route"}</button></div>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {timetableImportOpen ? (
+        <div className="staff-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setTimetableImportOpen(false); }}>
+          <div className="staff-modal staff-route-modal" role="dialog" aria-modal="true" aria-label="Import verified timetable">
+            <div className="staff-modal-heading"><div><span className="staff-kicker">Verified timetable import</span><h2>Publish real BA services in bulk</h2></div><button onClick={() => setTimetableImportOpen(false)} disabled={saving}>×</button></div>
+            <p className="staff-modal-lead">Paste a CSV exported from your checked source. Each row is validated before anything is published: it must contain a real BA flight number, its BAW callsign, the three-letter airports, local times, aircraft, source link and verification date. Duplicate services update safely; city-pair catalogue cards remain untouched.</p>
+            <label className="staff-import-label"><span>CSV format</span><code>flightNumber,callsign,from,to,departure,arrival,duration,aircraft,aircraftOptions,slots,validFrom,validUntil,operatingDays,sourceUrl,validatedAt,scheduleScoringEnabled,active</code></label>
+            <label className="staff-import-label"><span>Verified timetable CSV</span><textarea rows={12} value={timetableCsv} onChange={(event) => setTimetableCsv(event.target.value)} placeholder={"BA267,BAW267,LHR,PDX,15:40,17:40,10h 00m,Boeing 787-10,Boeing 787-10,12,2026-09-01,2026-09-30,0;1;2;3;4;5;6,https://www.britishairways.com/travel/schedules/public/en_gb,2026-09-19,false,true"} /></label>
+            <div className="staff-modal-actions"><span /><div><button className="staff-secondary-button" onClick={() => setTimetableImportOpen(false)} disabled={saving}>Cancel</button><button className="staff-primary-button" onClick={importTimetable} disabled={saving || !timetableCsv.trim()}>{saving ? "Importing…" : "Validate & publish timetable"}</button></div></div>
           </div>
         </div>
       ) : null}

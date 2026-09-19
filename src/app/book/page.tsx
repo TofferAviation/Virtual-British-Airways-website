@@ -21,6 +21,12 @@ function airportName(code: string) {
   return airportByCode[code]?.name ?? airportNames[code] ?? code;
 }
 
+function callsignLabel(flightNumber: string, callsign?: string) {
+  const number = /^BA(\d{1,4})$/i.exec(flightNumber.trim())?.[1];
+  if (!number) return callsign ?? null;
+  return `${callsign ?? `BAW${number}`} · SPEEDBIRD ${number}`;
+}
+
 export default async function BookPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const aircraft = typeof params.aircraft === "string" ? params.aircraft : "";
@@ -86,7 +92,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
               const selectedAircraft = eligibleAircraft.includes(flight.aircraft) ? flight.aircraft : (eligibleAircraft[0] ?? flight.aircraft);
               return <article className="result-flight card" key={flight.routeId}>
                 <div className="result-times"><div><strong>{catalogueOnly ? "BA" : flight.departure}</strong><span>{flight.from}</span></div><div className="result-line"><span>{catalogueOnly ? "Network route" : flight.duration}</span><i /></div><div><strong>{catalogueOnly ? "Route" : flight.arrival}</strong><span>{flight.to}</span></div></div>
-                <div className="result-meta"><strong>{catalogueOnly ? "British Airways network city pair" : `${flight.number} · British Airways`}</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{catalogueOnly ? "Flight number, local airport times and aircraft will appear once Operations publishes a verified schedule." : `${flight.aircraft} · ${flight.scheduledForSelectedDate ? "Scheduled equipment" : "Virtual-flexible assignment"}`}</span></div>
+                <div className="result-meta"><strong>{catalogueOnly ? "British Airways network city pair" : `${flight.number} · British Airways`}</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{catalogueOnly ? "Flight number, local airport times and aircraft will appear once Operations publishes a verified schedule." : `${callsignLabel(flight.number, flight.callsign) ?? "Callsign pending"} · ${flight.aircraft} · ${flight.scheduledForSelectedDate ? "Scheduled equipment" : "Virtual-flexible assignment"}`}</span></div>
                 <div className="result-availability"><strong>{catalogueOnly ? "○ Timetable pending" : flight.slots > 0 ? "● Available" : "● Full"}</strong><span>{catalogueOnly ? "BA route confirmed · detailed service validation in progress" : `${flight.slots} of ${flight.capacity} pilot slots open`}</span></div>
                 {catalogueOnly ? <button className="button button-outline" type="button" disabled>Awaiting verified timetable</button> : pilotSession && pilot ? (
                   flight.slots > 0 && eligibleAircraft.length > 0 ? <form action={bookFlight}>
