@@ -72,6 +72,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     aircraftOptions: aircraftList(raw.aircraftOptions),
     sourceUrl: /^https:\/\//.test(text(raw.sourceUrl)) ? text(raw.sourceUrl) : undefined,
     validatedAt: date(raw.validatedAt),
+    scheduleScoringEnabled: bool(raw.scheduleScoringEnabled, false),
     catalogueOnly: false,
   };
 }

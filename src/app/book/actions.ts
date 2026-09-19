@@ -46,6 +46,7 @@ export async function bookFlight(formData: FormData) {
     arrival: flight.arrival,
     duration: flight.duration,
     date,
+    scheduleScoringEnabled: flight.scheduleScoringEnabled === true,
   });
 
   const simbriefPilotId = pilot?.simbriefPilotId ?? null;

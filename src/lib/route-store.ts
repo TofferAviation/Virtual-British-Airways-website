@@ -19,6 +19,8 @@ export type ManagedRoute = {
   aircraftOptions?: string[];
   sourceUrl?: string;
   validatedAt?: string;
+  /** Timetables are references by default; Operations may opt a service into late-start scoring. */
+  scheduleScoringEnabled?: boolean;
   /** Published BA airport pair with detailed BA service data still pending. */
   catalogueOnly?: boolean;
 };
@@ -51,6 +53,7 @@ function normalizedRoutes(routes: unknown[]) {
       : undefined,
     sourceUrl: typeof route.sourceUrl === "string" && /^https:\/\//.test(route.sourceUrl) ? route.sourceUrl : undefined,
     validatedAt: typeof route.validatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validatedAt) ? route.validatedAt : undefined,
+    scheduleScoringEnabled: route.scheduleScoringEnabled === true,
     catalogueOnly: route.catalogueOnly === true,
   })).filter((route) => {
     if (!route.id || !route.from || !route.to || !route.flightNumber || !route.aircraft || ids.has(route.id)) return false;
@@ -144,6 +147,7 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       aircraftOptions: route.aircraftOptions,
       sourceUrl: route.sourceUrl,
       validatedAt: route.validatedAt,
+      scheduleScoringEnabled: route.scheduleScoringEnabled === true,
       catalogueOnly: route.catalogueOnly === true,
       scheduledForSelectedDate: routeOperatesOn(route, date),
       capacity: route.slots,

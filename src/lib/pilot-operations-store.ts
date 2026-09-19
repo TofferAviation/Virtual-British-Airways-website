@@ -64,6 +64,8 @@ export type PilotBooking = {
   arrival: string;
   duration: string;
   date: string;
+  /** Captured when booked so later timetable edits never change an earned PIREP. */
+  scheduleScoringEnabled?: boolean;
   status: "booked" | "in_progress" | "completed" | "cancelled";
   createdAt: string;
 };
@@ -173,7 +175,7 @@ type OperationsState = {
 };
 
 function normalizeBooking(booking: PilotBooking): PilotBooking {
-  return { ...booking, routeId: booking.routeId ?? null };
+  return { ...booking, routeId: booking.routeId ?? null, scheduleScoringEnabled: booking.scheduleScoringEnabled === true };
 }
 
 function normalizeFlightPlan(plan: PilotFlightPlan): PilotFlightPlan {
@@ -440,7 +442,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
       const event = getMatchingBavEvent(current, await getEvents());
       const baseReward = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
       const booking = current.bookingId ? await getPilotBooking(current.bookingId, current.pilotId) : null;
-      const lateStart = persistentScheduleFlexibilityEnabled() && current.source === "acars" ? calculateLateStartAdjustment(booking, current.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
+      const lateStart = persistentScheduleFlexibilityEnabled() && booking?.scheduleScoringEnabled === true && current.source === "acars" ? calculateLateStartAdjustment(booking, current.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
       const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
       const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
       update.points_awarded = points;
@@ -477,7 +479,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const event = getMatchingBavEvent(pirep, await getEvents());
     const baseReward = calculatePirepReward(pirep, await getRewardSettings(), firstFlightAward);
     const booking = pirep.bookingId ? await getPilotBooking(pirep.bookingId, pirep.pilotId) : null;
-    const lateStart = pirep.source === "acars" ? calculateLateStartAdjustment(booking, pirep.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
+    const lateStart = persistentScheduleFlexibilityEnabled() && booking?.scheduleScoringEnabled === true && pirep.source === "acars" ? calculateLateStartAdjustment(booking, pirep.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
     const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
     const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
     pirep.pointsAwarded = points;
