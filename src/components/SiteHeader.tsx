@@ -68,7 +68,7 @@ export async function SiteHeader() {
         <Link href="/book">Book</Link>
         <Link href={manageHref}>Manage</Link>
         <Link href="/handbook">Handbook</Link>
-        <Link className="header-search-link" href="/book"><SearchIcon /><span>Search</span></Link>
+        <Link className="header-search-link" href="/search" aria-label="Search the British Airways Virtual website"><SearchIcon /><span>Search</span></Link>
       </nav>
 
       <Link className="site-brand site-brand-centered" href="/" aria-label="British Airways Virtual home"><BrandLogo variant="white" priority /></Link>

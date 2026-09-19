@@ -54,6 +54,7 @@ import "./ba-radar-osm.css";
 import "./ba-radar-tracker-layout.css";
 import "./ba-radar-weather-layers.css";
 import "./ba-radar-wind-flow.css";
+import "./site-search.css";
 import "./first-visit-welcome.css";
 import "leaflet/dist/leaflet.css";
 
