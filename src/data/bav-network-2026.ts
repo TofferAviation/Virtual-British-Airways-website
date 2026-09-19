@@ -36,7 +36,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19";
+export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19-r2";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -64,7 +64,7 @@ export const BAV_NETWORK_ICAO_BY_IATA: Record<string, string> = {
  */
 const destinationsByHub = {
   LHR: [
-    "ABZ", "ACC", "AGP", "ALG", "AMM", "AMS", "ATH", "ATL", "AUH", "AUS", "BAH", "BCN", "BHD", "BKK", "BLR", "BNA", "BOD", "BOM", "BOS", "BRU", "BUD", "BWI", "CAI", "CPT", "CPH", "DEL", "DEN", "DFW", "DOH", "DUB", "DUS", "DXB", "EDI", "EZE", "FAO", "FCO", "FRA", "GCI", "GLA", "GVA", "HAM", "HKG", "HND", "HYD", "IAH", "IAD", "INV", "ISB", "IST", "JFK", "JNB", "JTR", "KEF", "KUL", "KWI", "LAS", "LAX", "LIS", "LOS", "LYS", "MAD", "MAN", "MAA", "MCT", "MEX", "MIA", "MLA", "MRS", "MSY", "MUC", "NAP", "NBO", "NCE", "NCL", "ORD", "OSL", "PHL", "PHX", "PIT", "PRG", "PVG", "SAN", "SEA", "SEZ", "SFO", "SIN", "SJO", "SOF", "SPU", "STL", "TLS", "TIV", "TLV", "TPA", "VCE", "VIE", "WAW", "YUL", "YVR", "YYZ", "ZRH", "ALC", "AYT", "BDS", "BLL", "BLQ", "BRI", "CAG", "CFU", "CHQ", "CTA", "DBV", "EFL", "FLR", "FNC", "HER", "IBZ", "INN", "KGS", "KLX", "LCA", "LIN", "MAH", "PMI", "PFO", "PSA", "PVK", "RHO", "SKG", "SZG", "TFS", "TIA", "VRN", "ZAG", "ZTH",
+    "ABZ", "ACC", "AGP", "ALG", "AMM", "AMS", "ATH", "ATL", "AUH", "AUS", "BAH", "BCN", "BHD", "BKK", "BLR", "BNA", "BOD", "BOM", "BOS", "BRU", "BUD", "BWI", "CAI", "CPT", "CPH", "DEL", "DEN", "DFW", "DOH", "DUB", "DUS", "DXB", "EDI", "EZE", "FAO", "FCO", "FRA", "GCI", "GLA", "GVA", "HAM", "HKG", "HND", "HYD", "IAH", "IAD", "INV", "ISB", "IST", "JFK", "JNB", "JTR", "KEF", "KUL", "KWI", "LAS", "LAX", "LIS", "LOS", "LYS", "MAD", "MAN", "MAA", "MCT", "MEX", "MIA", "MLA", "MRS", "MSY", "MUC", "NAP", "NBO", "NCE", "NCL", "ORD", "OSL", "PDX", "PHL", "PHX", "PIT", "PRG", "PVG", "SAN", "SEA", "SEZ", "SFO", "SIN", "SJO", "SOF", "SPU", "STL", "TLS", "TIV", "TLV", "TPA", "VCE", "VIE", "WAW", "YUL", "YVR", "YYZ", "ZRH", "ALC", "AYT", "BDS", "BLL", "BLQ", "BRI", "CAG", "CFU", "CHQ", "CTA", "DBV", "EFL", "FLR", "FNC", "HER", "IBZ", "INN", "KGS", "KLX", "LCA", "LIN", "MAH", "PMI", "PFO", "PSA", "PVK", "RHO", "SKG", "SZG", "TFS", "TIA", "VRN", "ZAG", "ZTH",
     "ABV", "BDA", "CDG", "EWR", "HAJ", "JER", "LUX", "MXP", "NUE",
   ],
   LGW: [

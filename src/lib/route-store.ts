@@ -82,12 +82,10 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
   const baseline = BAV_NETWORK_2026.map((route) => ({ ...route }));
   if (state.routeScheduleVersion === BAV_NETWORK_SCHEDULE_VERSION) return stored.length ? stored : baseline;
 
-  // Earlier releases either generated made-up BAV timetable details from a
-  // destination list or shipped the small verified-service audit alone. Both
-  // are baseline data, not an Operations change, so replace only those known
-  // seed records. Routes deliberately created by Operations remain untouched.
-  const customRoutes = stored.filter((route) => !route.id.startsWith("bav-network-2026-") && !route.id.startsWith("ba-s26-"));
-  const migrated = normalizedRoutes([...baseline, ...customRoutes]);
+  // The catalogue is shipped by BAV, but Operations may edit any timetable
+  // record. Overlay the saved records onto the latest baseline so a catalogue
+  // correction adds missing city pairs without deleting a staff amendment.
+  const migrated = normalizedRoutes([...baseline, ...stored]);
   state.routeSchedule = migrated;
   state.routeScheduleVersion = BAV_NETWORK_SCHEDULE_VERSION;
   await saveStaffState(state);
