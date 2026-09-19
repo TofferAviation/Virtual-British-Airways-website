@@ -19,6 +19,8 @@ export type ManagedRoute = {
   aircraftOptions?: string[];
   sourceUrl?: string;
   validatedAt?: string;
+  /** Published BA airport pair with detailed BA service data still pending. */
+  catalogueOnly?: boolean;
 };
 
 function validRoute(value: unknown): value is ManagedRoute {
@@ -49,6 +51,7 @@ function normalizedRoutes(routes: unknown[]) {
       : undefined,
     sourceUrl: typeof route.sourceUrl === "string" && /^https:\/\//.test(route.sourceUrl) ? route.sourceUrl : undefined,
     validatedAt: typeof route.validatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validatedAt) ? route.validatedAt : undefined,
+    catalogueOnly: route.catalogueOnly === true,
   })).filter((route) => {
     if (!route.id || !route.from || !route.to || !route.flightNumber || !route.aircraft || ids.has(route.id)) return false;
     ids.add(route.id);
@@ -76,11 +79,11 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
   const baseline = BAV_NETWORK_2026.map((route) => ({ ...route }));
   if (state.routeScheduleVersion === BAV_NETWORK_SCHEDULE_VERSION) return stored.length ? stored : baseline;
 
-  // Earlier releases built a large fallback from a list of destinations and
-  // assigned invented BAV numbers, arbitrary times and guessed aircraft. Drop
-  // only those old seed records during the one-time schedule migration; routes
-  // deliberately created by Operations continue to belong to the airline.
-  const customRoutes = stored.filter((route) => !route.id.startsWith("bav-network-2026-"));
+  // Earlier releases either generated made-up BAV timetable details from a
+  // destination list or shipped the small verified-service audit alone. Both
+  // are baseline data, not an Operations change, so replace only those known
+  // seed records. Routes deliberately created by Operations remain untouched.
+  const customRoutes = stored.filter((route) => !route.id.startsWith("bav-network-2026-") && !route.id.startsWith("ba-s26-"));
   const migrated = normalizedRoutes([...baseline, ...customRoutes]);
   state.routeSchedule = migrated;
   state.routeScheduleVersion = BAV_NETWORK_SCHEDULE_VERSION;
@@ -140,10 +143,11 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       arrival: route.arrival,
     duration: route.duration,
     aircraft: route.aircraft,
-    aircraftOptions: route.aircraftOptions,
-    sourceUrl: route.sourceUrl,
-    validatedAt: route.validatedAt,
-    scheduledForSelectedDate: routeOperatesOn(route, date),
+      aircraftOptions: route.aircraftOptions,
+      sourceUrl: route.sourceUrl,
+      validatedAt: route.validatedAt,
+      catalogueOnly: route.catalogueOnly === true,
+      scheduledForSelectedDate: routeOperatesOn(route, date),
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),
     };
@@ -156,17 +160,24 @@ type FlightSearchOptions = {
 };
 
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
-  return withAvailability(managed, date);
+  const matching = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to);
+  const detailed = matching.filter((route) => !route.catalogueOnly && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
+  // A city pair remains discoverable when its timetable has not yet been
+  // audited. Once a detailed BA service is available, it replaces this
+  // catalogue card for the selected date instead of creating a duplicate.
+  return withAvailability(detailed.length ? detailed : matching.filter((route) => route.catalogueOnly), date);
 }
 
 /** Lists every active BAV service departing a selected BAV hub. */
 export async function getFlightsFromHub(from: string, date?: string, options: FlightSearchOptions = {}) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
-  return withAvailability(managed, date);
+  const matching = (await getManagedRoutes()).filter((route) => route.active && route.from === from);
+  const detailed = matching.filter((route) => !route.catalogueOnly && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
+  const detailedPairs = new Set(detailed.map((route) => `${route.from}-${route.to}`));
+  const catalogue = matching.filter((route) => route.catalogueOnly && !detailedPairs.has(`${route.from}-${route.to}`));
+  return withAvailability([...detailed, ...catalogue], date);
 }
 
 export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && route.aircraft === aircraft && routeOperatesOn(route, date));
+  const managed = (await getManagedRoutes()).filter((route) => route.active && !route.catalogueOnly && route.aircraft === aircraft && routeOperatesOn(route, date));
   return withAvailability(managed, date);
 }

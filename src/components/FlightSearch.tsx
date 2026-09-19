@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { airports } from "@/data/airports";
+import { BAV_NETWORK_ROUTE_COUNTS } from "@/data/bav-network-2026";
 import { BAV_HUBS, type BavHubCode } from "@/lib/hubs";
 
 const baseAirports = BAV_HUBS.map((hub) => ({ ...hub, country: "United Kingdom" }));
@@ -91,7 +92,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
         <button className="button button-primary search-submit" type="submit">Find flights</button>
       </div>
       <div className="search-helper">
-        <span><strong>{airports.length + baseAirports.length} BA destinations / bases</strong> loaded into the current network selector.</span>
+        <span><strong>{BAV_NETWORK_ROUTE_COUNTS.total} BA London-hub airport-pair routes</strong> loaded: {BAV_NETWORK_ROUTE_COUNTS.LHR} Heathrow, {BAV_NETWORK_ROUTE_COUNTS.LGW} Gatwick and {BAV_NETWORK_ROUTE_COUNTS.LCY} City.</span>
         {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ hub: from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : <span>{aircraft} · filter this city pair by the aircraft scheduled for that service</span>}
       </div>
     </form>

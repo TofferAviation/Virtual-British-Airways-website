@@ -80,7 +80,8 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
   }, [events]);
 
   const activeEventCount = upcoming.filter((event) => event.published).length;
-  const activeRouteCount = routes.filter((route) => route.active).length;
+  const activeRouteCount = new Set(routes.filter((route) => route.active).map((route) => `${route.from}-${route.to}`)).size;
+  const verifiedScheduleCount = routes.filter((route) => route.active && !route.catalogueOnly).length;
   const draftCount = events.filter((event) => !event.published).length;
 
   function scrollTo(id: string) {
@@ -142,7 +143,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
       if (!response.ok || !body.route) throw new Error(body.error || "Could not save route.");
       setRoutes((current) => isNew ? [...current, body.route!] : current.map((item) => item.id === body.route!.id ? body.route! : item));
       setRouteDraft(null);
-      setMessage(isNew ? "Route override created. Flight search now uses it for that city pair." : "Route override updated.");
+      setMessage(isNew ? "Verified service created. It is now available to pilots for that city pair." : "Verified service updated.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save route.");
     } finally {
@@ -159,7 +160,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
       if (!response.ok) throw new Error(body.error || "Could not delete route.");
       setRoutes((current) => current.filter((item) => item.id !== routeDraft.id));
       setRouteDraft(null);
-      setMessage("Route override removed. Flight search will fall back to the default development schedule for that route.");
+      setMessage("Verified service removed. The BA network catalogue card remains available for that city pair.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not delete route.");
     } finally {
@@ -180,7 +181,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
           <div className="staff-overview-heading"><h2>Admin overview</h2><span>{staffName}</span></div>
           <div className="staff-overview-grid">
             <button onClick={() => scrollTo("staff-events")}><span className="staff-overview-icon">□</span><strong>{activeEventCount}</strong><small>Published upcoming events</small></button>
-            <button onClick={() => scrollTo("route-tools")}><span className="staff-overview-icon">✈</span><strong>{activeRouteCount}</strong><small>Custom route overrides</small></button>
+            <button onClick={() => scrollTo("route-tools")}><span className="staff-overview-icon">✈</span><strong>{activeRouteCount}</strong><small>Published BAV city pairs</small></button>
             <button onClick={() => scrollTo("support-tools")}><span className="staff-overview-icon">◎</span><strong>0</strong><small>Connected support queues</small></button>
             <button onClick={() => scrollTo("website-tools")}><span className="staff-overview-icon">▤</span><strong>{draftCount}</strong><small>Event drafts</small></button>
           </div>
@@ -226,7 +227,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         </div>
 
         <div className="staff-panel" id="route-tools">
-          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>Custom overrides update flight-search results immediately.</p></div></div>
+          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>The BA airport-pair catalogue is published to pilots. Add or edit a verified service here to make its flight number, UTC times and aircraft bookable.</p></div></div>
           <div className="staff-tool-list">
             <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add route</b><small>Create a route override and flight details.</small><i>›</i></button>
             <button onClick={() => setRouteDraft(routes[0] ?? emptyRoute())}><span>⚙</span><b>Edit aircraft assignment</b><small>Change the aircraft on an existing route.</small><i>›</i></button>
@@ -234,10 +235,10 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
             <a href="/api/health" target="_blank" rel="noreferrer"><span>↥</span><b>Service health</b><small>Check the current website API status.</small><i>›</i></a>
           </div>
           <div className="staff-route-summary">
-            <strong>{activeRouteCount ? `${activeRouteCount} active custom route override${activeRouteCount === 1 ? "" : "s"}` : "No custom route overrides yet"}</strong>
-            <span>{activeRouteCount ? "These routes take priority over the development fallback schedule." : "Flight search is currently using the existing development fallback schedule."}</span>
+            <strong>{activeRouteCount} active BAV city pair{activeRouteCount === 1 ? "" : "s"} · {verifiedScheduleCount} verified service record{verifiedScheduleCount === 1 ? "" : "s"}</strong>
+            <span>Catalogue cards remain visible until a verified service is published for that city pair on the selected date.</span>
           </div>
-          {routes.length ? <div className="staff-mini-routes">{routes.slice(0, 5).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}</strong><span>{route.from} → {route.to}</span><small>{route.aircraft}</small></button>)}</div> : null}
+          {verifiedScheduleCount ? <div className="staff-mini-routes">{routes.filter((route) => !route.catalogueOnly).slice(0, 5).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}</strong><span>{route.from} → {route.to}</span><small>{route.aircraft}</small></button>)}</div> : null}
         </div>
       </section>
 
@@ -320,7 +321,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         <div className="staff-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setRouteDraft(null); }}>
           <div className="staff-modal staff-route-modal" role="dialog" aria-modal="true" aria-label={routeDraft.id ? "Edit route" : "Create route"}>
             <div className="staff-modal-heading"><div><span className="staff-kicker">Route editor</span><h2>{routeDraft.id ? "Edit route override" : "Add route override"}</h2></div><button onClick={() => setRouteDraft(null)} disabled={saving}>×</button></div>
-            <p className="staff-modal-lead">A custom route override replaces the development fallback flights for the same From/To pair on the Book page.</p>
+            <p className="staff-modal-lead">Publish a verified BA service with its real flight number, UTC times and scheduled aircraft. It replaces the route-catalogue card for this city pair on the Book page.</p>
             <div className="staff-form-grid">
               <label><span>From IATA</span><input value={routeDraft.from} onChange={(e) => setRouteDraft({ ...routeDraft, from: e.target.value.toUpperCase() })} /></label>
               <label><span>To IATA</span><input value={routeDraft.to} onChange={(e) => setRouteDraft({ ...routeDraft, to: e.target.value.toUpperCase() })} /></label>
