@@ -63,6 +63,8 @@ export type StaffState = {
   audit: StaffAuditEntry[];
   /** Persistent BAV virtual schedule, shared by every website instance. */
   routeSchedule: ManagedRoute[];
+  /** Allows the verified seed schedule to safely replace a previous generated baseline. */
+  routeScheduleVersion?: string;
 };
 
 const dataDir = path.join(process.cwd(), ".bav-data");
@@ -118,6 +120,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
   const invitations = Array.isArray(input?.invitations) ? input!.invitations! : [];
   const audit = Array.isArray(input?.audit) ? input!.audit! : [];
   const routeSchedule = Array.isArray(input?.routeSchedule) ? input!.routeSchedule! : [];
+  const routeScheduleVersion = typeof input?.routeScheduleVersion === "string" ? input.routeScheduleVersion : undefined;
 
   const admin = envAdmin();
   if (admin) {
@@ -146,7 +149,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     }
   }
 
-  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule };
+  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion };
 }
 
 async function ensureDataDir() {

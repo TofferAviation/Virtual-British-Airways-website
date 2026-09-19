@@ -15,9 +15,10 @@ export async function bookFlight(formData: FormData) {
   const date = String(formData.get("date") ?? "");
   const flightNumber = String(formData.get("flightNumber") ?? "");
   const routeId = String(formData.get("routeId") ?? "");
+  const flexible = String(formData.get("flexible") ?? "") === "1";
   if (!from || !to || !date || !flightNumber || !routeId) redirect("/book");
 
-  const flights = await getFlightsForRoute(from, to, date);
+  const flights = await getFlightsForRoute(from, to, date, { includeVirtualFlexible: flexible });
   const flight = flights.find((item) => item.routeId === routeId && item.number === flightNumber);
   if (!flight || flight.slots <= 0) redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=unavailable`);
 

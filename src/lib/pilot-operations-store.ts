@@ -7,6 +7,7 @@ import { getEvents } from "@/lib/event-store";
 import { getMatchingBavEvent } from "@/lib/pilot-awards";
 import { applyApprovedPirepStats, getPilotById, getRewardSettings, isFirstFlightAwardEligible } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
+import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
@@ -15,7 +16,7 @@ type PirepRow = {
   id: string; pilot_id: string; booking_id: string | null; flight_number: string;
   departure_station: string; arrival_station: string; aircraft: string; started_at: string;
   completed_at: string; block_minutes: number; distance_nm: number; landing_fpm: number | null;
-  fuel_used_kg: number | null; points_awarded: number; tier_points_awarded: number;
+  fuel_used_kg: number | null; points_awarded: number; tier_points_awarded: number; late_start_penalty_points: number;
   status: PirepStatus; source: "manual" | "acars"; simulator: SupportedSimulator;
   acars_session_id: string | null; pilot_comments: string; staff_comments: string;
   reviewed_at: string | null; reviewed_by: string | null; created_at: string;
@@ -34,6 +35,7 @@ function pirepFromRow(row: PirepRow): PilotPirep {
     from: row.departure_station, to: row.arrival_station, aircraft: row.aircraft, startedAt: row.started_at,
     completedAt: row.completed_at, blockMinutes: row.block_minutes, distanceNm: row.distance_nm,
     landingFpm: row.landing_fpm, fuelUsedKg: row.fuel_used_kg, pointsAwarded: row.points_awarded,
+    lateStartPenaltyPoints: row.late_start_penalty_points ?? 0,
     tierPointsAwarded: row.tier_points_awarded, status: row.status, source: row.source,
     simulator: row.simulator, acarsSessionId: row.acars_session_id, pilotComments: row.pilot_comments,
     staffComments: row.staff_comments, reviewedAt: row.reviewed_at, reviewedBy: row.reviewed_by,
@@ -140,6 +142,8 @@ export type PilotPirep = {
   landingFpm: number | null;
   fuelUsedKg: number | null;
   pointsAwarded: number;
+  /** Small VA-point adjustment for an ACARS departure after the scheduled UTC time. */
+  lateStartPenaltyPoints: number;
   tierPointsAwarded: number;
   status: PirepStatus;
   source: "manual" | "acars";
@@ -173,6 +177,7 @@ function normalizePirep(pirep: Partial<PilotPirep> & Pick<PilotPirep, "id" | "pi
     landingFpm: null,
     fuelUsedKg: null,
     pointsAwarded: 0,
+    lateStartPenaltyPoints: 0,
     tierPointsAwarded: 0,
     status: "pending",
     source: "manual",
@@ -341,7 +346,7 @@ export async function cancelActivePilotBooking(pilotId: string) {
   return booking;
 }
 
-export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt" | "reviewedAt" | "reviewedBy" | "staffComments" | "pointsAwarded" | "tierPointsAwarded">) {
+export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt" | "reviewedAt" | "reviewedBy" | "staffComments" | "pointsAwarded" | "lateStartPenaltyPoints" | "tierPointsAwarded">) {
   const client = getPirepClient();
   if (client) {
     const createdAt = new Date().toISOString();
@@ -349,7 +354,7 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
       id: randomUUID(), pilot_id: input.pilotId, booking_id: input.bookingId, flight_number: input.flightNumber,
       departure_station: input.from, arrival_station: input.to, aircraft: input.aircraft, started_at: input.startedAt,
       completed_at: input.completedAt, block_minutes: input.blockMinutes, distance_nm: input.distanceNm,
-      landing_fpm: input.landingFpm, fuel_used_kg: input.fuelUsedKg, points_awarded: 0, tier_points_awarded: 0,
+      landing_fpm: input.landingFpm, fuel_used_kg: input.fuelUsedKg, points_awarded: 0, late_start_penalty_points: 0, tier_points_awarded: 0,
       status: input.status, source: input.source, simulator: input.simulator, acars_session_id: input.acarsSessionId,
       pilot_comments: input.pilotComments, staff_comments: "", reviewed_at: null, reviewed_by: null, created_at: createdAt,
     }).select("*").single();
@@ -370,6 +375,7 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
     reviewedBy: null,
     staffComments: "",
     pointsAwarded: 0,
+    lateStartPenaltyPoints: 0,
     tierPointsAwarded: 0,
   };
   state.pireps.push(pirep);
@@ -391,9 +397,12 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
       const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(current.pilotId));
       const event = getMatchingBavEvent(current, await getEvents());
       const baseReward = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
-      const points = baseReward.points + (event?.rewards.vaPoints ?? 0);
+      const booking = current.bookingId ? await getPilotBooking(current.bookingId, current.pilotId) : null;
+      const lateStart = current.source === "acars" ? calculateLateStartAdjustment(booking, current.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
+      const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
       const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
       update.points_awarded = points;
+      update.late_start_penalty_points = lateStart.vaPointsDeducted;
       update.tier_points_awarded = tierPoints;
       await applyApprovedPirepStats(current.pilotId, {
         blockMinutes: current.blockMinutes,
@@ -425,9 +434,12 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(pirep.pilotId));
     const event = getMatchingBavEvent(pirep, await getEvents());
     const baseReward = calculatePirepReward(pirep, await getRewardSettings(), firstFlightAward);
-    const points = baseReward.points + (event?.rewards.vaPoints ?? 0);
+    const booking = pirep.bookingId ? await getPilotBooking(pirep.bookingId, pirep.pilotId) : null;
+    const lateStart = pirep.source === "acars" ? calculateLateStartAdjustment(booking, pirep.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
+    const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
     const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
     pirep.pointsAwarded = points;
+    pirep.lateStartPenaltyPoints = lateStart.vaPointsDeducted;
     pirep.tierPointsAwarded = tierPoints;
     await applyApprovedPirepStats(pirep.pilotId, {
       blockMinutes: pirep.blockMinutes,

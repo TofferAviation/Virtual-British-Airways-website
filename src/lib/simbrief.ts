@@ -8,6 +8,7 @@ const airportIcao: Record<string, string> = {
 };
 
 const aircraftIcao: Record<string, string> = {
+  "Airbus A319": "A319",
   "Airbus A320": "A320",
   "Airbus A320neo": "A20N",
   "Airbus A321neo": "A21N",

@@ -1,11 +1,11 @@
 "use client";
 
 import L from "leaflet";
-import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from "react-leaflet";
-import { useState } from "react";
-import type { RadarWeatherData, VatsimStation } from "@/lib/radar-external";
+import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
+import { useEffect, useState } from "react";
+import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, RadarLayers } from "@/components/PublicBaRadar";
-import { BaRadarWeatherOverlay } from "@/components/BaRadarWeatherOverlay";
+import { BaRadarWindField } from "@/components/BaRadarWindField";
 
 type Position = [number, number];
 
@@ -41,15 +41,36 @@ function isUkPriorityController(controller: VatsimStation) {
   return /^(EG|EI)/.test(controller.callsign);
 }
 
+function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
+  const [revision, setRevision] = useState(() => Math.floor(Date.now() / 120_000));
+  useEffect(() => {
+    if (!enabled) return;
+    const interval = window.setInterval(() => setRevision(Math.floor(Date.now() / 120_000)), 120_000);
+    return () => window.clearInterval(interval);
+  }, [enabled]);
+  if (!enabled) return null;
+  return <WMSTileLayer
+    key={revision}
+    url={`https://view.eumetsat.int/geoserver/wms?ba-radar-cache=${revision}`}
+    params={{ layers: "mtg_fd:li_afa", format: "image/png", transparent: true, version: "1.3.0" }}
+    opacity={0.86}
+    attribution={'Observed lightning &copy; <a href="https://www.eumetsat.int/" target="_blank" rel="noreferrer">EUMETSAT</a>'}
+  />;
+}
+
 function MapLayers({
   controllers,
   weather,
+  windGrid,
+  onWindRendererStatus,
   layers,
   selectedController,
   onSelectController,
 }: {
   controllers: VatsimStation[];
   weather: RadarWeatherData | null;
+  windGrid: RadarWindGrid | null;
+  onWindRendererStatus: (status: "ready" | "unsupported") => void;
   layers: RadarLayers;
   selectedController: string;
   onSelectController: (callsign: string) => void;
@@ -77,7 +98,8 @@ function MapLayers({
       data={weather.advisories as never}
       style={{ color: "#ff9f43", weight: 2, fillColor: "#e45454", fillOpacity: 0.2 }}
     /> : null}
-    <BaRadarWeatherOverlay winds={weather?.winds ?? []} convectiveRisk={weather?.convectiveRisk ?? []} showWinds={layers.winds} showConvectiveOutlook={layers.convection} />
+    <OfficialLightningLayer enabled={layers.lightning} />
+    <BaRadarWindField windGrid={windGrid} enabled={layers.winds} onStatus={onWindRendererStatus} />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
 }
@@ -88,6 +110,8 @@ export function BaRadarMap({
   onSelect,
   controllers,
   weather,
+  windGrid,
+  onWindRendererStatus,
   layers,
   selectedController,
   onSelectController,
@@ -97,6 +121,8 @@ export function BaRadarMap({
   onSelect: (id: string) => void;
   controllers: VatsimStation[];
   weather: RadarWeatherData | null;
+  windGrid: RadarWindGrid | null;
+  onWindRendererStatus: (status: "ready" | "unsupported") => void;
   layers: RadarLayers;
   selectedController: string;
   onSelectController: (callsign: string) => void;
@@ -113,7 +139,7 @@ export function BaRadarMap({
       attribution={'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
       maxZoom={19}
     />
-    <MapLayers controllers={controllers} weather={weather} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
+    <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
     {trail.length > 1 ? <Polyline positions={trail} pathOptions={{ color: "#e9ba2f", weight: 3, opacity: 0.9 }} /> : null}
     {positioned.map((flight) => <Marker key={flight.id} position={[flight.lastSnapshot!.latitude, flight.lastSnapshot!.longitude]} icon={aircraftIcon(flight, flight.id === selectedId)} eventHandlers={{ click: () => onSelect(flight.id) }} />)}
   </MapContainer>;

@@ -1,6 +1,6 @@
 import { countActiveScheduleBookings } from "@/lib/pilot-operations-store";
 import { getStaffState, saveStaffState } from "@/lib/staff-store";
-import { BAV_NETWORK_2026 } from "@/data/bav-network-2026";
+import { BAV_NETWORK_2026, BAV_NETWORK_SCHEDULE_VERSION } from "@/data/bav-network-2026";
 
 export type ManagedRoute = {
   id: string;
@@ -14,7 +14,11 @@ export type ManagedRoute = {
   slots: number;
   active: boolean;
   validFrom?: string;
+  validUntil?: string;
   operatingDays?: number[];
+  aircraftOptions?: string[];
+  sourceUrl?: string;
+  validatedAt?: string;
 };
 
 function validRoute(value: unknown): value is ManagedRoute {
@@ -36,9 +40,15 @@ function normalizedRoutes(routes: unknown[]) {
     flightNumber: route.flightNumber.trim().toUpperCase(), departure: route.departure.trim(), arrival: route.arrival.trim(),
     duration: route.duration.trim(), aircraft: route.aircraft.trim(), slots: Math.max(0, Math.round(route.slots)),
     validFrom: typeof route.validFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validFrom) ? route.validFrom : undefined,
+    validUntil: typeof route.validUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validUntil) ? route.validUntil : undefined,
     operatingDays: Array.isArray(route.operatingDays)
       ? route.operatingDays.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)
       : undefined,
+    aircraftOptions: Array.isArray(route.aircraftOptions)
+      ? Array.from(new Set(route.aircraftOptions.filter((aircraft): aircraft is string => typeof aircraft === "string" && aircraft.trim().length > 0).map((aircraft) => aircraft.trim())))
+      : undefined,
+    sourceUrl: typeof route.sourceUrl === "string" && /^https:\/\//.test(route.sourceUrl) ? route.sourceUrl : undefined,
+    validatedAt: typeof route.validatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validatedAt) ? route.validatedAt : undefined,
   })).filter((route) => {
     if (!route.id || !route.from || !route.to || !route.flightNumber || !route.aircraft || ids.has(route.id)) return false;
     ids.add(route.id);
@@ -49,6 +59,7 @@ function normalizedRoutes(routes: unknown[]) {
 export function routeOperatesOn(route: ManagedRoute, date?: string) {
   if (!date) return true;
   if (route.validFrom && date < route.validFrom) return false;
+  if (route.validUntil && date > route.validUntil) return false;
   if (!route.operatingDays?.length) return true;
   const parsed = new Date(`${date}T12:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && route.operatingDays.includes(parsed.getUTCDay());
@@ -62,18 +73,26 @@ export function routeOperatesOn(route: ManagedRoute, date?: string) {
 export async function getManagedRoutes(): Promise<ManagedRoute[]> {
   const state = await getStaffState();
   const stored = normalizedRoutes(state.routeSchedule);
-  if (stored.length) return stored;
-
   const baseline = BAV_NETWORK_2026.map((route) => ({ ...route }));
-  state.routeSchedule = baseline;
+  if (state.routeScheduleVersion === BAV_NETWORK_SCHEDULE_VERSION) return stored.length ? stored : baseline;
+
+  // Earlier releases built a large fallback from a list of destinations and
+  // assigned invented BAV numbers, arbitrary times and guessed aircraft. Drop
+  // only those old seed records during the one-time schedule migration; routes
+  // deliberately created by Operations continue to belong to the airline.
+  const customRoutes = stored.filter((route) => !route.id.startsWith("bav-network-2026-"));
+  const migrated = normalizedRoutes([...baseline, ...customRoutes]);
+  state.routeSchedule = migrated;
+  state.routeScheduleVersion = BAV_NETWORK_SCHEDULE_VERSION;
   await saveStaffState(state);
-  return baseline;
+  return migrated;
 }
 
 export async function saveManagedRoutes(routes: ManagedRoute[]) {
   const normalized = normalizedRoutes(routes);
   const state = await getStaffState();
   state.routeSchedule = normalized;
+  state.routeScheduleVersion = BAV_NETWORK_SCHEDULE_VERSION;
   await saveStaffState(state);
 }
 
@@ -119,22 +138,31 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       to: route.to,
       departure: route.departure,
       arrival: route.arrival,
-      duration: route.duration,
-      aircraft: route.aircraft,
+    duration: route.duration,
+    aircraft: route.aircraft,
+    aircraftOptions: route.aircraftOptions,
+    sourceUrl: route.sourceUrl,
+    validatedAt: route.validatedAt,
+    scheduledForSelectedDate: routeOperatesOn(route, date),
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),
     };
   }));
 }
 
-export async function getFlightsForRoute(from: string, to: string, date?: string) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to && routeOperatesOn(route, date));
+type FlightSearchOptions = {
+  /** Lets pilots fly a real BAV service on a different simulator day. */
+  includeVirtualFlexible?: boolean;
+};
+
+export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
+  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
   return withAvailability(managed, date);
 }
 
 /** Lists every active BAV service departing a selected BAV hub. */
-export async function getFlightsFromHub(from: string, date?: string) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && routeOperatesOn(route, date));
+export async function getFlightsFromHub(from: string, date?: string, options: FlightSearchOptions = {}) {
+  const managed = (await getManagedRoutes()).filter((route) => route.active && route.from === from && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
   return withAvailability(managed, date);
 }
 

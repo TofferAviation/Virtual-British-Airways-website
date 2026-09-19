@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { RADAR_WIND_LAYERS, type RadarWeatherData, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
+import { RADAR_WIND_LAYERS, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
   ssr: false,
@@ -40,15 +40,15 @@ export type RadarLayers = {
   vatsim: boolean;
   precipitation: boolean;
   winds: boolean;
-  convection: boolean;
+  lightning: boolean;
   advisories: boolean;
 };
 
 const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string }> = [
   { key: "vatsim", label: "VATSIM ATC", detail: "Live controller and ATIS positions" },
   { key: "precipitation", label: "Precipitation", detail: "Latest available weather radar" },
-  { key: "winds", label: "Animated wind", detail: "Animated model wind at the selected altitude" },
-  { key: "convection", label: "Convective outlook", detail: "Modelled atmospheric instability — not live lightning observations" },
+  { key: "winds", label: "GFS wind flow", detail: "GPU-rendered NOAA GFS wind at the selected altitude" },
+  { key: "lightning", label: "Observed lightning", detail: "EUMETSAT Lightning Imager flash coverage where available" },
   { key: "advisories", label: "Aviation hazards", detail: "SIGMET advisories, including turbulence where issued" },
 ];
 
@@ -81,10 +81,13 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
   const [checkedAt, setCheckedAt] = useState(() => new Date(0));
-  const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, convection: false, advisories: false });
+  const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, lightning: false, advisories: false });
   const [windLayer, setWindLayer] = useState<RadarWindLayerId>("surface");
   const [vatsim, setVatsim] = useState<VatsimRadarData | null>(null);
   const [weather, setWeather] = useState<RadarWeatherData | null>(null);
+  const [windGrid, setWindGrid] = useState<RadarWindGrid | null>(null);
+  const [windError, setWindError] = useState("");
+  const [windRendererStatus, setWindRendererStatus] = useState<"loading" | "ready" | "unsupported">("loading");
   const [selectedController, setSelectedController] = useState("");
 
   useEffect(() => {
@@ -125,13 +128,13 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     return () => { mounted = false; window.clearInterval(interval); };
   }, [layers.vatsim]);
 
-  const needsWeather = layers.precipitation || layers.winds || layers.convection || layers.advisories;
+  const needsWeather = layers.precipitation || layers.advisories;
   useEffect(() => {
     if (!needsWeather) return;
     let mounted = true;
     const refresh = async () => {
       try {
-        const response = await fetch(`/api/radar/weather?windLayer=${encodeURIComponent(windLayer)}`, { cache: "no-store" });
+        const response = await fetch("/api/radar/weather", { cache: "no-store" });
         if (!response.ok) return;
         const payload = await response.json() as RadarWeatherData;
         if (mounted) setWeather(payload);
@@ -142,7 +145,33 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     void refresh();
     const interval = window.setInterval(refresh, 5 * 60_000);
     return () => { mounted = false; window.clearInterval(interval); };
-  }, [needsWeather, windLayer]);
+  }, [needsWeather]);
+
+  useEffect(() => {
+    if (!layers.winds) return;
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        if (mounted) {
+          setWindGrid(null);
+          setWindRendererStatus("loading");
+        }
+        setWindError("");
+        const response = await fetch(`/api/radar/wind-grid?windLayer=${encodeURIComponent(windLayer)}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("The GFS field is currently unavailable.");
+        const payload = await response.json() as RadarWindGrid;
+        if (mounted) setWindGrid(payload);
+      } catch {
+        if (mounted) {
+          setWindGrid(null);
+          setWindError("NOAA GFS is temporarily unavailable. Try the layer again shortly.");
+        }
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 20 * 60_000);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, [layers.winds, windLayer]);
 
   const visibleFlights = useMemo(() => flights.filter((flight) => {
     if (filter !== "all" && (!flight.lastSnapshot || (filter === "ground" ? !flight.lastSnapshot.onGround : flight.lastSnapshot.onGround))) return false;
@@ -156,7 +185,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const selectFlight = (id: string) => { setSelectedController(""); setSelectedId(id); };
   const selectController = (callsign: string) => { setSelectedId(""); setSelectedController(callsign); };
   const toggleLayer = (key: keyof RadarLayers) => setLayers((current) => ({ ...current, [key]: !current[key] }));
-  const hasExternalMapData = layers.vatsim || needsWeather;
+  const hasExternalMapData = layers.vatsim || needsWeather || layers.winds || layers.lightning;
 
   return <div className="ba-radar ba-radar-tracker">
     <header className="ba-radar-toolbar">
@@ -175,12 +204,12 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       </aside>
       <div className="ba-radar-map-wrap">
         <div className="ba-radar-map">
-          <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} layers={layers} selectedController={selectedController} onSelectController={selectController} />
+          <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} />
           <div className="ba-radar-layer-controls" role="group" aria-label="BA-Radar map layers">
             <strong>Map layers</strong>
             {layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
-            {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{RADAR_WIND_LAYERS.find((entry) => entry.id === windLayer)?.sourceLabel}</small></label> : null}
-            {layers.convection ? <p className="ba-radar-layer-note">Modelled instability only — actual lightning needs a dedicated strike-data provider.</p> : null}
+            {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
+            {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}
           </div>
           <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
           {!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}

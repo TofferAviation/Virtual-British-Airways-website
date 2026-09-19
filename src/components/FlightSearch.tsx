@@ -44,11 +44,9 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (aircraft !== "Any aircraft") {
-      router.push(`/book?${new URLSearchParams({ aircraft, date }).toString()}`);
-      return;
-    }
-    router.push(`/book?${new URLSearchParams({ from, to, date }).toString()}`);
+    const params = new URLSearchParams({ from, to, date });
+    if (aircraft !== "Any aircraft") params.set("aircraft", aircraft);
+    router.push(`/book?${params.toString()}`);
   }
 
   return (
@@ -61,7 +59,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
       <div className="flight-search-body">
         <div className="field">
           <label htmlFor="from">From</label>
-          <select id="from" value={from} onChange={(event) => setFrom(event.target.value as BavHubCode)} disabled={aircraft !== "Any aircraft"}>
+          <select id="from" value={from} onChange={(event) => setFrom(event.target.value as BavHubCode)}>
             {baseAirports.map((airport) => (
               <option key={`from-${airport.code}`} value={airport.code}>
                 {airport.name} ({airport.code}) — {airport.country}
@@ -71,7 +69,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
         </div>
         <div className="field">
           <label htmlFor="to">To</label>
-          <select id="to" value={to} onChange={(event) => setTo(event.target.value)} disabled={aircraft !== "Any aircraft"}>
+          <select id="to" value={to} onChange={(event) => setTo(event.target.value)}>
             {orderedAirports.map((airport) => (
               <option key={`to-${airport.code}`} value={airport.code}>
                 {airport.name} ({airport.code}) — {airport.country}
@@ -94,7 +92,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
       </div>
       <div className="search-helper">
         <span><strong>{airports.length + baseAirports.length} BA destinations / bases</strong> loaded into the current network selector.</span>
-        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ hub: from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : <span>{aircraft} · showing routes operated by this airframe</span>}
+        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ hub: from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : <span>{aircraft} · filter this city pair by the aircraft scheduled for that service</span>}
       </div>
     </form>
   );

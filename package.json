@@ -11,6 +11,7 @@
     "migrate:pilot-state": "node --env-file=.env.local scripts/migrate-pilot-state-to-supabase.mjs"
   },
   "dependencies": {
+    "@mattnucc/gribberish": "^1.7.0",
     "@supabase/supabase-js": "^2.116.0",
     "@types/leaflet": "^1.9.22",
     "leaflet": "^1.9.4",
