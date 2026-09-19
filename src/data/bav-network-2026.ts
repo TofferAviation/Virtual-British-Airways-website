@@ -1,11 +1,11 @@
 /**
  * British Airways London-hub network data used by BAV.
  *
- * City-pair availability and a detailed operating timetable are deliberately
- * separate. A route is useful to pilots as soon as BA publishes the city pair;
- * a BA flight number, local airport time and aircraft are shown only after that individual
- * service has been verified. This prevents a broad route map from accidentally
- * presenting guessed operational details as fact.
+ * City-pair availability, BAV virtual scheduling and verified BA timetable
+ * data are deliberately separate. A BAV service can keep a route flyable
+ * without suggesting its reference, timing or aircraft is a real-world BA
+ * assignment. A real BA flight number, local airport time and aircraft appear
+ * only once Operations has verified that individual service.
  */
 
 export type BavNetworkRouteSeed = {
@@ -35,10 +35,12 @@ export type BavNetworkRouteSeed = {
   validatedAt?: string;
   /** A published city pair without a verified individual BA timetable yet. */
   catalogueOnly?: boolean;
+  /** A bookable BAV operational schedule, not a copied BA published timetable. */
+  virtualTimetable?: boolean;
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19-r4";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-virtual-operational-timetable-2026-09-19-r5";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -59,9 +61,11 @@ export const BAV_NETWORK_ICAO_BY_IATA: Record<string, string> = {
 
 /**
  * The BAV London-hub route catalogue requested by Operations. These are
- * airport-pair records, not generated BA timetables. It is deliberately kept separate from the
- * detailed service records below so a city pair never gains a made-up BA
- * flight number, time or equipment assignment.
+ * airport-pair records. Each is published by BAV as a bookable virtual
+ * operational service with its own BAV reference and UTC planning time. This
+ * deliberately avoids presenting an invented BA flight number, callsign,
+ * time, or aircraft assignment as real-world data. Confirmed BA services are
+ * supplied separately below and replace the virtual service for that city pair.
  */
 const destinationsByHub = {
   LHR: [
@@ -85,22 +89,68 @@ export const BAV_NETWORK_ROUTE_COUNTS = {
 
 const routeNetworkSource = "https://www.britishairways.com/content/information/flight-information/our-route-network";
 
-const catalogueRoutes: BavNetworkRouteSeed[] = (Object.keys(destinationsByHub) as Array<BavNetworkRouteSeed["from"]>).flatMap((from) =>
-  destinationsByHub[from].map((to) => ({
-    id: `bav-network-2026-${from.toLowerCase()}-${to.toLowerCase()}`,
-    from,
-    to,
-    flightNumber: "BA route",
-    departure: "TBD",
-    arrival: "TBD",
-    duration: "Timetable pending",
-    aircraft: "Aircraft to be scheduled",
-    slots: 0,
-    active: true,
-    catalogueOnly: true,
-    sourceUrl: routeNetworkSource,
-    validatedAt: BAV_NETWORK_VALIDATED_AT,
-  })),
+const longHaulDestinations = new Set([
+  "ACC", "ATL", "AUS", "AUH", "BAH", "BKK", "BLR", "BOM", "BOS", "BWI", "CAI", "CPT", "DEL", "DEN", "DFW", "DOH", "DXB", "EWR", "EZE", "GIG", "GRU", "HKG", "HND", "HYD", "IAD", "IAH", "ISB", "JNB", "KUL", "KWI", "LAS", "LAX", "LOS", "MAA", "MCO", "MCT", "MEL", "MEX", "MIA", "MRU", "MSY", "NAS", "NBO", "ORD", "PDX", "PHL", "PHX", "PIT", "PVG", "SAN", "SCL", "SEA", "SEZ", "SFO", "SIN", "SJO", "SYD", "TLV", "TPA", "YUL", "YVR", "YYZ", "BDA", "CMB", "CUN", "GND", "KIN", "PLS", "POS", "PUJ", "SKB", "UVF", "ZNZ",
+]);
+
+const ultraLongHaulDestinations = new Set(["MEL", "SYD", "SCL", "EZE", "PVG", "HND", "SIN", "KUL"]);
+
+function durationPartsForVirtualService(to: string) {
+  if (ultraLongHaulDestinations.has(to)) return { hours: 13, minutes: 30 };
+  if (longHaulDestinations.has(to)) return { hours: 9, minutes: 15 };
+  if (["AMM", "CAI", "LCA", "MCT", "NBO", "RAK", "RBA", "SSH"].includes(to)) return { hours: 5, minutes: 20 };
+  if (["AGP", "AYT", "CFU", "CHQ", "DLM", "FAO", "FNC", "HER", "IBZ", "JTR", "KGS", "LPA", "PFO", "PMI", "PVK", "RHO", "TFS", "ZTH"].includes(to)) return { hours: 3, minutes: 5 };
+  if (["ABZ", "BHD", "DUB", "EDI", "GLA", "GCI", "INV", "JER", "MAN", "NCL"].includes(to)) return { hours: 1, minutes: 25 };
+  return { hours: 2, minutes: 10 };
+}
+
+function toClock(totalMinutes: number) {
+  const normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+}
+
+function virtualAircraft(from: BavNetworkRouteSeed["from"], to: string, sequence: number) {
+  if (from === "LCY") return { aircraft: "Embraer E190", aircraftOptions: ["Embraer E190"] };
+  if (longHaulDestinations.has(to)) {
+    const aircraft = ["Boeing 787-9", "Boeing 777-200ER", "Airbus A350-1000", "Boeing 787-10"][sequence % 4];
+    return { aircraft, aircraftOptions: [aircraft] };
+  }
+  const aircraft = ["Airbus A320neo", "Airbus A320", "Airbus A319"][sequence % 3];
+  return { aircraft, aircraftOptions: ["Airbus A320neo", "Airbus A320", "Airbus A319", "Airbus A321neo"] };
+}
+
+function bAVVirtualFlightNumber(from: BavNetworkRouteSeed["from"], sequence: number) {
+  const base = from === "LHR" ? 1000 : from === "LGW" ? 2000 : 3000;
+  return `BAV${base + sequence + 1}`;
+}
+
+const virtualOperationalRoutes: BavNetworkRouteSeed[] = (Object.keys(destinationsByHub) as Array<BavNetworkRouteSeed["from"]>).flatMap((from) =>
+  destinationsByHub[from].map((to, sequence) => {
+    const flightNumber = bAVVirtualFlightNumber(from, sequence);
+    const duration = durationPartsForVirtualService(to);
+    // These values are deliberately BAV UTC reference times, spread across
+    // the day for choice in a simulator session. SimBrief supplies the final
+    // flight plan timing when the pilot creates their OFP.
+    const departureMinutes = 5 * 60 + ((sequence * 47 + (from === "LHR" ? 0 : from === "LGW" ? 13 : 26)) % (16 * 60));
+    const equipment = virtualAircraft(from, to, sequence);
+    return {
+      id: `bav-network-2026-${from.toLowerCase()}-${to.toLowerCase()}`,
+      from,
+      to,
+      flightNumber,
+      callsign: flightNumber,
+      departure: toClock(departureMinutes),
+      arrival: toClock(departureMinutes + duration.hours * 60 + duration.minutes),
+      duration: `${duration.hours}h ${String(duration.minutes).padStart(2, "0")}m`,
+      aircraft: equipment.aircraft,
+      aircraftOptions: equipment.aircraftOptions,
+      slots: 12,
+      active: true,
+      virtualTimetable: true,
+      sourceUrl: routeNetworkSource,
+      validatedAt: BAV_NETWORK_VALIDATED_AT,
+    };
+  }),
 );
 
 const checked = BAV_NETWORK_VALIDATED_AT;
@@ -146,6 +196,6 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
  * pairs have multiple independently verified departures.
  */
 export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
-  ...catalogueRoutes,
+  ...virtualOperationalRoutes,
   ...verifiedSchedules,
 ];

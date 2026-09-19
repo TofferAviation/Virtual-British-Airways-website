@@ -48,11 +48,12 @@ function buildSimbriefDispatchFields(booking: PilotBooking, pilotName: string, s
   if (!codes.origin || !codes.destination || !codes.aircraft) return null;
   const departure = departureParts(booking.departure);
   const duration = durationParts(booking.duration);
+  const virtualService = /^BAV\d+$/i.test(booking.flightNumber);
   const flightNumber = booking.flightNumber.replace(/^(?:BAV|BAW|BA)/i, "");
   return {
-    airline: "BAW",
+    airline: virtualService ? "BAV" : "BAW",
     fltnum: flightNumber,
-    callsign: `BAW${flightNumber}`,
+    callsign: virtualService ? `BAV${flightNumber}` : `BAW${flightNumber}`,
     type: codes.aircraft,
     orig: codes.origin,
     dest: codes.destination,

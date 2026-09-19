@@ -25,6 +25,8 @@ export type ManagedRoute = {
   scheduleScoringEnabled?: boolean;
   /** Published BA airport pair with detailed BA service data still pending. */
   catalogueOnly?: boolean;
+  /** BAV's own bookable schedule for a real network city pair. */
+  virtualTimetable?: boolean;
 };
 
 function validRoute(value: unknown): value is ManagedRoute {
@@ -59,6 +61,7 @@ function normalizedRoutes(routes: unknown[]) {
     validatedAt: typeof route.validatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validatedAt) ? route.validatedAt : undefined,
     scheduleScoringEnabled: route.scheduleScoringEnabled === true,
     catalogueOnly: route.catalogueOnly === true,
+    virtualTimetable: route.virtualTimetable === true,
   })).filter((route) => {
     if (!route.id || !route.from || !route.to || !route.flightNumber || !route.aircraft || ids.has(route.id)) return false;
     ids.add(route.id);
@@ -91,7 +94,14 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
   // in Staff Centre during a later baseline release.
   const byId = new Map<string, ManagedRoute>();
   for (const route of baseline) byId.set(route.id, route);
-  for (const route of stored) byId.set(route.id, route);
+  for (const route of stored) {
+    const shipped = byId.get(route.id);
+    // Previous baseline catalogue cards were never editable timetable
+    // records. Replace only those placeholders with the new, bookable BAV
+    // virtual schedule; preserve every staff-created or staff-edited record.
+    if (shipped?.virtualTimetable && route.catalogueOnly) continue;
+    byId.set(route.id, route);
+  }
   const migrated = normalizedRoutes([...byId.values()]);
   state.routeSchedule = migrated;
   state.routeScheduleVersion = BAV_NETWORK_SCHEDULE_VERSION;
@@ -155,6 +165,7 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       validatedAt: route.validatedAt,
       scheduleScoringEnabled: route.scheduleScoringEnabled === true,
       catalogueOnly: route.catalogueOnly === true,
+      virtualTimetable: route.virtualTimetable === true,
       scheduledForSelectedDate: routeOperatesOn(route, date),
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),
@@ -169,23 +180,26 @@ type FlightSearchOptions = {
 
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to);
-  const detailed = matching.filter((route) => !route.catalogueOnly && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
-  // A city pair remains discoverable when its timetable has not yet been
-  // audited. Once a detailed BA service is available, it replaces this
-  // catalogue card for the selected date instead of creating a duplicate.
-  return withAvailability(detailed.length ? detailed : matching.filter((route) => route.catalogueOnly), date);
+  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
+  const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
+  const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
+  // A checked BA service always takes priority. Otherwise BAV's clearly
+  // labelled virtual operational service keeps the real network city pair
+  // bookable without inventing a BA timetable.
+  return withAvailability([...verified, ...virtual], date);
 }
 
 /** Lists every active BAV service departing a selected BAV hub. */
 export async function getFlightsFromHub(from: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getManagedRoutes()).filter((route) => route.active && route.from === from);
-  const detailed = matching.filter((route) => !route.catalogueOnly && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
-  const detailedPairs = new Set(detailed.map((route) => `${route.from}-${route.to}`));
-  const catalogue = matching.filter((route) => route.catalogueOnly && !detailedPairs.has(`${route.from}-${route.to}`));
-  return withAvailability([...detailed, ...catalogue], date);
+  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
+  const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
+  const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
+  const catalogue = matching.filter((route) => route.catalogueOnly && !verifiedPairs.has(`${route.from}-${route.to}`));
+  return withAvailability([...verified, ...virtual, ...catalogue], date);
 }
 
 export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && !route.catalogueOnly && route.aircraft === aircraft && routeOperatesOn(route, date));
+  const managed = (await getManagedRoutes()).filter((route) => route.active && !route.catalogueOnly && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)) && (route.virtualTimetable || routeOperatesOn(route, date)));
   return withAvailability(managed, date);
 }

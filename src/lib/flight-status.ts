@@ -38,6 +38,7 @@ function flightPhase(onGround: boolean | undefined, altitudeFt: number | undefin
 }
 
 function callsignFor(flightNumber: string) {
+  if (/^BAV\d+$/i.test(flightNumber)) return flightNumber.toUpperCase();
   const number = flightNumber.replace(/^BA/i, "");
   return /^\d+$/.test(number) ? `BAW${number}` : flightNumber;
 }

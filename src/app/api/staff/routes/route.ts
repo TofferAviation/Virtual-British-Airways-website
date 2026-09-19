@@ -39,11 +39,21 @@ function baFlightNumber(value: unknown) {
   return /^BA\d{1,4}$/.test(candidate) ? candidate : undefined;
 }
 
+function bavVirtualFlightNumber(value: unknown) {
+  const candidate = text(value).toUpperCase().replace(/\s+/g, "");
+  return /^BAV\d{3,5}$/.test(candidate) ? candidate : undefined;
+}
+
 function callsign(value: unknown) {
   const candidate = text(value).toUpperCase().replace(/\s+/g, "");
   // BAW is BA's ICAO designator.  A small alpha suffix is allowed for a
   // tracker-confirmed operational callsign such as BAW26PV.
   return /^BAW\d{1,4}[A-Z]{0,2}$/.test(candidate) ? candidate : undefined;
+}
+
+function bavVirtualCallsign(value: unknown) {
+  const candidate = text(value).toUpperCase().replace(/\s+/g, "");
+  return /^BAV\d{3,5}$/.test(candidate) ? candidate : undefined;
 }
 
 function aircraftList(value: unknown) {
@@ -63,7 +73,8 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   const raw = input as Record<string, unknown>;
   const from = text(raw.from).toUpperCase();
   const to = text(raw.to).toUpperCase();
-  const flightNumber = baFlightNumber(raw.flightNumber);
+  const virtualTimetable = bool(raw.virtualTimetable, false);
+  const flightNumber = virtualTimetable ? bavVirtualFlightNumber(raw.flightNumber) : baFlightNumber(raw.flightNumber);
   const departure = time(raw.departure);
   const arrival = time(raw.arrival);
   const aircraft = text(raw.aircraft);
@@ -73,7 +84,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   if (!/^(?:LHR|LGW|LCY)$/.test(from) || !/^[A-Z]{3}$/.test(to)) {
     throw new Error("The departure hub must be LHR, LGW or LCY and the destination must be a three-letter IATA code.");
   }
-  if (!flightNumber) throw new Error("Use a real BA flight number in the format BA123.");
+  if (!flightNumber) throw new Error(virtualTimetable ? "Use a BAV virtual service reference in the format BAV1001." : "Use a real BA flight number in the format BA123.");
   if (!departure || !arrival || !aircraft) {
     throw new Error("Local departure time, arrival time and scheduled aircraft are required.");
   }
@@ -83,16 +94,16 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
 
   const id = existingId || text(raw.id) || `${flightNumber}-${from}-${to}`.toLowerCase();
   const suppliedCallsign = text(raw.callsign);
-  const verifiedCallsign = suppliedCallsign ? callsign(suppliedCallsign) : undefined;
+  const verifiedCallsign = suppliedCallsign ? (virtualTimetable ? bavVirtualCallsign(suppliedCallsign) : callsign(suppliedCallsign)) : undefined;
   if (suppliedCallsign && !verifiedCallsign) {
-    throw new Error("Use a verified BAW callsign in the format BAW267.");
+    throw new Error(virtualTimetable ? "Use the BAV virtual service reference as its callsign, for example BAV1001." : "Use a verified BAW callsign in the format BAW267.");
   }
   return {
     id,
     from,
     to,
     flightNumber,
-    callsign: verifiedCallsign ?? `BAW${flightNumber.slice(2)}`,
+    callsign: verifiedCallsign ?? (virtualTimetable ? flightNumber : `BAW${flightNumber.slice(2)}`),
     departure,
     arrival,
     duration: text(raw.duration, "2h 00m"),
@@ -107,6 +118,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     validatedAt,
     scheduleScoringEnabled: bool(raw.scheduleScoringEnabled, false),
     catalogueOnly: false,
+    virtualTimetable,
   };
 }
 

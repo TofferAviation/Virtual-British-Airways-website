@@ -91,7 +91,8 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
 
   const activeEventCount = upcoming.filter((event) => event.published).length;
   const activeRouteCount = new Set(routes.filter((route) => route.active).map((route) => `${route.from}-${route.to}`)).size;
-  const verifiedScheduleCount = routes.filter((route) => route.active && !route.catalogueOnly).length;
+  const verifiedScheduleCount = routes.filter((route) => route.active && !route.catalogueOnly && !route.virtualTimetable).length;
+  const virtualScheduleCount = routes.filter((route) => route.active && route.virtualTimetable).length;
   const timetableRecords = useMemo(() => routes.filter((route) => !route.catalogueOnly).sort((left, right) => `${left.from}${left.to}${left.flightNumber}`.localeCompare(`${right.from}${right.to}${right.flightNumber}`)), [routes]);
   const matchingTimetableRecords = useMemo(() => {
     const search = routeSearch.trim().toLowerCase();
@@ -265,7 +266,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         </div>
 
         <div className="staff-panel" id="route-tools">
-          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>Only a verified BA service is bookable. Each record carries the real BA flight number, BAW callsign, local airport times and scheduled aircraft.</p></div></div>
+          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>BAV virtual services keep every published city pair bookable. Confirmed BA services remain separately controlled with their real BA flight number, BAW callsign, local times and scheduled aircraft.</p></div></div>
           <div className="staff-tool-list">
             <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add verified service</b><small>Enter a confirmed BA flight manually.</small><i>›</i></button>
             <button onClick={() => setTimetableImportOpen(true)}><span>↥</span><b>Import timetable CSV</b><small>Publish many verified BA services safely.</small><i>›</i></button>
@@ -274,10 +275,10 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
             <a href="/api/health" target="_blank" rel="noreferrer"><span>↥</span><b>Service health</b><small>Check the current website API status.</small><i>›</i></a>
           </div>
           <div className="staff-route-summary">
-            <strong>{activeRouteCount} active BAV city pair{activeRouteCount === 1 ? "" : "s"} · {verifiedScheduleCount} verified service record{verifiedScheduleCount === 1 ? "" : "s"}</strong>
-            <span>Catalogue cards remain visible until a verified service is published for that city pair on the selected date.</span>
+            <strong>{activeRouteCount} active BAV city pair{activeRouteCount === 1 ? "" : "s"} · {virtualScheduleCount} BAV virtual service{virtualScheduleCount === 1 ? "" : "s"} · {verifiedScheduleCount} verified BA service record{verifiedScheduleCount === 1 ? "" : "s"}</strong>
+            <span>A verified BA service takes priority over the matching BAV virtual service on the Book page.</span>
           </div>
-          {verifiedScheduleCount ? <div className="staff-timetable-records"><label><span>Find a timetable record</span><input value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} placeholder="Flight number, callsign, airport or aircraft" /></label><div className="staff-mini-routes">{matchingTimetableRecords.slice(0, 20).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}{route.callsign ? ` · ${route.callsign}` : ""}</strong><span>{route.from} → {route.to} · {route.departure}–{route.arrival} local</span><small>{route.aircraft}{route.scheduleScoringEnabled ? " · schedule scoring on" : " · timetable reference"}</small></button>)}</div>{matchingTimetableRecords.length > 20 ? <small className="staff-timetable-limit">Showing the first 20 matching records. Narrow the search to edit a specific service.</small> : null}</div> : null}
+          {timetableRecords.length ? <div className="staff-timetable-records"><label><span>Find a timetable record</span><input value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} placeholder="Flight number, callsign, airport or aircraft" /></label><div className="staff-mini-routes">{matchingTimetableRecords.slice(0, 20).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}{route.callsign ? ` · ${route.callsign}` : ""}</strong><span>{route.from} → {route.to} · {route.departure}–{route.arrival} {route.virtualTimetable ? "UTC reference" : "local"}</span><small>{route.aircraft}{route.virtualTimetable ? " · BAV virtual service" : route.scheduleScoringEnabled ? " · schedule scoring on" : " · verified BA timetable"}</small></button>)}</div>{matchingTimetableRecords.length > 20 ? <small className="staff-timetable-limit">Showing the first 20 matching records. Narrow the search to edit a specific service.</small> : null}</div> : null}
         </div>
       </section>
 
@@ -360,20 +361,20 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         <div className="staff-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setRouteDraft(null); }}>
           <div className="staff-modal staff-route-modal" role="dialog" aria-modal="true" aria-label={routeDraft.id ? "Edit route" : "Create route"}>
             <div className="staff-modal-heading"><div><span className="staff-kicker">Route editor</span><h2>{routeDraft.id ? "Edit route override" : "Add route override"}</h2></div><button onClick={() => setRouteDraft(null)} disabled={saving}>×</button></div>
-            <p className="staff-modal-lead">Publish a verified BA service with its real BA flight number, BAW callsign, local airport times and scheduled aircraft. Add the source and verification date so staff can audit it later. Times are a pilot reference by default, not a points penalty. It replaces the route-catalogue card for this city pair on the Book page.</p>
+            <p className="staff-modal-lead">{routeDraft.virtualTimetable ? "This is BAV’s own bookable operational schedule for a real network city pair. Its BAV reference, UTC planning time and approved virtual aircraft must remain clearly separate from a verified BA timetable." : "Publish a verified BA service with its real BA flight number, BAW callsign, local airport times and scheduled aircraft. Add the source and verification date so staff can audit it later. Times are a pilot reference by default, not a points penalty. It replaces the matching BAV virtual service on the Book page."}</p>
             <div className="staff-form-grid">
               <label><span>From IATA</span><input value={routeDraft.from} onChange={(e) => setRouteDraft({ ...routeDraft, from: e.target.value.toUpperCase() })} /></label>
               <label><span>To IATA</span><input value={routeDraft.to} onChange={(e) => setRouteDraft({ ...routeDraft, to: e.target.value.toUpperCase() })} /></label>
-              <label><span>BA flight number</span><input value={routeDraft.flightNumber} onChange={(e) => setRouteDraft({ ...routeDraft, flightNumber: e.target.value.toUpperCase() })} placeholder="BA267" /></label>
-              <label><span>ICAO callsign</span><input value={routeDraft.callsign ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, callsign: e.target.value.toUpperCase() })} placeholder="BAW267" /></label>
+              <label><span>{routeDraft.virtualTimetable ? "BAV service reference" : "BA flight number"}</span><input value={routeDraft.flightNumber} onChange={(e) => setRouteDraft({ ...routeDraft, flightNumber: e.target.value.toUpperCase() })} placeholder={routeDraft.virtualTimetable ? "BAV1001" : "BA267"} /></label>
+              <label><span>{routeDraft.virtualTimetable ? "BAV service callsign" : "ICAO callsign"}</span><input value={routeDraft.callsign ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, callsign: e.target.value.toUpperCase() })} placeholder={routeDraft.virtualTimetable ? "BAV1001" : "BAW267"} /></label>
               <label><span>Aircraft</span><input value={routeDraft.aircraft} onChange={(e) => setRouteDraft({ ...routeDraft, aircraft: e.target.value })} /></label>
               <label><span>Departure</span><input type="time" value={routeDraft.departure} onChange={(e) => setRouteDraft({ ...routeDraft, departure: e.target.value })} /></label>
               <label><span>Arrival</span><input type="time" value={routeDraft.arrival} onChange={(e) => setRouteDraft({ ...routeDraft, arrival: e.target.value })} /></label>
               <label><span>Duration</span><input value={routeDraft.duration} onChange={(e) => setRouteDraft({ ...routeDraft, duration: e.target.value })} placeholder="2h 10m" /></label>
               <label><span>Pilot slots</span><input type="number" min="0" value={routeDraft.slots} onChange={(e) => setRouteDraft({ ...routeDraft, slots: Number(e.target.value) })} /></label>
               <label><span>Approved virtual substitutes</span><input value={(routeDraft.aircraftOptions ?? []).join(", ")} onChange={(e) => setRouteDraft({ ...routeDraft, aircraftOptions: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Airbus A320, Airbus A319" /></label>
-              <label><span>Official timetable source</span><input type="url" value={routeDraft.sourceUrl ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, sourceUrl: e.target.value })} placeholder="https://…" /></label>
-              <label><span>Verified on</span><input type="date" value={routeDraft.validatedAt ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validatedAt: e.target.value })} /></label>
+              <label><span>{routeDraft.virtualTimetable ? "BA route-network reference" : "Official timetable source"}</span><input type="url" value={routeDraft.sourceUrl ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, sourceUrl: e.target.value })} placeholder="https://…" /></label>
+              <label><span>{routeDraft.virtualTimetable ? "BAV schedule published" : "Verified on"}</span><input type="date" value={routeDraft.validatedAt ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validatedAt: e.target.value })} /></label>
               <label><span>Valid from</span><input type="date" value={routeDraft.validFrom ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validFrom: e.target.value })} /></label>
               <label><span>Valid until (optional)</span><input type="date" value={routeDraft.validUntil ?? ""} onChange={(e) => setRouteDraft({ ...routeDraft, validUntil: e.target.value })} /></label>
               <label><span>Operating days</span><input value={(routeDraft.operatingDays ?? []).join(", ")} onChange={(e) => setRouteDraft({ ...routeDraft, operatingDays: e.target.value.split(",").map((item) => Number(item.trim())).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) })} placeholder="0 Sun, 1 Mon … 6 Sat" /></label>
