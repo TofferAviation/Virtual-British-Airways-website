@@ -7,12 +7,8 @@ import type { ConvectiveRiskPoint, WindVector } from "@/lib/radar-external";
 type GeoPoint = { latitude: number; longitude: number };
 type ScreenPoint = { x: number; y: number };
 type WindFlow = { east: number; north: number; speedKt: number };
-type WindParticle = GeoPoint & {
-  age: number;
-  maxAge: number;
-  trail: GeoPoint[];
-  speedKt: number;
-};
+type ScreenWind = { x: number; y: number; speedKt: number };
+type WindParticle = ScreenPoint & { age: number; maxAge: number; speedKt: number };
 
 type WindField = {
   latitudes: number[];
@@ -21,8 +17,16 @@ type WindField = {
   fallback: WindVector[];
 };
 
+type ScreenWindField = {
+  columns: number;
+  rows: number;
+  cellWidth: number;
+  cellHeight: number;
+  values: ScreenWind[];
+};
+
 const MAX_LATITUDE = 85;
-const TRAIL_POINTS = 16;
+const TARGET_FRAME_MS = 1000 / 32;
 
 function canvasFor(className: string, zIndex: number) {
   const canvas = document.createElement("canvas");
@@ -33,12 +37,15 @@ function canvasFor(className: string, zIndex: number) {
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
-  const ratio = window.devicePixelRatio || 1;
+  // A device-pixel-ratio canvas would make every animation frame several times
+  // more expensive on high-resolution displays. This layer prioritises a smooth
+  // flight-planning map over imperceptibly sharper individual particles.
+  const ratio = 1;
   canvas.width = Math.max(1, Math.round(width * ratio));
   canvas.height = Math.max(1, Math.round(height * ratio));
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d", { alpha: true });
   context?.setTransform(ratio, 0, 0, ratio, 0, 0);
   return context;
 }
@@ -155,16 +162,35 @@ function pointFromMap(map: ReturnType<typeof useMap>, point: GeoPoint): ScreenPo
   return { x: projected.x, y: projected.y };
 }
 
-function seedParticle(map: ReturnType<typeof useMap>): WindParticle {
-  const bounds = map.getBounds();
-  const latitude = Math.max(-MAX_LATITUDE, Math.min(MAX_LATITUDE, bounds.getSouth() + Math.random() * (bounds.getNorth() - bounds.getSouth())));
-  const longitude = normaliseLongitude(bounds.getWest() + Math.random() * (bounds.getEast() - bounds.getWest()));
+function windAtScreen(field: ScreenWindField, x: number, y: number): ScreenWind | null {
+  if (!field.values.length) return null;
+  const xIndex = Math.max(0, Math.min(field.columns - 2, Math.floor(x / field.cellWidth)));
+  const yIndex = Math.max(0, Math.min(field.rows - 2, Math.floor(y / field.cellHeight)));
+  const horizontal = Math.max(0, Math.min(1, (x - xIndex * field.cellWidth) / field.cellWidth));
+  const vertical = Math.max(0, Math.min(1, (y - yIndex * field.cellHeight) / field.cellHeight));
+  const southwest = field.values[yIndex * field.columns + xIndex];
+  const southeast = field.values[yIndex * field.columns + xIndex + 1];
+  const northwest = field.values[(yIndex + 1) * field.columns + xIndex];
+  const northeast = field.values[(yIndex + 1) * field.columns + xIndex + 1];
+  if (!southwest || !southeast || !northwest || !northeast) return null;
+  const interpolate = (southwestValue: number, southeastValue: number, northwestValue: number, northeastValue: number) => {
+    const southValue = southwestValue + (southeastValue - southwestValue) * horizontal;
+    const northValue = northwestValue + (northeastValue - northwestValue) * horizontal;
+    return southValue + (northValue - southValue) * vertical;
+  };
   return {
-    latitude,
-    longitude,
+    x: interpolate(southwest.x, southeast.x, northwest.x, northeast.x),
+    y: interpolate(southwest.y, southeast.y, northwest.y, northeast.y),
+    speedKt: interpolate(southwest.speedKt, southeast.speedKt, northwest.speedKt, northeast.speedKt),
+  };
+}
+
+function seedParticle(width: number, height: number): WindParticle {
+  return {
+    x: Math.random() * width,
+    y: Math.random() * height,
     age: Math.random() * 90,
-    maxAge: 120 + Math.random() * 100,
-    trail: [],
+    maxAge: 80 + Math.random() * 100,
     speedKt: 0,
   };
 }
@@ -193,13 +219,23 @@ export function BaRadarWeatherOverlay({
     let outlookContext: CanvasRenderingContext2D | null = null;
     let windContext: CanvasRenderingContext2D | null = null;
     let particles: WindParticle[] = [];
+    let screenField: ScreenWindField | null = null;
     let frame = 0;
-    let lastTimestamp = performance.now();
+    let lastDrawTimestamp = 0;
+    let mapIsMoving = false;
     const field = buildWindField(winds);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const mapSize = () => map.getSize();
+    const scheduleFrame = () => {
+      if (!frame && showWinds && field && !reduceMotion && !document.hidden && !mapIsMoving) {
+        frame = window.requestAnimationFrame(animateWind);
+      }
+    };
 
     const drawOutlook = () => {
       if (!outlookContext) return;
-      const { x: width, y: height } = map.getSize();
+      const { x: width, y: height } = mapSize();
       outlookContext.clearRect(0, 0, width, height);
       if (!showConvectiveOutlook || !convectiveRisk.length) return;
       const radius = Math.max(140, Math.sqrt((width * height) / convectiveRisk.length) * 1.7);
@@ -216,121 +252,169 @@ export function BaRadarWeatherOverlay({
       }
     };
 
-    const drawWindTint = () => {
-      if (!windTintContext) return;
-      const { x: width, y: height } = map.getSize();
-      windTintContext.clearRect(0, 0, width, height);
-      if (!showWinds || !field) return;
-      const cellSize = 52;
-      windTintContext.filter = "blur(20px)";
-      for (let y = -cellSize; y < height + cellSize; y += cellSize) {
-        for (let x = -cellSize; x < width + cellSize; x += cellSize) {
-          const location = map.containerPointToLatLng([x + cellSize / 2, y + cellSize / 2]);
+    const buildScreenField = () => {
+      if (!field) return null;
+      const { x: width, y: height } = mapSize();
+      const cellSize = 112;
+      const columns = Math.max(6, Math.ceil(width / cellSize) + 1);
+      const rows = Math.max(5, Math.ceil(height / cellSize) + 1);
+      const cellWidth = width / (columns - 1);
+      const cellHeight = height / (rows - 1);
+      const values: ScreenWind[] = [];
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          const x = column * cellWidth;
+          const y = row * cellHeight;
+          const location = map.containerPointToLatLng([x, y]);
           const wind = modelWindAt(field, location.lat, location.lng);
-          if (!wind) continue;
-          const [red, green, blue] = windTintColour(wind.speedKt);
-          windTintContext.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.22)`;
-          windTintContext.fillRect(x - cellSize / 2, y - cellSize / 2, cellSize * 2, cellSize * 2);
+          if (!wind || wind.speedKt < 0.2) {
+            values.push({ x: 0, y: 0, speedKt: 0 });
+            continue;
+          }
+          const latitudeOffset = Math.sign(wind.north || 1) * 0.18;
+          const longitudeOffset = Math.sign(wind.east || 1) * 0.18 / Math.max(0.2, Math.cos(location.lat * Math.PI / 180));
+          const bearingPoint = pointFromMap(map, {
+            latitude: Math.max(-MAX_LATITUDE, Math.min(MAX_LATITUDE, location.lat + latitudeOffset)),
+            longitude: normaliseLongitude(location.lng + longitudeOffset),
+          });
+          const directionX = bearingPoint.x - x;
+          const directionY = bearingPoint.y - y;
+          const magnitude = Math.hypot(directionX, directionY);
+          values.push(magnitude < 0.001
+            ? { x: 0, y: 0, speedKt: wind.speedKt }
+            : { x: directionX / magnitude, y: directionY / magnitude, speedKt: wind.speedKt });
         }
       }
-      windTintContext.filter = "none";
+      return { columns, rows, cellWidth, cellHeight, values };
+    };
+
+    const drawWindTint = () => {
+      if (!windTintContext) return;
+      const { x: width, y: height } = mapSize();
+      windTintContext.clearRect(0, 0, width, height);
+      if (!showWinds || !screenField) return;
+      // A small, static colour wash gives strength context without the expensive
+      // per-frame blur and re-projection that caused the original map lag.
+      const tintCellSize = 112;
+      for (let y = 0; y < height; y += tintCellSize) {
+        for (let x = 0; x < width; x += tintCellSize) {
+          const wind = windAtScreen(screenField, x + tintCellSize / 2, y + tintCellSize / 2);
+          if (!wind) continue;
+          const [red, green, blue] = windTintColour(wind.speedKt);
+          windTintContext.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.12)`;
+          windTintContext.fillRect(x, y, tintCellSize + 1, tintCellSize + 1);
+        }
+      }
+    };
+
+    const configureMapView = () => {
+      const { x: width, y: height } = mapSize();
+      screenField = buildScreenField();
+      particles = Array.from(
+        { length: Math.max(100, Math.min(180, Math.round((width * height) / 12_500))) },
+        () => seedParticle(width, height),
+      );
+      windContext?.clearRect(0, 0, width, height);
+      drawWindTint();
+      drawOutlook();
     };
 
     const resize = () => {
-      const { x: width, y: height } = map.getSize();
+      const { x: width, y: height } = mapSize();
       windTintContext = resizeCanvas(windTintCanvas, width, height);
       outlookContext = resizeCanvas(outlookCanvas, width, height);
       windContext = resizeCanvas(windCanvas, width, height);
-      if (!particles.length) {
-        const count = Math.max(360, Math.min(780, Math.round((width * height) / 1_250)));
-        particles = Array.from({ length: count }, () => seedParticle(map));
-      }
-      drawWindTint();
-      drawOutlook();
-    };
-
-    const refreshVisibleParticles = () => {
-      const visibleBounds = map.getBounds().pad(0.04);
-      for (let index = 0; index < particles.length; index += 1) {
-        const particle = particles[index];
-        if (!visibleBounds.contains([particle.latitude, particle.longitude])) particles[index] = seedParticle(map);
-      }
-      drawWindTint();
-      drawOutlook();
-    };
-
-    const reprojectParticle = (particle: WindParticle, wind: WindFlow, elapsed: number) => {
-      const current = pointFromMap(map, particle);
-      const latitudeOffset = wind.north === 0 ? 0 : Math.sign(wind.north) * 0.18;
-      const longitudeOffset = wind.east === 0 ? 0 : Math.sign(wind.east) * 0.18 / Math.max(0.2, Math.cos(particle.latitude * Math.PI / 180));
-      const bearingPoint = pointFromMap(map, {
-        latitude: Math.max(-MAX_LATITUDE, Math.min(MAX_LATITUDE, particle.latitude + latitudeOffset)),
-        longitude: normaliseLongitude(particle.longitude + longitudeOffset),
-      });
-      const xDirection = bearingPoint.x - current.x;
-      const yDirection = bearingPoint.y - current.y;
-      const magnitude = Math.hypot(xDirection, yDirection);
-      if (magnitude < 0.001) return null;
-      const distance = Math.max(1.15, Math.min(5.8, 0.65 + wind.speedKt * 0.075)) * elapsed;
-      return map.containerPointToLatLng([current.x + xDirection / magnitude * distance, current.y + yDirection / magnitude * distance]);
-    };
-
-    const drawTrail = (particle: WindParticle) => {
-      if (!windContext || !particle.trail.length) return;
-      const points = [{ latitude: particle.latitude, longitude: particle.longitude }, ...particle.trail];
-      const projected = points.map((point) => pointFromMap(map, point));
-      windContext.lineCap = "round";
-      for (let index = 0; index < projected.length - 1; index += 1) {
-        const opacity = Math.max(0.035, 0.88 - index * 0.055);
-        windContext.strokeStyle = windColour(particle.speedKt, opacity);
-        windContext.lineWidth = particle.speedKt >= 50 ? 1.65 : 1.25;
-        windContext.shadowBlur = index < 3 ? 2.5 : 0;
-        windContext.shadowColor = windColour(particle.speedKt, Math.min(0.5, opacity));
-        windContext.beginPath();
-        windContext.moveTo(projected[index].x, projected[index].y);
-        windContext.lineTo(projected[index + 1].x, projected[index + 1].y);
-        windContext.stroke();
-      }
-      windContext.shadowBlur = 0;
+      configureMapView();
     };
 
     const animateWind = (timestamp: number) => {
-      if (!windContext || !showWinds || !field) return;
-      const elapsed = Math.max(0.35, Math.min(2.2, (timestamp - lastTimestamp) / 16.67));
-      lastTimestamp = timestamp;
-      const { x: width, y: height } = map.getSize();
-      windContext.clearRect(0, 0, width, height);
+      if (!windContext || !showWinds || !screenField || reduceMotion || document.hidden) {
+        frame = 0;
+        return;
+      }
+      if (mapIsMoving) {
+        frame = 0;
+        return;
+      }
+      if (timestamp - lastDrawTimestamp < TARGET_FRAME_MS) {
+        frame = 0;
+        scheduleFrame();
+        return;
+      }
+      frame = 0;
+      const elapsed = Math.min(2, Math.max(0.55, (timestamp - lastDrawTimestamp || TARGET_FRAME_MS) / TARGET_FRAME_MS));
+      lastDrawTimestamp = timestamp;
+      const { x: width, y: height } = mapSize();
+
+      // Fade the previous stroke instead of clearing and rebuilding every trail.
+      // Each frame now draws one inexpensive line per particle.
+      windContext.save();
+      windContext.globalCompositeOperation = "destination-in";
+      windContext.fillStyle = "rgba(0, 0, 0, 0.84)";
+      windContext.fillRect(0, 0, width, height);
+      windContext.restore();
+      windContext.lineCap = "round";
+      windContext.lineWidth = 1.15;
+
       for (let index = 0; index < particles.length; index += 1) {
         const particle = particles[index];
-        const wind = modelWindAt(field, particle.latitude, particle.longitude);
-        if (!wind || particle.age > particle.maxAge) {
-          particles[index] = seedParticle(map);
+        const wind = windAtScreen(screenField, particle.x, particle.y);
+        if (!wind || particle.age > particle.maxAge || wind.speedKt < 0.2) {
+          particles[index] = seedParticle(width, height);
           continue;
         }
-        const nextPoint = reprojectParticle(particle, wind, elapsed);
-        if (!nextPoint || Math.abs(nextPoint.lat) > MAX_LATITUDE) {
-          particles[index] = seedParticle(map);
+        const distance = Math.min(3.4, 0.45 + wind.speedKt * 0.045) * elapsed;
+        const nextX = particle.x + wind.x * distance;
+        const nextY = particle.y + wind.y * distance;
+        if (nextX < -5 || nextX > width + 5 || nextY < -5 || nextY > height + 5) {
+          particles[index] = seedParticle(width, height);
           continue;
         }
-        particle.trail.unshift({ latitude: particle.latitude, longitude: particle.longitude });
-        particle.trail.length = Math.min(TRAIL_POINTS, particle.trail.length);
-        particle.latitude = nextPoint.lat;
-        particle.longitude = normaliseLongitude(nextPoint.lng);
+        windContext.strokeStyle = windColour(wind.speedKt, 0.82);
+        windContext.lineWidth = wind.speedKt >= 50 ? 1.45 : 1.1;
+        windContext.beginPath();
+        windContext.moveTo(particle.x, particle.y);
+        windContext.lineTo(nextX, nextY);
+        windContext.stroke();
+        particle.x = nextX;
+        particle.y = nextY;
         particle.speedKt = wind.speedKt;
         particle.age += elapsed;
-        drawTrail(particle);
       }
-      frame = window.requestAnimationFrame(animateWind);
+      scheduleFrame();
+    };
+
+    const pauseForMapMove = () => {
+      mapIsMoving = true;
+      window.cancelAnimationFrame(frame);
+      frame = 0;
+    };
+    const resumeAfterMapMove = () => {
+      mapIsMoving = false;
+      configureMapView();
+      lastDrawTimestamp = performance.now();
+      scheduleFrame();
+    };
+    const refreshForVisibility = () => {
+      if (!document.hidden) {
+        configureMapView();
+        lastDrawTimestamp = performance.now();
+        scheduleFrame();
+      }
     };
 
     resize();
     map.on("resize", resize);
-    map.on("moveend zoomend", refreshVisibleParticles);
-    if (showWinds && field) frame = window.requestAnimationFrame(animateWind);
+    map.on("movestart zoomstart", pauseForMapMove);
+    map.on("moveend zoomend", resumeAfterMapMove);
+    document.addEventListener("visibilitychange", refreshForVisibility);
+    scheduleFrame();
     return () => {
       window.cancelAnimationFrame(frame);
       map.off("resize", resize);
-      map.off("moveend zoomend", refreshVisibleParticles);
+      map.off("movestart zoomstart", pauseForMapMove);
+      map.off("moveend zoomend", resumeAfterMapMove);
+      document.removeEventListener("visibilitychange", refreshForVisibility);
       windTintCanvas.remove();
       outlookCanvas.remove();
       windCanvas.remove();

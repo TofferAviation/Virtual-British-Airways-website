@@ -8,8 +8,7 @@
 }
 
 .ba-radar-wind-tint {
-  opacity: 0.46;
-  mix-blend-mode: multiply;
+  opacity: 0.32;
 }
 
 .ba-radar-convective-outlook {
