@@ -36,7 +36,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19-r2";
+export const BAV_NETWORK_SCHEDULE_VERSION = "ba-london-hubs-route-catalogue-2026-09-19-r3";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -57,21 +57,20 @@ export const BAV_NETWORK_ICAO_BY_IATA: Record<string, string> = {
 
 /**
  * The BAV London-hub route catalogue requested by Operations. These are
- * airport-pair records, not generated BA timetables: 144 Heathrow, 53
- * Gatwick and 24 City routes. It is deliberately kept separate from the
+ * airport-pair records, not generated BA timetables. It is deliberately kept separate from the
  * detailed service records below so a city pair never gains a made-up BA
  * flight number, time or equipment assignment.
  */
 const destinationsByHub = {
   LHR: [
     "ABZ", "ACC", "AGP", "ALG", "AMM", "AMS", "ATH", "ATL", "AUH", "AUS", "BAH", "BCN", "BHD", "BKK", "BLR", "BNA", "BOD", "BOM", "BOS", "BRU", "BUD", "BWI", "CAI", "CPT", "CPH", "DEL", "DEN", "DFW", "DOH", "DUB", "DUS", "DXB", "EDI", "EZE", "FAO", "FCO", "FRA", "GCI", "GLA", "GVA", "HAM", "HKG", "HND", "HYD", "IAH", "IAD", "INV", "ISB", "IST", "JFK", "JNB", "JTR", "KEF", "KUL", "KWI", "LAS", "LAX", "LIS", "LOS", "LYS", "MAD", "MAN", "MAA", "MCT", "MEX", "MIA", "MLA", "MRS", "MSY", "MUC", "NAP", "NBO", "NCE", "NCL", "ORD", "OSL", "PDX", "PHL", "PHX", "PIT", "PRG", "PVG", "SAN", "SEA", "SEZ", "SFO", "SIN", "SJO", "SOF", "SPU", "STL", "TLS", "TIV", "TLV", "TPA", "VCE", "VIE", "WAW", "YUL", "YVR", "YYZ", "ZRH", "ALC", "AYT", "BDS", "BLL", "BLQ", "BRI", "CAG", "CFU", "CHQ", "CTA", "DBV", "EFL", "FLR", "FNC", "HER", "IBZ", "INN", "KGS", "KLX", "LCA", "LIN", "MAH", "PMI", "PFO", "PSA", "PVK", "RHO", "SKG", "SZG", "TFS", "TIA", "VRN", "ZAG", "ZTH",
-    "ABV", "BDA", "CDG", "EWR", "HAJ", "JER", "LUX", "MXP", "NUE",
+    "ABV", "BDA", "CDG", "EWR", "HAJ", "JER", "LUX", "MXP", "NUE", "ARN", "BER", "BSL", "CGN", "GIB", "GIG", "GOT", "GRU", "HEL", "JMK", "KRK", "LJU", "LPA", "NAS", "OTP", "PUY", "RAK", "SCL", "SYD",
   ],
   LGW: [
-    "ACE", "ALC", "ANU", "BGI", "BOD", "CMB", "CFU", "CHQ", "CUN", "DBV", "FNC", "GNB", "GND", "GRZ", "HER", "IBZ", "INN", "IVL", "JER", "JRO", "KGS", "KIN", "KLX", "LCA", "LPA", "LYS", "MAH", "MLA", "MCO", "MPL", "MRU", "NCE", "PFO", "PLS", "PMI", "POS", "PUJ", "RAK", "RHO", "RVN", "SKB", "SKG", "SSH", "SVQ", "SZG", "TFS", "TPA", "TRN", "UVF", "VRN", "ZNZ", "AGP", "FUE",
+    "ACE", "ALC", "ANU", "BGI", "BOD", "CMB", "CFU", "CHQ", "CUN", "DBV", "FNC", "GNB", "GND", "GRZ", "HER", "IBZ", "INN", "IVL", "JER", "JRO", "KGS", "KIN", "KLX", "LCA", "LPA", "LYS", "MAH", "MLA", "MCO", "MPL", "MRU", "NCE", "PFO", "PLS", "PMI", "POS", "PUJ", "RAK", "RHO", "RVN", "SKB", "SKG", "SSH", "SVQ", "SZG", "TFS", "TPA", "TRN", "UVF", "VRN", "ZNZ", "AGP", "FUE", "ALG", "AYT", "BRI", "CPT", "CTA", "DLM", "DOH", "FAO", "GLA", "GVA", "OPO", "RBA",
   ],
   LCY: [
-    "AMS", "BCN", "BHD", "BER", "CMF", "DUB", "EDI", "EAS", "EGC", "FAO", "FLR", "GLA", "GVA", "IBZ", "JSI", "LIN", "NCE", "OLB", "PMI", "PRG", "RTM", "SPU", "TLN", "ZRH",
+    "AMS", "BCN", "BHD", "BER", "CMF", "DUB", "EDI", "EAS", "EGC", "FAO", "FLR", "GLA", "GVA", "IBZ", "JSI", "LIN", "NCE", "OLB", "PMI", "PRG", "RTM", "SPU", "TLN", "ZRH", "AGP",
   ],
 } as const;
 
