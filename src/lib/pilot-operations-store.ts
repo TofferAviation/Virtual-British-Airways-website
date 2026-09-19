@@ -12,6 +12,15 @@ import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
 
+/**
+ * Production requires the accompanying numeric-column migration before a
+ * decimal VA-point adjustment can be stored. Local development has no such
+ * constraint, while production stays safe until Operations enables it.
+ */
+function persistentScheduleFlexibilityEnabled() {
+  return process.env.SCHEDULE_FLEXIBILITY_ENABLED === "true";
+}
+
 type PirepRow = {
   id: string; pilot_id: string; booking_id: string | null; flight_number: string;
   departure_station: string; arrival_station: string; aircraft: string; started_at: string;
@@ -350,14 +359,16 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
   const client = getPirepClient();
   if (client) {
     const createdAt = new Date().toISOString();
-    const { data, error } = await client.from("pilot_pireps").insert({
+    const row: Record<string, unknown> = {
       id: randomUUID(), pilot_id: input.pilotId, booking_id: input.bookingId, flight_number: input.flightNumber,
       departure_station: input.from, arrival_station: input.to, aircraft: input.aircraft, started_at: input.startedAt,
       completed_at: input.completedAt, block_minutes: input.blockMinutes, distance_nm: input.distanceNm,
-      landing_fpm: input.landingFpm, fuel_used_kg: input.fuelUsedKg, points_awarded: 0, late_start_penalty_points: 0, tier_points_awarded: 0,
+      landing_fpm: input.landingFpm, fuel_used_kg: input.fuelUsedKg, points_awarded: 0, tier_points_awarded: 0,
       status: input.status, source: input.source, simulator: input.simulator, acars_session_id: input.acarsSessionId,
       pilot_comments: input.pilotComments, staff_comments: "", reviewed_at: null, reviewed_by: null, created_at: createdAt,
-    }).select("*").single();
+    };
+    if (persistentScheduleFlexibilityEnabled()) row.late_start_penalty_points = 0;
+    const { data, error } = await client.from("pilot_pireps").insert(row).select("*").single();
     if (error) throw error;
     if (input.bookingId) {
       const state = await readState();
@@ -398,11 +409,11 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
       const event = getMatchingBavEvent(current, await getEvents());
       const baseReward = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
       const booking = current.bookingId ? await getPilotBooking(current.bookingId, current.pilotId) : null;
-      const lateStart = current.source === "acars" ? calculateLateStartAdjustment(booking, current.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
+      const lateStart = persistentScheduleFlexibilityEnabled() && current.source === "acars" ? calculateLateStartAdjustment(booking, current.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
       const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
       const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
       update.points_awarded = points;
-      update.late_start_penalty_points = lateStart.vaPointsDeducted;
+      if (persistentScheduleFlexibilityEnabled()) update.late_start_penalty_points = lateStart.vaPointsDeducted;
       update.tier_points_awarded = tierPoints;
       await applyApprovedPirepStats(current.pilotId, {
         blockMinutes: current.blockMinutes,
