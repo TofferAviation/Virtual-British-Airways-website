@@ -228,25 +228,25 @@ function NightAirportSurfaceLights() {
       <GeoJSON
         data={surfaceFeatures as never}
         style={(feature) => feature?.properties?.kind === "taxiway"
-          ? { color: "#178fff", weight: 9, opacity: 0.16, interactive: false, className: "ba-radar-night-taxi-glow" }
-          : { color: "#e8a04b", weight: 7, opacity: 0.1, interactive: false, className: "ba-radar-night-apron-glow" }}
+          ? { color: "#178fff", weight: 5, opacity: 0.075, interactive: false, className: "ba-radar-night-taxi-glow" }
+          : { color: "#e8a04b", weight: 5, opacity: 0.07, interactive: false, className: "ba-radar-night-apron-glow" }}
       />
       <GeoJSON
         data={surfaceFeatures as never}
         style={(feature) => feature?.properties?.kind === "taxiway"
-          ? { color: "#50b6ff", weight: 1.65, opacity: 0.9, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-taxi-light" }
-          : { color: "#e5ad62", weight: 1, opacity: 0.55, dashArray: "1 10", lineCap: "round", interactive: false, className: "ba-radar-night-apron-light" }}
+          ? { color: "#50b6ff", weight: 1.1, opacity: 0.8, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-taxi-light" }
+          : { color: "#e5ad62", weight: 0.75, opacity: 0.42, dashArray: "1 11", lineCap: "round", interactive: false, className: "ba-radar-night-apron-light" }}
       />
     </> : null}
     {gateFeatures.features.length ? <GeoJSON
       data={gateFeatures as never}
       pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
-        radius: 2.1,
+        radius: 1.65,
         color: "#ffe1a6",
         weight: 0.8,
         opacity: 0.95,
         fillColor: "#f5a142",
-        fillOpacity: 0.9,
+        fillOpacity: 0.82,
         interactive: false,
         className: "ba-radar-night-gate-light",
       })}
