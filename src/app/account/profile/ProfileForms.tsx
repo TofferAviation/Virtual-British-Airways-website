@@ -9,6 +9,8 @@ import styles from "./ember-download.module.css";
 import hubStyles from "./hub-picker.module.css";
 import rulesStyles from "./pilot-rules.module.css";
 
+const EMBER_INSTALLER_URL = "https://github.com/TofferAviation/FreeFlight-Cabin-Controls/releases/download/v0.5.22/Ember_Systems.exe";
+
 async function patchProfile(payload: Record<string, string | null>) {
   const response = await fetch("/api/pilot/profile", {
     method: "PATCH",
@@ -134,13 +136,15 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
       <article className={`pilot-profile-card ${styles.card}`}>
         <div>
           <span className="pilot-profile-kicker">PILOT SYSTEMS</span>
-          <Image className={styles.logo} src="/branding/ember-logo-ba-blue-text.png" alt="Ember" width={560} height={256} priority />
+          <a className={styles.logoLink} href={EMBER_INSTALLER_URL} download aria-label="Download Ember ACARS for Windows">
+            <Image className={styles.logo} src="/branding/ember-logo-ba-blue-text.png" alt="Ember" width={560} height={256} priority />
+          </a>
           <h2>Ember ACARS</h2>
           <p>Ember connects your selected BAV flight, aircraft reservation and simulator telemetry to BA-Radar.</p>
         </div>
-        <div className={styles.access}><strong>Included with your pilot account</strong><span>Your secure Windows download will be provided here when the installer is released.</span></div>
-        <button type="button" className={styles.downloadButton} disabled aria-describedby="ember-download-note">Download Ember ACARS — coming soon</button>
-        <p id="ember-download-note" className={styles.note}>No installer is available yet. This button will become your official Ember download link.</p>
+        <div className={styles.access}><strong>Included with your pilot account</strong><span>Your secure Windows installer is ready to download. Open it yourself after the download finishes to begin setup.</span></div>
+        <a className={styles.downloadButton} href={EMBER_INSTALLER_URL} download aria-describedby="ember-download-note">Download Ember ACARS for Windows</a>
+        <p id="ember-download-note" className={styles.note}>Downloads Ember_Systems.exe. When it has finished downloading, open the installer yourself to continue with setup.</p>
       </article>
 
       <article className={`pilot-profile-card ${rulesStyles.card}`}>

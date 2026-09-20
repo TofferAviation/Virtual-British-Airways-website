@@ -10,6 +10,17 @@
   margin: 12px 0 4px;
 }
 
+.logoLink {
+  display: block;
+  width: fit-content;
+  border-radius: 2px;
+}
+
+.logoLink:focus-visible {
+  outline: 3px solid #2a83cf;
+  outline-offset: 4px;
+}
+
 .access {
   display: flex;
   flex-direction: column;
@@ -26,10 +37,23 @@
   color: #092d58;
 }
 
-.downloadButton:disabled {
-  opacity: 1 !important;
-  background: #51779e !important;
-  cursor: not-allowed !important;
+.downloadButton {
+  align-self: flex-start;
+  border: 0;
+  background: #005eb8;
+  color: #fff;
+  padding: 12px 20px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.downloadButton:hover {
+  background: #004b93;
+}
+
+.downloadButton:focus-visible {
+  outline: 3px solid #2a83cf;
+  outline-offset: 3px;
 }
 
 .note {
