@@ -2,10 +2,11 @@
 
 import L from "leaflet";
 import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, RadarLayers } from "@/components/PublicBaRadar";
 import { BaRadarWindField } from "@/components/BaRadarWindField";
+import { BAV_AIRPORT_RUNWAY_LIGHTS, type BAVAirportRunwayLight } from "@/data/bav-airport-runway-lights";
 
 type Position = [number, number];
 
@@ -45,6 +46,73 @@ function hasLocation(controller: VatsimStation): controller is VatsimStation & {
 
 function isUkPriorityController(controller: VatsimStation) {
   return /^(EG|EI)/.test(controller.callsign);
+}
+
+function useDarkTheme() {
+  const [dark, setDark] = useState(() => typeof document !== "undefined" && document.documentElement.dataset.theme === "dark");
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setDark(root.dataset.theme === "dark");
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
+function translatePoint([latitude, longitude]: Position, eastMeters: number, northMeters: number): Position {
+  return [
+    latitude + northMeters / 110_540,
+    longitude + eastMeters / (111_320 * Math.max(0.15, Math.cos(latitude * Math.PI / 180))),
+  ];
+}
+
+function runwayEdges(runway: BAVAirportRunwayLight) {
+  const [startLatitude, startLongitude] = runway.start;
+  const [endLatitude, endLongitude] = runway.end;
+  const meanLatitude = (startLatitude + endLatitude) / 2 * Math.PI / 180;
+  const east = (endLongitude - startLongitude) * 111_320 * Math.cos(meanLatitude);
+  const north = (endLatitude - startLatitude) * 110_540;
+  const length = Math.hypot(east, north);
+  if (length < 1) return null;
+  const halfWidth = runway.widthM / 2;
+  const leftEast = -north / length * halfWidth;
+  const leftNorth = east / length * halfWidth;
+  const start: Position = [startLatitude, startLongitude];
+  const end: Position = [endLatitude, endLongitude];
+  return {
+    left: [translatePoint(start, leftEast, leftNorth), translatePoint(end, leftEast, leftNorth)] as Position[],
+    right: [translatePoint(start, -leftEast, -leftNorth), translatePoint(end, -leftEast, -leftNorth)] as Position[],
+    centre: [start, end] as Position[],
+  };
+}
+
+function NightAirportLights() {
+  const map = useMap();
+  const darkTheme = useDarkTheme();
+  const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
+  useMapEvents({
+    moveend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }),
+  });
+
+  // Aircraft lighting should appear only when a pilot is close enough to use it.
+  // The visible-viewport filter keeps the all-airport data effectively free at world scale.
+  if (!darkTheme || view.zoom < 11) return null;
+  const bounds = view.bounds.pad(0.12);
+  const visibleRunways = BAV_AIRPORT_RUNWAY_LIGHTS.filter((runway) => bounds.contains([runway.start[0], runway.start[1]]) || bounds.contains([runway.end[0], runway.end[1]]));
+
+  return <>{visibleRunways.map((runway, index) => {
+    const edges = runwayEdges(runway);
+    if (!edges) return null;
+    const key = `${runway.code}:${index}`;
+    return <Fragment key={key}>
+      <Polyline key={`${key}:glow`} positions={edges.centre} pathOptions={{ color: "#168fff", weight: 10, opacity: 0.16, interactive: false, className: "ba-radar-night-runway-glow" }} />
+      <Polyline key={`${key}:left`} positions={edges.left} pathOptions={{ color: "#d6f2ff", weight: 1.8, opacity: 0.96, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-runway-edge" }} />
+      <Polyline key={`${key}:right`} positions={edges.right} pathOptions={{ color: "#d6f2ff", weight: 1.8, opacity: 0.96, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-runway-edge" }} />
+      <Polyline key={`${key}:centre`} positions={edges.centre} pathOptions={{ color: "#f8d95a", weight: 1.1, opacity: 0.82, dashArray: "4 13", lineCap: "round", interactive: false, className: "ba-radar-night-runway-centre" }} />
+    </Fragment>;
+  })}</>;
 }
 
 function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
@@ -106,6 +174,7 @@ function MapLayers({
     /> : null}
     <OfficialLightningLayer enabled={layers.lightning} />
     <BaRadarWindField windGrid={windGrid} enabled={layers.winds} onStatus={onWindRendererStatus} />
+    <NightAirportLights />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
 }
