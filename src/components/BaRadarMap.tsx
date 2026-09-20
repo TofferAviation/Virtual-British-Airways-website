@@ -90,10 +90,45 @@ function runwayEdges(runway: BAVAirportRunwayLight) {
   const leftNorth = east / length * halfWidth;
   const start: Position = [startLatitude, startLongitude];
   const end: Position = [endLatitude, endLongitude];
+  const runwayEast = east / length;
+  const runwayNorth = north / length;
+  const approachLine = (origin: Position, direction: 1 | -1) => Array.from(
+    { length: 17 },
+    (_, index) => translatePoint(origin, runwayEast * direction * (720 - index * 45), runwayNorth * direction * (720 - index * 45)),
+  );
+  const approachCrossbars = (origin: Position, direction: 1 | -1) => [180, 360, 540].map((distance) => {
+    const centre = translatePoint(origin, runwayEast * direction * distance, runwayNorth * direction * distance);
+    return [
+      translatePoint(centre, leftEast * 0.72, leftNorth * 0.72),
+      translatePoint(centre, -leftEast * 0.72, -leftNorth * 0.72),
+    ] as Position[];
+  });
   return {
     left: [translatePoint(start, leftEast, leftNorth), translatePoint(end, leftEast, leftNorth)] as Position[],
     right: [translatePoint(start, -leftEast, -leftNorth), translatePoint(end, -leftEast, -leftNorth)] as Position[],
     centre: [start, end] as Position[],
+    startThreshold: [translatePoint(start, leftEast, leftNorth), translatePoint(start, -leftEast, -leftNorth)] as Position[],
+    endThreshold: [translatePoint(end, leftEast, leftNorth), translatePoint(end, -leftEast, -leftNorth)] as Position[],
+    startApproach: approachLine(start, -1),
+    endApproach: approachLine(end, 1),
+    startApproachBars: approachCrossbars(start, -1),
+    endApproachBars: approachCrossbars(end, 1),
+  };
+}
+
+function taxiwayEdges(points: Position[], halfWidthM = 10.5) {
+  if (points.length < 2) return null;
+  const offset = (point: Position, previous: Position, next: Position, side: 1 | -1) => {
+    const meanLatitude = (previous[0] + next[0]) / 2 * Math.PI / 180;
+    const east = (next[1] - previous[1]) * 111_320 * Math.cos(meanLatitude);
+    const north = (next[0] - previous[0]) * 110_540;
+    const length = Math.hypot(east, north);
+    if (length < 0.1) return point;
+    return translatePoint(point, -north / length * halfWidthM * side, east / length * halfWidthM * side);
+  };
+  return {
+    left: points.map((point, index) => offset(point, points[Math.max(0, index - 1)], points[Math.min(points.length - 1, index + 1)], 1)),
+    right: points.map((point, index) => offset(point, points[Math.max(0, index - 1)], points[Math.min(points.length - 1, index + 1)], -1)),
   };
 }
 
@@ -120,6 +155,12 @@ function NightAirportLights() {
       <Polyline key={`${key}:left`} positions={edges.left} pathOptions={{ color: "#d6f2ff", weight: 1.8, opacity: 0.96, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-runway-edge" }} />
       <Polyline key={`${key}:right`} positions={edges.right} pathOptions={{ color: "#d6f2ff", weight: 1.8, opacity: 0.96, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-runway-edge" }} />
       <Polyline key={`${key}:centre`} positions={edges.centre} pathOptions={{ color: "#f8d95a", weight: 1.1, opacity: 0.82, dashArray: "4 13", lineCap: "round", interactive: false, className: "ba-radar-night-runway-centre" }} />
+      <Polyline key={`${key}:start-approach`} positions={edges.startApproach} pathOptions={{ color: "#f6fbff", weight: 1.1, opacity: 0.92, dashArray: "2 13", lineCap: "round", interactive: false, className: "ba-radar-night-approach-light" }} />
+      <Polyline key={`${key}:end-approach`} positions={edges.endApproach} pathOptions={{ color: "#f6fbff", weight: 1.1, opacity: 0.92, dashArray: "2 13", lineCap: "round", interactive: false, className: "ba-radar-night-approach-light" }} />
+      {edges.startApproachBars.map((bar, index) => <Polyline key={`${key}:start-approach-bar:${index}`} positions={bar} pathOptions={{ color: "#eaf9ff", weight: 1, opacity: 0.84, dashArray: "2 9", lineCap: "round", interactive: false, className: "ba-radar-night-approach-light" }} />)}
+      {edges.endApproachBars.map((bar, index) => <Polyline key={`${key}:end-approach-bar:${index}`} positions={bar} pathOptions={{ color: "#eaf9ff", weight: 1, opacity: 0.84, dashArray: "2 9", lineCap: "round", interactive: false, className: "ba-radar-night-approach-light" }} />)}
+      <Polyline key={`${key}:start-threshold`} positions={edges.startThreshold} pathOptions={{ color: "#66f7a5", weight: 2, opacity: 0.94, dashArray: "2 7", lineCap: "round", interactive: false, className: "ba-radar-night-threshold-light" }} />
+      <Polyline key={`${key}:end-threshold`} positions={edges.endThreshold} pathOptions={{ color: "#ff666d", weight: 2, opacity: 0.94, dashArray: "2 7", lineCap: "round", interactive: false, className: "ba-radar-night-end-light" }} />
     </Fragment>;
   })}</>;
 }
@@ -199,18 +240,36 @@ function NightAirportSurfaceLights() {
 
   // Loading is asynchronous. Do not draw a previous airport's lights while a
   // pilot is moving between airports or switching out of the close-up view.
-  const visibleAirportLighting = airportLighting.key === candidateKey ? airportLighting.airports : [];
+  const visibleAirportLighting = useMemo(
+    () => airportLighting.key === candidateKey ? airportLighting.airports : [],
+    [airportLighting, candidateKey],
+  );
 
-  const surfaceFeatures = useMemo(() => ({
+  const taxiwayEdgeFeatures = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: visibleAirportLighting.flatMap((airport) => airport.surfaces.slice(0, 850).map((surface) => ({
-      type: "Feature" as const,
-      properties: { kind: surface.kind },
-      geometry: {
-        type: "LineString" as const,
-        coordinates: surface.points.map(([latitude, longitude]) => [longitude, latitude]),
-      },
-    }))),
+    features: visibleAirportLighting.flatMap((airport) => airport.surfaces
+      .filter((surface) => surface.kind === "taxiway")
+      .slice(0, 425)
+      .flatMap((surface) => {
+        const edges = taxiwayEdges(surface.points);
+        if (!edges) return [];
+        return [edges.left, edges.right].map((edge) => ({
+          type: "Feature" as const,
+          properties: {},
+          geometry: { type: "LineString" as const, coordinates: edge.map(([latitude, longitude]) => [longitude, latitude]) },
+        }));
+      })),
+  }), [visibleAirportLighting]);
+  const apronFeatures = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: visibleAirportLighting.flatMap((airport) => airport.surfaces
+      .filter((surface) => surface.kind === "apron")
+      .slice(0, 180)
+      .map((surface) => ({
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "LineString" as const, coordinates: surface.points.map(([latitude, longitude]) => [longitude, latitude]) },
+      }))),
   }), [visibleAirportLighting]);
   const gateFeatures = useMemo(() => ({
     type: "FeatureCollection" as const,
@@ -221,22 +280,22 @@ function NightAirportSurfaceLights() {
     }))),
   }), [visibleAirportLighting]);
 
-  if (!darkTheme || view.zoom < 13 || (!surfaceFeatures.features.length && !gateFeatures.features.length)) return null;
+  if (!darkTheme || view.zoom < 13 || (!taxiwayEdgeFeatures.features.length && !apronFeatures.features.length && !gateFeatures.features.length)) return null;
 
   return <>
-    {surfaceFeatures.features.length ? <>
+    {taxiwayEdgeFeatures.features.length ? <>
       <GeoJSON
-        data={surfaceFeatures as never}
-        style={(feature) => feature?.properties?.kind === "taxiway"
-          ? { color: "#178fff", weight: 5, opacity: 0.075, interactive: false, className: "ba-radar-night-taxi-glow" }
-          : { color: "#e8a04b", weight: 5, opacity: 0.07, interactive: false, className: "ba-radar-night-apron-glow" }}
+        data={taxiwayEdgeFeatures as never}
+        style={{ color: "#178fff", weight: 4, opacity: 0.08, interactive: false, className: "ba-radar-night-taxi-glow" }}
       />
       <GeoJSON
-        data={surfaceFeatures as never}
-        style={(feature) => feature?.properties?.kind === "taxiway"
-          ? { color: "#50b6ff", weight: 1.1, opacity: 0.8, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-taxi-light" }
-          : { color: "#e5ad62", weight: 0.75, opacity: 0.42, dashArray: "1 11", lineCap: "round", interactive: false, className: "ba-radar-night-apron-light" }}
+        data={taxiwayEdgeFeatures as never}
+        style={{ color: "#50b6ff", weight: 1.05, opacity: 0.86, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-taxi-light" }}
       />
+    </> : null}
+    {apronFeatures.features.length ? <>
+      <GeoJSON data={apronFeatures as never} style={{ color: "#e8a04b", weight: 4, opacity: 0.06, interactive: false, className: "ba-radar-night-apron-glow" }} />
+      <GeoJSON data={apronFeatures as never} style={{ color: "#e5ad62", weight: 0.75, opacity: 0.42, dashArray: "1 11", lineCap: "round", interactive: false, className: "ba-radar-night-apron-light" }} />
     </> : null}
     {gateFeatures.features.length ? <GeoJSON
       data={gateFeatures as never}
