@@ -141,6 +141,7 @@ export function BaRadarMap({
 
   return <MapContainer className="ba-radar-leaflet-map" center={[27, -13]} zoom={2} minZoom={2} maxZoom={19} worldCopyJump scrollWheelZoom>
     <TileLayer
+      className="ba-radar-base-tiles"
       url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       attribution={'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
       maxNativeZoom={19}
