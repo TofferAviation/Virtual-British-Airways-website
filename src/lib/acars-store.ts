@@ -37,7 +37,12 @@ function snapshotFromStorage(value: unknown, session: Pick<AcarsSession, "id" | 
   const latitude = asNumber(snapshot.latitude); const longitude = asNumber(snapshot.longitude);
   const altitudeFt = asNumber(snapshot.altitudeFt); const groundSpeedKt = asNumber(snapshot.groundSpeedKt); const headingDeg = asNumber(snapshot.headingDeg);
   if (latitude == null || longitude == null || altitudeFt == null || groundSpeedKt == null || headingDeg == null || typeof snapshot.timestamp !== "string") return null;
-  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm) };
+  const indicatedAirspeedKt = asNumber(snapshot.indicatedAirspeedKt);
+  const squawk = typeof snapshot.squawk === "string" && /^[0-7]{4}$/.test(snapshot.squawk) ? snapshot.squawk : null;
+  const registration = typeof snapshot.registration === "string" && /^[A-Z0-9-]{2,16}$/i.test(snapshot.registration.trim())
+    ? snapshot.registration.trim().toUpperCase()
+    : null;
+  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration };
 }
 function sessionFromRow(row: AcarsSessionRow): AcarsSession {
   if (!isSupportedSimulator(row.simulator)) throw new Error(`Unsupported ACARS simulator returned from storage: ${row.simulator}`);

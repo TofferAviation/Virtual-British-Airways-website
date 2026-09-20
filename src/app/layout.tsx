@@ -42,6 +42,7 @@ import "./theme-pages.css";
 import "./tickets.css";
 import "./operations.css";
 import "./live-operations-map.css";
+import "./ba-radar-flight-tracker-detail.css";
 import "./live-operations-tracker.css";
 import "./pilot-auth.css";
 import "./pilot-rules.css";

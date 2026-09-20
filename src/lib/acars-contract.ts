@@ -17,11 +17,18 @@ export type AcarsFlightSnapshot = {
   altitudeFt: number;
   groundSpeedKt: number;
   headingDeg: number;
+  indicatedAirspeedKt: number | null;
+  squawk: string | null;
+  beaconOn: boolean;
   fuelKg: number | null;
   enginesRunning: boolean;
   parkingBrakeSet: boolean;
   onGround: boolean;
   verticalSpeedFpm: number | null;
+  // Beacon can arm a session before departure. This durable marker prevents
+  // a parked aircraft from being logged as a completed PIREP.
+  flightStarted: boolean;
+  registration: string | null;
 };
 
 export type AcarsCompletedFlight = {

@@ -4,35 +4,12 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { RADAR_WIND_LAYERS, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
+import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
   ssr: false,
   loading: () => <div className="ba-radar-map-loading">Loading interactive map…</div>,
 });
-
-type Snapshot = {
-  latitude: number;
-  longitude: number;
-  altitudeFt: number;
-  groundSpeedKt: number;
-  headingDeg: number;
-  enginesRunning: boolean;
-  onGround: boolean;
-};
-
-export type PublicRadarFlight = {
-  id: string;
-  flightNumber: string;
-  from: string;
-  to: string;
-  aircraft: string;
-  simulator: "xplane12" | "msfs2020" | "msfs2024";
-  updatedAt: string;
-  distanceNm: number;
-  connectionHealthy: boolean;
-  lastSnapshot: Snapshot | null;
-  recentSnapshots: Snapshot[];
-};
 
 type FlightFilter = "all" | "airborne" | "ground";
 
@@ -63,7 +40,7 @@ function age(iso: string) {
   return seconds < 60 ? `${seconds}s ago` : `${Math.floor(seconds / 60)}m ago`;
 }
 
-function phase(snapshot: Snapshot | null) {
+function phase(snapshot: PublicRadarSnapshot | null) {
   if (!snapshot) return "Position pending";
   if (snapshot.onGround && snapshot.enginesRunning) return "Ground operations";
   if (snapshot.onGround) return "At stand";
@@ -73,6 +50,31 @@ function phase(snapshot: Snapshot | null) {
 
 function controllerAge(controller: VatsimStation) {
   return controller.onlineSince ? age(controller.onlineSince) : "Time unavailable";
+}
+
+function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
+  const snapshot = flight.lastSnapshot;
+  return <div className="ba-radar-selected-flight ba-radar-flight-tracker-detail">
+    <div className="ba-radar-selected-title"><strong>{flight.flightNumber}</strong><span className={flight.connectionHealthy ? "ba-radar-connection connected" : "ba-radar-connection stale"}>{flight.connectionHealthy ? "Live" : "Delayed"}</span></div>
+    <p className="ba-radar-route"><b>{flight.from}</b><span>→</span><b>{flight.to}</b></p>
+    <div className="ba-radar-aircraft-summary">
+      {flight.aircraftImage ? <a className="ba-radar-aircraft-photo" href={flight.aircraftImage.sourcePageUrl ?? flight.aircraftImage.url} target="_blank" rel="noreferrer" title={`Photo: ${flight.aircraftImage.source}`}><img src={flight.aircraftImage.url} alt={`${flight.registration ?? flight.aircraft} aircraft`} /></a> : <div className="ba-radar-aircraft-photo ba-radar-aircraft-photo-empty" aria-hidden="true">✈</div>}
+      <p className="ba-radar-aircraft-name"><b>{flight.registration ?? "Tail pending"}</b><span>{flight.aircraft}</span><small>{simulatorLabels[flight.simulator]}{flight.aircraftImage ? ` · Photo ${flight.aircraftImage.source}` : ""}</small></p>
+    </div>
+    {snapshot ? <>
+      <div className="ba-radar-selected-data ba-radar-flight-data">
+        <div><span>Altitude</span><strong>{Math.round(snapshot.altitudeFt).toLocaleString()} ft</strong></div>
+        <div><span>Ground speed</span><strong>{Math.round(snapshot.groundSpeedKt)} kt</strong></div>
+        <div><span>Indicated airspeed</span><strong>{snapshot.indicatedAirspeedKt == null ? "—" : `${Math.round(snapshot.indicatedAirspeedKt)} kt`}</strong></div>
+        <div><span>Heading</span><strong>{Math.round(snapshot.headingDeg)}°</strong></div>
+        <div><span>Squawk</span><strong>{snapshot.squawk ?? "—"}</strong></div>
+        <div><span>Beacon</span><strong>{snapshot.beaconOn ? "On" : "Off"}</strong></div>
+        <div><span>Phase</span><strong>{phase(snapshot)}</strong></div>
+        <div><span>Vertical speed</span><strong>{snapshot.verticalSpeedFpm == null ? "—" : `${Math.round(snapshot.verticalSpeedFpm).toLocaleString()} fpm`}</strong></div>
+      </div>
+      <p className="ba-radar-selected-foot">{Math.round(flight.distanceNm)} NM tracked · signal {age(flight.updatedAt)}</p>
+    </> : <p className="ba-radar-pending">The first position report is pending.</p>}
+  </div>;
 }
 
 export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarFlight[] }) {
@@ -106,7 +108,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       }
     };
     void refresh();
-    const interval = window.setInterval(refresh, 15_000);
+    const interval = window.setInterval(refresh, 5_000);
     return () => { mounted = false; window.clearInterval(interval); };
   }, []);
 
@@ -196,7 +198,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     <section className="ba-radar-stage" aria-label="BA-Radar live simulator map">
       <aside className="ba-radar-sidebar">
         <div className="ba-radar-selection-head"><span className="ba-radar-kicker">{controller ? "Selected VATSIM position" : selected ? "Selected live flight" : "Live flights"}</span><button type="button" onClick={() => { setSelectedId(""); setSelectedController(""); }} aria-label="Clear map selection">×</button></div>
-        {controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <div className="ba-radar-selected-flight"><div className="ba-radar-selected-title"><strong>{selected.flightNumber}</strong><span className={selected.connectionHealthy ? "ba-radar-connection connected" : "ba-radar-connection stale"}>{selected.connectionHealthy ? "Live" : "Delayed"}</span></div><p className="ba-radar-route"><b>{selected.from}</b><span>→</span><b>{selected.to}</b></p><p className="ba-radar-aircraft-name">{selected.aircraft}<br />{simulatorLabels[selected.simulator]}</p>{selected.lastSnapshot ? <div className="ba-radar-selected-data"><div><span>Altitude</span><strong>{Math.round(selected.lastSnapshot.altitudeFt).toLocaleString()} ft</strong></div><div><span>Speed</span><strong>{Math.round(selected.lastSnapshot.groundSpeedKt)} kt</strong></div><div><span>Track</span><strong>{Math.round(selected.lastSnapshot.headingDeg)}°</strong></div><div><span>Phase</span><strong>{phase(selected.lastSnapshot)}</strong></div></div> : <p className="ba-radar-pending">The first position report is pending.</p>}<p className="ba-radar-selected-foot">{Math.round(selected.distanceNm)} NM tracked · signal {age(selected.updatedAt)}</p></div> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
+        {controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <FlightTrackerDetails flight={selected} /> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
         <div className="ba-radar-list-controls"><span>Flight list</span><div>{(["all", "airborne", "ground"] as const).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "airborne" ? "Air" : "Ground"}</button>)}</div></div>
         <div className="ba-radar-flight-list">{visibleFlights.length ? visibleFlights.map((flight) => <button key={flight.id} type="button" onClick={() => selectFlight(flight.id)} className={flight.id === selected?.id && !controller ? "selected" : ""}><i className={flight.connectionHealthy ? "connected" : "stale"} /><span><strong>{flight.flightNumber}</strong><small>{flight.from} → {flight.to}</small></span><em>{flight.lastSnapshot ? `${Math.round(flight.lastSnapshot.altitudeFt).toLocaleString()} ft` : "Pending"}</em></button>) : <p className="ba-radar-none">No flights match this view.</p>}</div>
         <div className="ba-radar-vatsim-summary"><strong>VATSIM network</strong><span>{layers.vatsim ? vatsim?.available === false ? "Live feed unavailable — BAV tracking remains online." : `${vatsim?.onlineCount ?? 0} controllers currently online` : "ATC layer is switched off."}</span></div>

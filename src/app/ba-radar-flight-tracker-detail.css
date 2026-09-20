@@ -1,0 +1,13 @@
+.ba-radar-flight-tracker-detail{max-height:calc(100vh - 295px);overflow:auto}
+.ba-radar-aircraft-summary{display:grid;grid-template-columns:82px minmax(0,1fr);gap:10px;margin:11px 0}
+.ba-radar-aircraft-photo{display:block;width:82px;height:58px;overflow:hidden;border:1px solid #41647c;background:#0a1927}
+.ba-radar-aircraft-photo img{width:100%;height:100%;object-fit:cover}
+.ba-radar-aircraft-photo-empty{display:grid;place-items:center;color:#8ccff0;font-size:26px}
+.ba-radar-flight-tracker-detail .ba-radar-aircraft-name{display:grid;gap:3px;margin:0}
+.ba-radar-flight-tracker-detail .ba-radar-aircraft-name b{color:#eff8ff;font-size:14px}
+.ba-radar-flight-tracker-detail .ba-radar-aircraft-name span{color:#b5cbdb;font-size:10px;line-height:1.35}
+.ba-radar-flight-tracker-detail .ba-radar-aircraft-name small{color:#80a6be;font-size:8px;line-height:1.25}
+.ba-radar-flight-data{grid-template-columns:1fr 1fr}
+.ba-radar-flight-data>div{min-height:48px;padding:7px}
+.ba-radar-flight-data strong{font-size:10px;overflow-wrap:anywhere}
+@media(max-width:800px){.ba-radar-flight-tracker-detail{max-height:none}.ba-radar-aircraft-summary{grid-template-columns:92px minmax(0,1fr)}.ba-radar-aircraft-photo{width:92px;height:64px}}

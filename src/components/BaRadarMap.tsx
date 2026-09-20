@@ -4,7 +4,8 @@ import L from "leaflet";
 import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
 import { useEffect, useState } from "react";
 import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
-import type { PublicRadarFlight, RadarLayers } from "@/components/PublicBaRadar";
+import type { RadarLayers } from "@/components/PublicBaRadar";
+import type { PublicRadarFlight } from "@/lib/radar-live";
 import { BaRadarWindField } from "@/components/BaRadarWindField";
 
 type Position = [number, number];
