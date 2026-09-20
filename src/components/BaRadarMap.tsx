@@ -2,13 +2,22 @@
 
 import L from "leaflet";
 import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, RadarLayers } from "@/components/PublicBaRadar";
 import { BaRadarWindField } from "@/components/BaRadarWindField";
 import { BAV_AIRPORT_RUNWAY_LIGHTS, type BAVAirportRunwayLight } from "@/data/bav-airport-runway-lights";
+import { BAV_AIRPORT_LIGHT_INDEX } from "@/data/bav-airport-light-index";
 
 type Position = [number, number];
+type AirportSurfaceKind = "taxiway" | "apron";
+type AirportSurfaceLighting = {
+  code: string;
+  surfaces: { kind: AirportSurfaceKind; points: Position[] }[];
+  gates: Position[];
+};
+
+const airportSurfaceCache = new Map<string, AirportSurfaceLighting>();
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
@@ -115,6 +124,133 @@ function NightAirportLights() {
   })}</>;
 }
 
+function isPosition(value: unknown): value is Position {
+  return Array.isArray(value)
+    && value.length === 2
+    && typeof value[0] === "number"
+    && typeof value[1] === "number"
+    && Number.isFinite(value[0])
+    && Number.isFinite(value[1]);
+}
+
+function readAirportSurfaceLighting(value: unknown): AirportSurfaceLighting | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.code !== "string" || !Array.isArray(record.surfaces) || !Array.isArray(record.gates)) return null;
+
+  const surfaces = record.surfaces.flatMap((surface) => {
+    if (!surface || typeof surface !== "object") return [];
+    const candidate = surface as Record<string, unknown>;
+    const kind: AirportSurfaceKind | null = candidate.kind === "taxiway" || candidate.kind === "apron" ? candidate.kind : null;
+    if (!kind || !Array.isArray(candidate.points)) return [];
+    const points = candidate.points.filter(isPosition);
+    return points.length >= 2 ? [{ kind, points }] : [];
+  });
+
+  return { code: record.code, surfaces, gates: record.gates.filter(isPosition) };
+}
+
+async function loadAirportSurfaceLighting(code: string) {
+  const cached = airportSurfaceCache.get(code);
+  if (cached) return cached;
+  const response = await fetch(`/airport-lights/${code}.json`, { cache: "force-cache" });
+  if (!response.ok) return null;
+  const parsed = readAirportSurfaceLighting(await response.json());
+  if (parsed) airportSurfaceCache.set(code, parsed);
+  return parsed;
+}
+
+function NightAirportSurfaceLights() {
+  const map = useMap();
+  const darkTheme = useDarkTheme();
+  const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
+  const [airportLighting, setAirportLighting] = useState<AirportSurfaceLighting[]>([]);
+  useMapEvents({
+    moveend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }),
+  });
+
+  // Keep airport geometry out of the normal map experience: at most two nearby
+  // airports are fetched, and only once a pilot is at an airport-operating zoom.
+  const candidateCodes = useMemo(() => {
+    if (!darkTheme || view.zoom < 13) return [];
+    const visibleBounds = view.bounds.pad(0.18);
+    return BAV_AIRPORT_LIGHT_INDEX
+      .filter((airport) => visibleBounds.intersects(L.latLngBounds(
+        [airport.bounds[0], airport.bounds[1]],
+        [airport.bounds[2], airport.bounds[3]],
+      )))
+      .slice(0, 2)
+      .map((airport) => airport.code);
+  }, [darkTheme, view]);
+  const candidateKey = candidateCodes.join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!darkTheme || view.zoom < 13 || !candidateCodes.length) {
+      setAirportLighting([]);
+      return () => { cancelled = true; };
+    }
+    void Promise.all(candidateCodes.map(loadAirportSurfaceLighting)).then((loaded) => {
+      if (!cancelled) setAirportLighting(loaded.filter((airport): airport is AirportSurfaceLighting => airport !== null));
+    }).catch(() => {
+      if (!cancelled) setAirportLighting([]);
+    });
+    return () => { cancelled = true; };
+  }, [candidateKey, candidateCodes, darkTheme, view.zoom]);
+
+  const surfaceFeatures = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: airportLighting.flatMap((airport) => airport.surfaces.slice(0, 850).map((surface) => ({
+      type: "Feature" as const,
+      properties: { kind: surface.kind },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: surface.points.map(([latitude, longitude]) => [longitude, latitude]),
+      },
+    }))),
+  }), [airportLighting]);
+  const gateFeatures = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: airportLighting.flatMap((airport) => airport.gates.slice(0, 420).map(([latitude, longitude]) => ({
+      type: "Feature" as const,
+      properties: {},
+      geometry: { type: "Point" as const, coordinates: [longitude, latitude] },
+    }))),
+  }), [airportLighting]);
+
+  if (!darkTheme || view.zoom < 13 || (!surfaceFeatures.features.length && !gateFeatures.features.length)) return null;
+
+  return <>
+    {surfaceFeatures.features.length ? <>
+      <GeoJSON
+        data={surfaceFeatures as never}
+        style={(feature) => feature?.properties?.kind === "taxiway"
+          ? { color: "#178fff", weight: 9, opacity: 0.16, interactive: false, className: "ba-radar-night-taxi-glow" }
+          : { color: "#e8a04b", weight: 7, opacity: 0.1, interactive: false, className: "ba-radar-night-apron-glow" }}
+      />
+      <GeoJSON
+        data={surfaceFeatures as never}
+        style={(feature) => feature?.properties?.kind === "taxiway"
+          ? { color: "#50b6ff", weight: 1.65, opacity: 0.9, dashArray: "1 8", lineCap: "round", interactive: false, className: "ba-radar-night-taxi-light" }
+          : { color: "#e5ad62", weight: 1, opacity: 0.55, dashArray: "1 10", lineCap: "round", interactive: false, className: "ba-radar-night-apron-light" }}
+      />
+    </> : null}
+    {gateFeatures.features.length ? <GeoJSON
+      data={gateFeatures as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        radius: 2.1,
+        color: "#ffe1a6",
+        weight: 0.8,
+        opacity: 0.95,
+        fillColor: "#f5a142",
+        fillOpacity: 0.9,
+        interactive: false,
+        className: "ba-radar-night-gate-light",
+      })}
+    /> : null}
+  </>;
+}
+
 function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
   const [revision, setRevision] = useState(() => Math.floor(Date.now() / 120_000));
   useEffect(() => {
@@ -175,6 +311,7 @@ function MapLayers({
     <OfficialLightningLayer enabled={layers.lightning} />
     <BaRadarWindField windGrid={windGrid} enabled={layers.winds} onStatus={onWindRendererStatus} />
     <NightAirportLights />
+    <NightAirportSurfaceLights />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
 }
