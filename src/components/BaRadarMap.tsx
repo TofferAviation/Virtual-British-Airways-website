@@ -355,6 +355,146 @@ function NightAirportSurfaceLights() {
   </>;
 }
 
+type AirportGeometryFeature = {
+  type: "Feature";
+  properties: { aeroway?: string };
+  geometry: { type: "LineString" | "Polygon" | "Point"; coordinates: unknown };
+};
+
+type AirportGeometry = {
+  type: "FeatureCollection";
+  metadata?: { bounds?: { south?: number; west?: number; north?: number; east?: number } };
+  features: AirportGeometryFeature[];
+};
+
+function readAirportGeometry(value: unknown): AirportGeometry | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (record.type !== "FeatureCollection" || !Array.isArray(record.features)) return null;
+  const features = record.features.flatMap((feature) => {
+    if (!feature || typeof feature !== "object") return [];
+    const candidate = feature as Record<string, unknown>;
+    const properties = candidate.properties;
+    const geometry = candidate.geometry;
+    if (!properties || typeof properties !== "object" || !geometry || typeof geometry !== "object") return [];
+    const geometryRecord = geometry as Record<string, unknown>;
+    const aeroway = (properties as Record<string, unknown>).aeroway;
+    const type = geometryRecord.type;
+    if (typeof aeroway !== "string" || (type !== "LineString" && type !== "Polygon" && type !== "Point")) return [];
+    const geometryType = type as AirportGeometryFeature["geometry"]["type"];
+    return [{ type: "Feature" as const, properties: { aeroway }, geometry: { type: geometryType, coordinates: geometryRecord.coordinates } }];
+  });
+  return { type: "FeatureCollection", metadata: record.metadata as AirportGeometry["metadata"], features };
+}
+
+function useAirportDebugMode() {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    const sync = () => setEnabled(new URLSearchParams(window.location.search).get("airportDebug") === "true");
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  return enabled;
+}
+
+function lineCoordinates(geometry: AirportGeometryFeature["geometry"]) {
+  if (geometry.type !== "LineString" || !Array.isArray(geometry.coordinates)) return [] as Position[];
+  return geometry.coordinates.flatMap((coordinate) => {
+    if (!Array.isArray(coordinate) || coordinate.length !== 2 || !Number.isFinite(coordinate[0]) || !Number.isFinite(coordinate[1])) return [];
+    return [[coordinate[1], coordinate[0]] as Position];
+  });
+}
+
+function sampleLinePositions(points: Position[], spacingMeters = 90) {
+  const samples: Position[] = [];
+  let travelled = 0;
+  let nextSample = spacingMeters;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const length = distanceMeters(start, end);
+    while (length > 0 && travelled + length >= nextSample) {
+      samples.push(interpolatePoint(start, end, (nextSample - travelled) / length));
+      nextSample += spacingMeters;
+    }
+    travelled += length;
+  }
+  return samples;
+}
+
+/**
+ * Development-only projection check. The data is a committed OSM snapshot, so
+ * this has no live external dependency and Leaflet performs the projection.
+ */
+function AirportGeometryDebug() {
+  const map = useMap();
+  const debugMode = useAirportDebugMode();
+  const [geometry, setGeometry] = useState<AirportGeometry | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!debugMode) return () => { cancelled = true; };
+    void fetch("/airport-geometry/EGLL.geojson", { cache: "force-cache" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((value) => {
+        if (!cancelled) setGeometry(readAirportGeometry(value));
+      })
+      .catch(() => {
+        if (!cancelled) setGeometry(null);
+      });
+    return () => { cancelled = true; };
+  }, [debugMode]);
+
+  useEffect(() => {
+    const bounds = geometry?.metadata?.bounds;
+    const { south, west, north, east } = bounds ?? {};
+    if (!debugMode || typeof south !== "number" || typeof west !== "number" || typeof north !== "number" || typeof east !== "number") return;
+    map.fitBounds([[south, west], [north, east]], { animate: false, padding: [46, 46], maxZoom: 15 });
+  }, [debugMode, geometry, map]);
+
+  const visualGeometry = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: geometry?.features.filter((feature) => ["runway", "taxiway", "apron"].includes(feature.properties.aeroway ?? "")) ?? [],
+  }), [geometry]);
+  const samplePoints = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: (geometry?.features ?? []).flatMap((feature) => {
+      if (feature.properties.aeroway !== "taxiway") return [];
+      return sampleLinePositions(lineCoordinates(feature.geometry)).map(([latitude, longitude]) => ({
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "Point" as const, coordinates: [longitude, latitude] },
+      }));
+    }),
+  }), [geometry]);
+
+  if (!debugMode || !geometry) return null;
+  return <>
+    <GeoJSON
+      data={visualGeometry as never}
+      style={(feature) => {
+        const aeroway = feature?.properties?.aeroway;
+        if (aeroway === "runway") return { color: "#ff3441", weight: 4, opacity: 0.96, interactive: false };
+        if (aeroway === "taxiway") return { color: "#45ff7d", weight: 1.3, opacity: 0.94, interactive: false };
+        return { color: "#ffe35b", weight: 1, opacity: 0.82, fillColor: "#ffe35b", fillOpacity: 0.18, interactive: false };
+      }}
+    />
+    <GeoJSON
+      data={samplePoints as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        radius: 1.25,
+        color: "#ffffff",
+        weight: 0.6,
+        opacity: 0.96,
+        fillColor: "#ffffff",
+        fillOpacity: 0.92,
+        interactive: false,
+      })}
+    />
+  </>;
+}
+
 function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
   const [revision, setRevision] = useState(() => Math.floor(Date.now() / 120_000));
   useEffect(() => {
@@ -414,8 +554,7 @@ function MapLayers({
     /> : null}
     <OfficialLightningLayer enabled={layers.lightning} />
     <BaRadarWindField windGrid={windGrid} enabled={layers.winds} onStatus={onWindRendererStatus} />
-    <NightAirportLights />
-    <NightAirportSurfaceLights />
+    <AirportGeometryDebug />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
 }
