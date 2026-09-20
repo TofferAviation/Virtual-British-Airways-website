@@ -164,7 +164,7 @@ function NightAirportSurfaceLights() {
   const map = useMap();
   const darkTheme = useDarkTheme();
   const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
-  const [airportLighting, setAirportLighting] = useState<AirportSurfaceLighting[]>([]);
+  const [airportLighting, setAirportLighting] = useState({ key: "", airports: [] as AirportSurfaceLighting[] });
   useMapEvents({
     moveend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }),
   });
@@ -187,20 +187,23 @@ function NightAirportSurfaceLights() {
   useEffect(() => {
     let cancelled = false;
     if (!darkTheme || view.zoom < 13 || !candidateCodes.length) {
-      setAirportLighting([]);
       return () => { cancelled = true; };
     }
     void Promise.all(candidateCodes.map(loadAirportSurfaceLighting)).then((loaded) => {
-      if (!cancelled) setAirportLighting(loaded.filter((airport): airport is AirportSurfaceLighting => airport !== null));
+      if (!cancelled) setAirportLighting({ key: candidateKey, airports: loaded.filter((airport): airport is AirportSurfaceLighting => airport !== null) });
     }).catch(() => {
-      if (!cancelled) setAirportLighting([]);
+      if (!cancelled) setAirportLighting({ key: candidateKey, airports: [] });
     });
     return () => { cancelled = true; };
   }, [candidateKey, candidateCodes, darkTheme, view.zoom]);
 
+  // Loading is asynchronous. Do not draw a previous airport's lights while a
+  // pilot is moving between airports or switching out of the close-up view.
+  const visibleAirportLighting = airportLighting.key === candidateKey ? airportLighting.airports : [];
+
   const surfaceFeatures = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: airportLighting.flatMap((airport) => airport.surfaces.slice(0, 850).map((surface) => ({
+    features: visibleAirportLighting.flatMap((airport) => airport.surfaces.slice(0, 850).map((surface) => ({
       type: "Feature" as const,
       properties: { kind: surface.kind },
       geometry: {
@@ -208,15 +211,15 @@ function NightAirportSurfaceLights() {
         coordinates: surface.points.map(([latitude, longitude]) => [longitude, latitude]),
       },
     }))),
-  }), [airportLighting]);
+  }), [visibleAirportLighting]);
   const gateFeatures = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: airportLighting.flatMap((airport) => airport.gates.slice(0, 420).map(([latitude, longitude]) => ({
+    features: visibleAirportLighting.flatMap((airport) => airport.gates.slice(0, 420).map(([latitude, longitude]) => ({
       type: "Feature" as const,
       properties: {},
       geometry: { type: "Point" as const, coordinates: [longitude, latitude] },
     }))),
-  }), [airportLighting]);
+  }), [visibleAirportLighting]);
 
   if (!darkTheme || view.zoom < 13 || (!surfaceFeatures.features.length && !gateFeatures.features.length)) return null;
 
