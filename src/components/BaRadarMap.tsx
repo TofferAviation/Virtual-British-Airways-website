@@ -13,13 +13,19 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }
 
+function normaliseHeading(headingDeg: number) {
+  return ((headingDeg % 360) + 360) % 360;
+}
+
 function aircraftIcon(flight: PublicRadarFlight, selected: boolean) {
   const snapshot = flight.lastSnapshot!;
+  const heading = Math.round(normaliseHeading(snapshot.headingDeg));
   return L.divIcon({
     className: "ba-radar-leaflet-icon-shell",
-    html: `<span class="ba-radar-leaflet-icon ${selected ? "selected" : ""} ${flight.connectionHealthy ? "connected" : "stale"}"><b style="transform:rotate(${Math.round(snapshot.headingDeg)}deg)">✈</b><em>${escapeHtml(flight.flightNumber)}</em></span>`,
-    iconSize: [54, 45],
-    iconAnchor: [27, 22],
+    // The SVG is drawn nose-up, so true heading 000° points north on the map.
+    html: `<span class="ba-radar-leaflet-icon ${selected ? "selected" : ""} ${flight.connectionHealthy ? "connected" : "stale"}"><b style="--aircraft-heading:${heading}deg"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.1 1.4c.5-.7 1.3-.7 1.8 0L15.1 9l6.3 2.5v2l-6.2-.7-1.2 4.4 2.5 1.5v1.6L12 19.4l-4.5.9v-1.6l2.5-1.5-1.2-4.4-6.2.7v-2L8.9 9l2.2-7.6Z" /></svg></b><em>${escapeHtml(flight.flightNumber)}</em></span>`,
+    iconSize: [58, 49],
+    iconAnchor: [29, 24],
   });
 }
 
@@ -133,10 +139,11 @@ export function BaRadarMap({
     .filter((snapshot) => Number.isFinite(snapshot.latitude) && Number.isFinite(snapshot.longitude))
     .map((snapshot) => [snapshot.latitude, snapshot.longitude]);
 
-  return <MapContainer className="ba-radar-leaflet-map" center={[27, -13]} zoom={2} minZoom={2} maxZoom={11} worldCopyJump scrollWheelZoom>
+  return <MapContainer className="ba-radar-leaflet-map" center={[27, -13]} zoom={2} minZoom={2} maxZoom={19} worldCopyJump scrollWheelZoom>
     <TileLayer
       url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       attribution={'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
+      maxNativeZoom={19}
       maxZoom={19}
     />
     <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
