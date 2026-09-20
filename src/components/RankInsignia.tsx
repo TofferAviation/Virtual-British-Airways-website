@@ -17,6 +17,16 @@ const RANK_DETAILS: Record<PilotRank, { stripes: number; distinction?: "senior" 
   "Training Captain": { stripes: 4, distinction: "training" },
 };
 
+const RANK_ART: Record<PilotRank, string> = {
+  Cadet: "/branding/pilot-ranks/cadet.png",
+  "Second Officer": "/branding/pilot-ranks/SO.png",
+  "First Officer": "/branding/pilot-ranks/FO.png",
+  "Senior First Officer": "/branding/pilot-ranks/SFO.png",
+  Captain: "/branding/pilot-ranks/C.png",
+  "Senior Captain": "/branding/pilot-ranks/SC.png",
+  "Training Captain": "/branding/pilot-ranks/TC.png",
+};
+
 /** Shoulder-board rank insignia based on the BAV flight-deck rank concept. */
 export function RankInsignia({ rank, size = "default", showLabel = false }: RankInsigniaProps) {
   const detail = RANK_DETAILS[rank];
@@ -26,6 +36,7 @@ export function RankInsignia({ rank, size = "default", showLabel = false }: Rank
 
   return (
     <span className={`rank-insignia rank-insignia--${size}`} aria-label={rank} title={rank}>
+      <img src={RANK_ART[rank]} alt="" aria-hidden="true" />
       <svg viewBox="0 0 72 108" aria-hidden="true" focusable="false">
         <defs>
           <linearGradient id={boardGradient} x1="0" x2="1" y1="0" y2="1"><stop stopColor="#173a63" /><stop offset=".48" stopColor="#071b35" /><stop offset="1" stopColor="#102a4a" /></linearGradient>
