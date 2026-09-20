@@ -49,6 +49,9 @@ function lineFeature(element, kind) {
       ref: element.tags?.ref ?? null,
       name: element.tags?.name ?? null,
       surface: element.tags?.surface ?? null,
+      width: element.tags?.width ?? null,
+      lit: element.tags?.lit ?? null,
+      service: element.tags?.service ?? null,
     },
     geometry: isArea
       ? { type: "Polygon", coordinates: [closed ? coordinates : [...coordinates, coordinates[0]]] }
@@ -66,6 +69,8 @@ function pointFeature(element, kind) {
       osmId: element.id,
       ref: element.tags?.ref ?? null,
       name: element.tags?.name ?? null,
+      width: element.tags?.width ?? null,
+      lit: element.tags?.lit ?? null,
     },
     geometry: { type: "Point", coordinates: [element.lon, element.lat] },
   };

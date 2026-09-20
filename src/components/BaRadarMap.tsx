@@ -1,7 +1,7 @@
 "use client";
 
 import L from "leaflet";
-import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
+import { GeoJSON, MapContainer, Marker, Pane, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, RadarLayers } from "@/components/PublicBaRadar";
@@ -357,7 +357,7 @@ function NightAirportSurfaceLights() {
 
 type AirportGeometryFeature = {
   type: "Feature";
-  properties: { aeroway?: string };
+  properties: { aeroway?: string; ref?: string | null; width?: string | null };
   geometry: { type: "LineString" | "Polygon" | "Point"; coordinates: unknown };
 };
 
@@ -382,9 +382,30 @@ function readAirportGeometry(value: unknown): AirportGeometry | null {
     const type = geometryRecord.type;
     if (typeof aeroway !== "string" || (type !== "LineString" && type !== "Polygon" && type !== "Point")) return [];
     const geometryType = type as AirportGeometryFeature["geometry"]["type"];
-    return [{ type: "Feature" as const, properties: { aeroway }, geometry: { type: geometryType, coordinates: geometryRecord.coordinates } }];
+    const sourceProperties = properties as Record<string, unknown>;
+    return [{
+      type: "Feature" as const,
+      properties: {
+        aeroway,
+        ref: typeof sourceProperties.ref === "string" ? sourceProperties.ref : null,
+        width: typeof sourceProperties.width === "string" ? sourceProperties.width : null,
+      },
+      geometry: { type: geometryType, coordinates: geometryRecord.coordinates },
+    }];
   });
   return { type: "FeatureCollection", metadata: record.metadata as AirportGeometry["metadata"], features };
+}
+
+let egllGeometryRequest: Promise<AirportGeometry | null> | null = null;
+
+function loadEgllGeometry() {
+  if (!egllGeometryRequest) {
+    egllGeometryRequest = fetch("/airport-geometry/EGLL.geojson", { cache: "force-cache" })
+      .then((response) => response.ok ? response.json() : null)
+      .then(readAirportGeometry)
+      .catch(() => null);
+  }
+  return egllGeometryRequest;
 }
 
 function useAirportDebugMode() {
@@ -435,8 +456,7 @@ function AirportGeometryDebug() {
   useEffect(() => {
     let cancelled = false;
     if (!debugMode) return () => { cancelled = true; };
-    void fetch("/airport-geometry/EGLL.geojson", { cache: "force-cache" })
-      .then((response) => response.ok ? response.json() : null)
+    void loadEgllGeometry()
       .then((value) => {
         if (!cancelled) setGeometry(readAirportGeometry(value));
       })
@@ -493,6 +513,200 @@ function AirportGeometryDebug() {
       })}
     />
   </>;
+}
+
+type LinearSample = { position: Position; east: number; north: number };
+
+function sampledLineWithTangent(points: Position[], spacingMeters: number): LinearSample[] {
+  const samples: LinearSample[] = [];
+  let travelled = 0;
+  let nextSample = spacingMeters;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const meanLatitude = (start[0] + end[0]) / 2 * Math.PI / 180;
+    const east = (end[1] - start[1]) * 111_320 * Math.cos(meanLatitude);
+    const north = (end[0] - start[0]) * 110_540;
+    const length = Math.hypot(east, north);
+    while (length > 0 && travelled + length >= nextSample) {
+      samples.push({ position: interpolatePoint(start, end, (nextSample - travelled) / length), east, north });
+      nextSample += spacingMeters;
+    }
+    travelled += length;
+  }
+  return samples;
+}
+
+function offsetFromCentreline(sample: LinearSample, perpendicularMeters: number) {
+  const length = Math.hypot(sample.east, sample.north);
+  if (length < 0.1) return sample.position;
+  return translatePoint(sample.position, -sample.north / length * perpendicularMeters, sample.east / length * perpendicularMeters);
+}
+
+function runwayThresholdPoints(points: Position[], widthMeters: number, atStart: boolean) {
+  const from = atStart ? points[0] : points.at(-1);
+  const toward = atStart ? points[1] : points.at(-2);
+  if (!from || !toward) return [] as Position[];
+  const meanLatitude = (from[0] + toward[0]) / 2 * Math.PI / 180;
+  const east = (toward[1] - from[1]) * 111_320 * Math.cos(meanLatitude);
+  const north = (toward[0] - from[0]) * 110_540;
+  const divisions = Math.max(5, Math.round(widthMeters / 5) + 1);
+  return Array.from({ length: divisions }, (_, index) => {
+    const offset = -widthMeters / 2 + widthMeters * index / (divisions - 1);
+    return offsetFromCentreline({ position: from, east, north }, offset);
+  });
+}
+
+function polygonPoints(geometry: AirportGeometryFeature["geometry"]) {
+  if (geometry.type !== "Polygon" || !Array.isArray(geometry.coordinates) || !Array.isArray(geometry.coordinates[0])) return [] as Position[];
+  return geometry.coordinates[0].flatMap((coordinate) => {
+    if (!Array.isArray(coordinate) || coordinate.length !== 2 || !Number.isFinite(coordinate[0]) || !Number.isFinite(coordinate[1])) return [];
+    return [[coordinate[1], coordinate[0]] as Position];
+  });
+}
+
+function polygonAreaMeters(points: Position[]) {
+  if (points.length < 4) return 0;
+  const latitude = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+  const longitude = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+  const scaleLongitude = 111_320 * Math.cos(latitude * Math.PI / 180);
+  let twiceArea = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    twiceArea += ((a[1] - longitude) * scaleLongitude) * ((b[0] - latitude) * 110_540)
+      - ((b[1] - longitude) * scaleLongitude) * ((a[0] - latitude) * 110_540);
+  }
+  return Math.abs(twiceArea) / 2;
+}
+
+function polygonCentroid(points: Position[]) {
+  const unique = points.length > 1 ? points.slice(0, -1) : points;
+  return unique.reduce<Position>((total, point) => [total[0] + point[0] / unique.length, total[1] + point[1] / unique.length], [0, 0]);
+}
+
+function pointFeature([latitude, longitude]: Position) {
+  return {
+    type: "Feature" as const,
+    properties: {},
+    geometry: { type: "Point" as const, coordinates: [longitude, latitude] },
+  };
+}
+
+/**
+ * Actual OSM geometry -> cached sampled light positions -> a shared Leaflet
+ * canvas. There are no inferred screen paths or generated road-style lines.
+ */
+function OsmAirportNightLights() {
+  const map = useMap();
+  const darkTheme = useDarkTheme();
+  const debugMode = useAirportDebugMode();
+  const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
+  const [geometry, setGeometry] = useState<AirportGeometry | null>(null);
+  const renderer = useMemo(() => L.canvas({ padding: 0.2 }), []);
+  useMapEvents({
+    moveend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }),
+    zoomend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }),
+  });
+
+  const nearHeathrow = view.zoom >= 13 && view.bounds.pad(0.16).intersects(L.latLngBounds([51.455, -0.502], [51.48, -0.415]));
+  useEffect(() => {
+    let cancelled = false;
+    if (!nearHeathrow) return () => { cancelled = true; };
+    void loadEgllGeometry().then((value) => {
+      if (!cancelled) setGeometry(value);
+    });
+    return () => { cancelled = true; };
+  }, [nearHeathrow]);
+
+  const lightData = useMemo(() => {
+    const taxiwaySamples: Position[] = [];
+    const runwayCentreSamples: Position[] = [];
+    const runwayEdgeSamples: Position[] = [];
+    const thresholdSamples: Position[] = [];
+    const endSamples: Position[] = [];
+    const largeAprons: { centre: Position; area: number }[] = [];
+
+    for (const feature of geometry?.features ?? []) {
+      const points = lineCoordinates(feature.geometry);
+      if (feature.properties.aeroway === "taxiway") {
+        taxiwaySamples.push(...sampledLineWithTangent(points, 90).map((sample) => sample.position));
+      }
+      if (feature.properties.aeroway === "runway" && /^(09L\/27R|09R\/27L)$/.test(feature.properties.ref ?? "")) {
+        const width = Math.max(30, Math.min(70, Number(feature.properties.width) || 45));
+        const centreSamples = sampledLineWithTangent(points, 30);
+        runwayCentreSamples.push(...centreSamples.map((sample) => sample.position));
+        runwayEdgeSamples.push(...sampledLineWithTangent(points, 60).flatMap((sample) => [
+          offsetFromCentreline(sample, width / 2),
+          offsetFromCentreline(sample, -width / 2),
+        ]));
+        thresholdSamples.push(...runwayThresholdPoints(points, width, true));
+        endSamples.push(...runwayThresholdPoints(points, width, false));
+      }
+      if (feature.properties.aeroway === "apron") {
+        const points = polygonPoints(feature.geometry);
+        const area = polygonAreaMeters(points);
+        if (area >= 8_000) largeAprons.push({ centre: polygonCentroid(points), area });
+      }
+    }
+
+    // One source per well-separated, major OSM apron: broad mast illumination,
+    // not a repeated grid of decorative points.
+    const apronFloodlights = largeAprons
+      .sort((a, b) => b.area - a.area)
+      .reduce<Position[]>((selected, apron) => selected.length >= 12 || selected.some((centre) => distanceMeters(centre, apron.centre) < 240)
+        ? selected
+        : [...selected, apron.centre], []);
+
+    return {
+      taxiways: { type: "FeatureCollection" as const, features: taxiwaySamples.map(pointFeature) },
+      runwayCentres: { type: "FeatureCollection" as const, features: runwayCentreSamples.map(pointFeature) },
+      runwayEdges: { type: "FeatureCollection" as const, features: runwayEdgeSamples.map(pointFeature) },
+      thresholds: { type: "FeatureCollection" as const, features: thresholdSamples.map(pointFeature) },
+      ends: { type: "FeatureCollection" as const, features: endSamples.map(pointFeature) },
+      aprons: { type: "FeatureCollection" as const, features: apronFloodlights.map(pointFeature) },
+    };
+  }, [geometry]);
+
+  if (!nearHeathrow || !geometry || debugMode) return null;
+  return <Pane name="bav-osm-night-lights" style={{ opacity: darkTheme ? 1 : 0, transition: "opacity 700ms ease", pointerEvents: "none" }}>
+    <GeoJSON
+      data={lightData.taxiways as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 1.35, color: "#74e9a6", weight: 0.55, opacity: 0.84, fillColor: "#43bd78", fillOpacity: 0.8, interactive: false, className: "ba-radar-osm-taxiway-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.runwayEdges as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 1.25, color: "#e8f7ff", weight: 0.5, opacity: 0.88, fillColor: "#d8f1ff", fillOpacity: 0.88, interactive: false, className: "ba-radar-osm-runway-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.runwayCentres as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 1.05, color: "#ffffff", weight: 0.45, opacity: 0.9, fillColor: "#f8fbff", fillOpacity: 0.9, interactive: false, className: "ba-radar-osm-runway-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.thresholds as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 1.45, color: "#91ffbd", weight: 0.6, opacity: 0.92, fillColor: "#58e994", fillOpacity: 0.9, interactive: false, className: "ba-radar-osm-threshold-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.ends as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 1.45, color: "#ff9c9c", weight: 0.6, opacity: 0.92, fillColor: "#ea5f62", fillOpacity: 0.9, interactive: false, className: "ba-radar-osm-end-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.aprons as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 18, color: "#ffcf80", weight: 0, opacity: 0, fillColor: "#f4a44f", fillOpacity: 0.1, interactive: false, className: "ba-radar-osm-apron-light",
+      })}
+    />
+  </Pane>;
 }
 
 function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
@@ -554,6 +768,7 @@ function MapLayers({
     /> : null}
     <OfficialLightningLayer enabled={layers.lightning} />
     <BaRadarWindField windGrid={windGrid} enabled={layers.winds} onStatus={onWindRendererStatus} />
+    <OsmAirportNightLights />
     <AirportGeometryDebug />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
