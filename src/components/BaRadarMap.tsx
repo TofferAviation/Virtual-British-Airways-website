@@ -518,7 +518,29 @@ function AirportGeometryDebug() {
 type LinearSample = { position: Position; east: number; north: number };
 
 function sampledLineWithTangent(points: Position[], spacingMeters: number): LinearSample[] {
+  return sampledLineWithTerminalLights(points, spacingMeters, false);
+}
+
+/**
+ * The points stay anchored to the OSM centreline.  Taxiways are commonly
+ * stored as several short ways, so retaining each terminal avoids visibly
+ * unlit joins without ever drawing a synthetic screen-space grid.
+ */
+function sampledLineWithTerminalLights(points: Position[], spacingMeters: number, includeTerminals: boolean): LinearSample[] {
   const samples: LinearSample[] = [];
+  if (points.length < 2) return samples;
+
+  const tangentAt = (from: Position, toward: Position): LinearSample | null => {
+    const meanLatitude = (from[0] + toward[0]) / 2 * Math.PI / 180;
+    const east = (toward[1] - from[1]) * 111_320 * Math.cos(meanLatitude);
+    const north = (toward[0] - from[0]) * 110_540;
+    return Math.hypot(east, north) > 0.1 ? { position: from, east, north } : null;
+  };
+
+  if (includeTerminals) {
+    const firstTangent = tangentAt(points[0], points[1]);
+    if (firstTangent) samples.push(firstTangent);
+  }
   let travelled = 0;
   let nextSample = spacingMeters;
   for (let index = 1; index < points.length; index += 1) {
@@ -533,6 +555,10 @@ function sampledLineWithTangent(points: Position[], spacingMeters: number): Line
       nextSample += spacingMeters;
     }
     travelled += length;
+  }
+  if (includeTerminals) {
+    const lastTangent = tangentAt(points.at(-1) as Position, points.at(-2) as Position);
+    if (lastTangent) samples.push(lastTangent);
   }
   return samples;
 }
@@ -585,6 +611,12 @@ function polygonCentroid(points: Position[]) {
   return unique.reduce<Position>((total, point) => [total[0] + point[0] / unique.length, total[1] + point[1] / unique.length], [0, 0]);
 }
 
+function pointCoordinates(geometry: AirportGeometryFeature["geometry"]) {
+  if (geometry.type !== "Point" || !Array.isArray(geometry.coordinates) || geometry.coordinates.length !== 2) return null;
+  const [longitude, latitude] = geometry.coordinates;
+  return Number.isFinite(latitude) && Number.isFinite(longitude) ? [latitude, longitude] as Position : null;
+}
+
 function pointFeature([latitude, longitude]: Position) {
   return {
     type: "Feature" as const,
@@ -620,17 +652,28 @@ function OsmAirportNightLights() {
   }, [nearHeathrow]);
 
   const lightData = useMemo(() => {
-    const taxiwaySamples: Position[] = [];
+    const taxiwayEdgeSamples: Position[] = [];
+    const taxiwayCentreSamples: Position[] = [];
     const runwayCentreSamples: Position[] = [];
     const runwayEdgeSamples: Position[] = [];
     const thresholdSamples: Position[] = [];
     const endSamples: Position[] = [];
     const largeAprons: { centre: Position; area: number }[] = [];
+    const gatePositions: Position[] = [];
 
     for (const feature of geometry?.features ?? []) {
       const points = lineCoordinates(feature.geometry);
       if (feature.properties.aeroway === "taxiway") {
-        taxiwaySamples.push(...sampledLineWithTangent(points, 90).map((sample) => sample.position));
+        // Blue edge lights are sampled from each actual taxiway centreline and
+        // its recorded width where available. A conservative 20 m default
+        // keeps the lighting inside a normal taxiway rather than on roads.
+        const width = Math.max(12, Math.min(36, Number(feature.properties.width) || 20));
+        const edgeSamples = sampledLineWithTerminalLights(points, 32, true);
+        taxiwayEdgeSamples.push(...edgeSamples.flatMap((sample) => [
+          offsetFromCentreline(sample, width / 2),
+          offsetFromCentreline(sample, -width / 2),
+        ]));
+        taxiwayCentreSamples.push(...sampledLineWithTangent(points, 64).map((sample) => sample.position));
       }
       if (feature.properties.aeroway === "runway" && /^(09L\/27R|09R\/27L)$/.test(feature.properties.ref ?? "")) {
         const width = Math.max(30, Math.min(70, Number(feature.properties.width) || 45));
@@ -648,6 +691,10 @@ function OsmAirportNightLights() {
         const area = polygonAreaMeters(points);
         if (area >= 8_000) largeAprons.push({ centre: polygonCentroid(points), area });
       }
+      if (feature.properties.aeroway === "gate") {
+        const position = pointCoordinates(feature.geometry);
+        if (position) gatePositions.push(position);
+      }
     }
 
     // One source per well-separated, major OSM apron: broad mast illumination,
@@ -659,21 +706,35 @@ function OsmAirportNightLights() {
         : [...selected, apron.centre], []);
 
     return {
-      taxiways: { type: "FeatureCollection" as const, features: taxiwaySamples.map(pointFeature) },
+      taxiwayEdges: { type: "FeatureCollection" as const, features: taxiwayEdgeSamples.map(pointFeature) },
+      taxiwayCentres: { type: "FeatureCollection" as const, features: taxiwayCentreSamples.map(pointFeature) },
       runwayCentres: { type: "FeatureCollection" as const, features: runwayCentreSamples.map(pointFeature) },
       runwayEdges: { type: "FeatureCollection" as const, features: runwayEdgeSamples.map(pointFeature) },
       thresholds: { type: "FeatureCollection" as const, features: thresholdSamples.map(pointFeature) },
       ends: { type: "FeatureCollection" as const, features: endSamples.map(pointFeature) },
       aprons: { type: "FeatureCollection" as const, features: apronFloodlights.map(pointFeature) },
+      gates: { type: "FeatureCollection" as const, features: gatePositions.map(pointFeature) },
     };
   }, [geometry]);
 
   if (!nearHeathrow || !geometry || debugMode) return null;
-  return <Pane name="bav-osm-night-lights" style={{ opacity: darkTheme ? 1 : 0, transition: "opacity 700ms ease", pointerEvents: "none" }}>
+  return <Pane name="bav-osm-night-lights" className="ba-radar-osm-night-lights" style={{ opacity: darkTheme ? 1 : 0, transition: "opacity 700ms ease", pointerEvents: "none" }}>
     <GeoJSON
-      data={lightData.taxiways as never}
+      data={lightData.taxiwayEdges as never}
       pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
-        renderer, radius: 1.35, color: "#74e9a6", weight: 0.55, opacity: 0.84, fillColor: "#43bd78", fillOpacity: 0.8, interactive: false, className: "ba-radar-osm-taxiway-light",
+        renderer, radius: 2.35, color: "#3eb7ff", weight: 0, opacity: 0, fillColor: "#178fe5", fillOpacity: 0.1, interactive: false,
+      })}
+    />
+    <GeoJSON
+      data={lightData.taxiwayEdges as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 0.9, color: "#b8ebff", weight: 0.25, opacity: 0.94, fillColor: "#299deb", fillOpacity: 0.94, interactive: false, className: "ba-radar-osm-taxiway-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.taxiwayCentres as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 0.7, color: "#74ffb1", weight: 0, opacity: 0, fillColor: "#53dd95", fillOpacity: 0.72, interactive: false,
       })}
     />
     <GeoJSON
@@ -703,7 +764,19 @@ function OsmAirportNightLights() {
     <GeoJSON
       data={lightData.aprons as never}
       pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
-        renderer, radius: 18, color: "#ffcf80", weight: 0, opacity: 0, fillColor: "#f4a44f", fillOpacity: 0.1, interactive: false, className: "ba-radar-osm-apron-light",
+        renderer, radius: 22, color: "#ffcf80", weight: 0, opacity: 0, fillColor: "#f4a44f", fillOpacity: 0.12, interactive: false, className: "ba-radar-osm-apron-light",
+      })}
+    />
+    <GeoJSON
+      data={lightData.gates as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 6, color: "#ffc66d", weight: 0, opacity: 0, fillColor: "#f4a44f", fillOpacity: 0.16, interactive: false,
+      })}
+    />
+    <GeoJSON
+      data={lightData.gates as never}
+      pointToLayer={(_feature, latitudeLongitude) => L.circleMarker(latitudeLongitude, {
+        renderer, radius: 1.35, color: "#ffe0a5", weight: 0.35, opacity: 0.9, fillColor: "#f5ad4d", fillOpacity: 0.94, interactive: false, className: "ba-radar-osm-gate-light",
       })}
     />
   </Pane>;

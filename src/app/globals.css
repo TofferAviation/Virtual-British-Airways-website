@@ -106,6 +106,10 @@ button{cursor:pointer}
 .page-heading p{margin:0;color:var(--muted);line-height:1.6}
 .card{background:#fff;border:1px solid var(--line);box-shadow:0 3px 10px rgba(15,31,62,.04)}
 
+@keyframes ba-radar-airport-light-breathe{0%,100%{opacity:.94}50%{opacity:1}}
+.ba-radar-osm-night-lights{filter:drop-shadow(0 0 .55px rgba(73,178,255,.42));animation:ba-radar-airport-light-breathe 4.8s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.ba-radar-osm-night-lights{animation:none}}
+
 @media(max-width:1040px){
   .site-nav{display:none}.header-actions{margin-left:auto}
   .flight-search-body{grid-template-columns:1fr 1fr 1fr}.search-submit{width:100%}
