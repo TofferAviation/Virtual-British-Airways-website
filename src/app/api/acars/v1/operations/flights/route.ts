@@ -1,16 +1,21 @@
 import { NextResponse } from "next/server";
 import { requireAcarsBearer } from "@/lib/acars-auth";
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
-import { getSimbriefCodes } from "@/lib/simbrief";
+import { listOperationsRosterFlights } from "@/lib/operations-roster";
+
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const auth = await requireAcarsBearer(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const assignment = await getActivePilotBooking(auth.account.id);
-  const codes = assignment ? getSimbriefCodes(assignment) : null;
+  const [flights, ownAssignment] = await Promise.all([
+    listOperationsRosterFlights(),
+    getActivePilotBooking(auth.account.id),
+  ]);
   return NextResponse.json({
-    assignment: assignment
-      ? { ...assignment, originIcao: codes?.origin ?? null, destinationIcao: codes?.destination ?? null }
-      : null,
+    flights: flights.map((flight) => ({
+      ...flight,
+      isCurrentPilot: flight.id === ownAssignment?.id,
+    })),
   });
 }

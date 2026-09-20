@@ -9,7 +9,7 @@ import styles from "./ember-download.module.css";
 import hubStyles from "./hub-picker.module.css";
 import rulesStyles from "./pilot-rules.module.css";
 
-const EMBER_INSTALLER_URL = "https://github.com/TofferAviation/FreeFlight-Cabin-Controls/releases/download/v0.5.22/Ember_Systems.exe";
+const EMBER_INSTALLER_URL = "https://github.com/TofferAviation/FreeFlight-Cabin-Controls/releases/latest/download/Ember_Systems.exe";
 
 async function patchProfile(payload: Record<string, string | null>) {
   const response = await fetch("/api/pilot/profile", {
