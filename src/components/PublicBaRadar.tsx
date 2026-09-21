@@ -52,28 +52,87 @@ function controllerAge(controller: VatsimStation) {
   return controller.onlineSince ? age(controller.onlineSince) : "Time unavailable";
 }
 
+function telemetryTime(iso: string) {
+  const time = new Date(iso);
+  return Number.isNaN(time.getTime()) ? "Time unavailable" : new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "UTC" }).format(time) + " UTC";
+}
+
+function position(value: number, positive: string, negative: string) {
+  return `${Math.abs(value).toFixed(4)}°${value >= 0 ? positive : negative}`;
+}
+
+function historyLine(snapshots: PublicRadarSnapshot[], valueFor: (snapshot: PublicRadarSnapshot) => number | null) {
+  const values = snapshots.map(valueFor);
+  const usable = values.filter((value): value is number => value != null && Number.isFinite(value));
+  if (usable.length < 2) return null;
+  const minimum = Math.min(...usable);
+  const span = Math.max(1, Math.max(...usable) - minimum);
+  const last = Math.max(1, snapshots.length - 1);
+  return snapshots.map((snapshot, index) => {
+    const value = valueFor(snapshot);
+    if (value == null || !Number.isFinite(value)) return null;
+    return `${(index / last * 250 + 5).toFixed(1)},${(64 - ((value - minimum) / span * 52 + 6)).toFixed(1)}`;
+  }).filter((point): point is string => point !== null).join(" ");
+}
+
+function TelemetryHistory({ flight, snapshot }: { flight: PublicRadarFlight; snapshot: PublicRadarSnapshot }) {
+  const snapshots = [...flight.recentSnapshots, snapshot]
+    .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.timestamp === entry.timestamp) === index)
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+  const altitude = historyLine(snapshots, (entry) => entry.altitudeFt);
+  const speed = historyLine(snapshots, (entry) => entry.groundSpeedKt);
+  if (!altitude && !speed) return <p className="ba-radar-telemetry-empty">History will appear after Ember has collected a few simulator samples.</p>;
+  return <>
+    <div className="ba-radar-telemetry-legend"><span><i className="altitude" /> Altitude</span><span><i className="speed" /> Ground speed</span></div>
+    <svg className="ba-radar-telemetry-chart" viewBox="0 0 260 70" role="img" aria-label="Recent simulator altitude and ground-speed history">
+      <path className="ba-radar-telemetry-grid" d="M5 12H255M5 35H255M5 58H255" />
+      {altitude ? <polyline className="ba-radar-telemetry-altitude" points={altitude} /> : null}
+      {speed ? <polyline className="ba-radar-telemetry-speed" points={speed} /> : null}
+    </svg>
+    <p className="ba-radar-telemetry-chart-note">Recent values sent by the simulator. The two lines use independent scales.</p>
+  </>;
+}
+
+function TrackerSection({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
+  return <details className="ba-radar-tracker-section" open={open}>
+    <summary><span>{title}</span><b aria-hidden="true">⌄</b></summary>
+    <div className="ba-radar-tracker-section-body">{children}</div>
+  </details>;
+}
+
 function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
   const snapshot = flight.lastSnapshot;
   return <div className="ba-radar-selected-flight ba-radar-flight-tracker-detail">
-    <div className="ba-radar-selected-title"><strong>{flight.callsign}</strong><span className={flight.connectionHealthy ? "ba-radar-connection connected" : "ba-radar-connection stale"}>{flight.connectionHealthy ? "Live" : "Delayed"}</span></div>
-    <p className="ba-radar-route"><b>{flight.from}</b><span>→</span><b>{flight.to}</b></p>
-    <div className="ba-radar-aircraft-summary">
-      {flight.aircraftImage ? <a className="ba-radar-aircraft-photo" href={flight.aircraftImage.sourcePageUrl ?? flight.aircraftImage.url} target="_blank" rel="noreferrer" title={`Photo: ${flight.aircraftImage.source}`}><img src={flight.aircraftImage.url} alt={`${flight.registration ?? flight.aircraft} aircraft`} /></a> : <div className="ba-radar-aircraft-photo ba-radar-aircraft-photo-empty" aria-hidden="true">✈</div>}
-      <p className="ba-radar-aircraft-name"><b>{flight.registration ?? "Tail pending"}</b><span>{flight.aircraft}</span><small>{simulatorLabels[flight.simulator]}{flight.aircraftImage ? ` · Photo ${flight.aircraftImage.source}` : ""}</small></p>
+    <header className="ba-radar-tracker-flight-head">
+      <div><span>BA-RADAR LIVE FLIGHT</span><strong>{flight.callsign}</strong><small>Flight number {flight.flightNumber}</small></div>
+      <i className={flight.connectionHealthy ? "ba-radar-connection connected" : "ba-radar-connection stale"}>{flight.connectionHealthy ? "Live" : "Delayed"}</i>
+    </header>
+    {flight.aircraftImage ? <a className="ba-radar-tracker-photo" href={flight.aircraftImage.sourcePageUrl ?? flight.aircraftImage.url} target="_blank" rel="noreferrer" title={`View photo source: ${flight.aircraftImage.source}`}><img src={flight.aircraftImage.url} alt={`${flight.registration ?? flight.aircraft} aircraft`} /><span>Photo · {flight.aircraftImage.source}</span></a> : <div className="ba-radar-tracker-photo ba-radar-tracker-photo-empty" aria-hidden="true">✈</div>}
+    <div className="ba-radar-tracker-route">
+      <div><span>Departure</span><strong>{flight.from}</strong></div><b aria-hidden="true">✈</b><div><span>Arrival</span><strong>{flight.to}</strong></div>
     </div>
     {snapshot ? <>
-      <div className="ba-radar-selected-data ba-radar-flight-data">
-        <div><span>Flight number</span><strong>{flight.flightNumber}</strong></div>
-        <div><span>Altitude</span><strong>{Math.round(snapshot.altitudeFt).toLocaleString()} ft</strong></div>
-        <div><span>Ground speed</span><strong>{Math.round(snapshot.groundSpeedKt)} kt</strong></div>
-        <div><span>Indicated airspeed</span><strong>{snapshot.indicatedAirspeedKt == null ? "—" : `${Math.round(snapshot.indicatedAirspeedKt)} kt`}</strong></div>
-        <div><span>Heading</span><strong>{Math.round(snapshot.headingDeg)}°</strong></div>
-        <div><span>Squawk</span><strong>{snapshot.squawk ?? "—"}</strong></div>
-        <div><span>Beacon</span><strong>{snapshot.beaconOn ? "On" : "Off"}</strong></div>
-        <div><span>Phase</span><strong>{phase(snapshot)}</strong></div>
-        <div><span>Vertical speed</span><strong>{snapshot.verticalSpeedFpm == null ? "—" : `${Math.round(snapshot.verticalSpeedFpm).toLocaleString()} fpm`}</strong></div>
-      </div>
-      <p className="ba-radar-selected-foot">{Math.round(flight.distanceNm)} NM tracked · signal {age(flight.updatedAt)}</p>
+      <TrackerSection title="Aircraft">
+        <div className="ba-radar-tracker-aircraft"><div><span>Registration</span><strong>{flight.registration ?? "Pending"}</strong></div><div><span>Aircraft type</span><strong>{flight.aircraft}</strong></div><div><span>Simulator</span><strong>{simulatorLabels[flight.simulator]}</strong></div></div>
+      </TrackerSection>
+      <TrackerSection title="Live flight data" open>
+        <div className="ba-radar-selected-data ba-radar-flight-data">
+          <div><span>Altitude</span><strong>{Math.round(snapshot.altitudeFt).toLocaleString()} ft</strong></div>
+          <div><span>Vertical speed</span><strong>{snapshot.verticalSpeedFpm == null ? "—" : `${Math.round(snapshot.verticalSpeedFpm).toLocaleString()} fpm`}</strong></div>
+          <div><span>Ground speed</span><strong>{Math.round(snapshot.groundSpeedKt)} kt</strong></div>
+          <div><span>Indicated airspeed</span><strong>{snapshot.indicatedAirspeedKt == null ? "—" : `${Math.round(snapshot.indicatedAirspeedKt)} kt`}</strong></div>
+          <div><span>Heading</span><strong>{Math.round(snapshot.headingDeg)}°</strong></div>
+          <div><span>Squawk</span><strong>{snapshot.squawk ?? "—"}</strong></div>
+          <div><span>Beacon</span><strong>{snapshot.beaconOn ? "On" : "Off"}</strong></div>
+          <div><span>Flight phase</span><strong>{phase(snapshot)}</strong></div>
+        </div>
+      </TrackerSection>
+      <TrackerSection title="Position & signal">
+        <div className="ba-radar-tracker-aircraft"><div><span>Latitude</span><strong>{position(snapshot.latitude, "N", "S")}</strong></div><div><span>Longitude</span><strong>{position(snapshot.longitude, "E", "W")}</strong></div><div><span>Last simulator sample</span><strong>{telemetryTime(snapshot.timestamp)}</strong></div><div><span>Tracked distance</span><strong>{Math.round(flight.distanceNm)} NM</strong></div></div>
+      </TrackerSection>
+      <TrackerSection title="Speed & altitude history">
+        <TelemetryHistory flight={flight} snapshot={snapshot} />
+      </TrackerSection>
     </> : <p className="ba-radar-pending">The first position report is pending.</p>}
   </div>;
 }
