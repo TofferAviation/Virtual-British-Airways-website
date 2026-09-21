@@ -5,7 +5,12 @@ function sameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
-    return new URL(origin).origin === request.nextUrl.origin;
+    const originUrl = new URL(origin);
+    const configuredHost = process.env.BAV_PUBLIC_SITE_URL ? new URL(process.env.BAV_PUBLIC_SITE_URL).hostname : "britishairwaysva.co.uk";
+    // Render forwards the public hostname to an internal HTTP request. Compare
+    // hostnames (rather than the internal protocol) so real browser requests
+    // remain accepted, while requests from another website are still rejected.
+    return originUrl.hostname === configuredHost || originUrl.hostname === request.nextUrl.hostname;
   } catch {
     return false;
   }
