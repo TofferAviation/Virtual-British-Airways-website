@@ -26,6 +26,11 @@ type AcarsSessionRow = {
   first_fuel_kg: number | null; last_fuel_kg: number | null; distance_nm: number; landing_fpm: number | null;
   last_snapshot: unknown; recent_snapshots: unknown;
 };
+type AcarsPositionReportRow = {
+  session_id: string; reported_at: string; latitude: number; longitude: number;
+  altitude_ft: number; ground_speed_kt: number; heading_deg: number; fuel_kg: number | null;
+  engines_running: boolean; parking_brake_set: boolean; on_ground: boolean; vertical_speed_fpm: number | null;
+};
 
 function isSupportedSimulator(value: unknown): value is SupportedSimulator {
   return value === "xplane12" || value === "msfs2020" || value === "msfs2024";
@@ -50,6 +55,16 @@ function sessionFromRow(row: AcarsSessionRow): AcarsSession {
   const base = { id: row.id, pilotId: row.pilot_id, bookingId: row.booking_id, simulator: row.simulator };
   const recentSnapshots = Array.isArray(row.recent_snapshots) ? row.recent_snapshots.map((snapshot) => snapshotFromStorage(snapshot, base)).filter((snapshot): snapshot is AcarsFlightSnapshot => snapshot != null) : [];
   return { id: row.id, pilotId: row.pilot_id, pilotNumber: row.pilot_number, pilotName: row.pilot_name, bookingId: row.booking_id, flightNumber: row.flight_number, from: row.departure_station, to: row.arrival_station, aircraft: row.aircraft, simulator: row.simulator, status: row.status, startedAt: row.started_at, updatedAt: row.updated_at, completedAt: row.completed_at, firstFuelKg: asNumber(row.first_fuel_kg), lastFuelKg: asNumber(row.last_fuel_kg), distanceNm: asNumber(row.distance_nm) ?? 0, landingFpm: asNumber(row.landing_fpm), lastSnapshot: snapshotFromStorage(row.last_snapshot, base), recentSnapshots };
+}
+function snapshotFromPositionRow(row: AcarsPositionReportRow, session: Pick<AcarsSession, "id" | "pilotId" | "bookingId" | "simulator">): AcarsFlightSnapshot {
+  return {
+    simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId,
+    timestamp: row.reported_at, latitude: row.latitude, longitude: row.longitude, altitudeFt: row.altitude_ft,
+    groundSpeedKt: row.ground_speed_kt, headingDeg: row.heading_deg, indicatedAirspeedKt: null, squawk: null,
+    beaconOn: false, fuelKg: asNumber(row.fuel_kg), enginesRunning: row.engines_running,
+    parkingBrakeSet: row.parking_brake_set, onGround: row.on_ground,
+    verticalSpeedFpm: asNumber(row.vertical_speed_fpm), flightStarted: !row.on_ground, registration: null,
+  };
 }
 
 function getSupabaseClient(): SupabaseClient | null {
@@ -114,12 +129,30 @@ async function appendPersistentAcarsSnapshot(client: SupabaseClient, id: string,
 }
 async function completePersistentAcarsSession(client: SupabaseClient, id: string, pilotId: string, landingFpm?: number | null) { const completedAt = new Date().toISOString(); const update: Record<string, unknown> = { status: "completed", completed_at: completedAt, updated_at: completedAt }; if (landingFpm != null && Number.isFinite(landingFpm)) update.landing_fpm = Math.round(landingFpm); const { data, error } = await client.from("acars_sessions").update(update).eq("id", id).eq("pilot_id", pilotId).eq("status", "active").select("*").maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null; }
 async function listPersistentLiveAcarsSessions(client: SupabaseClient) { const { data, error } = await client.from("acars_sessions").select("*").eq("status", "active").order("updated_at", { ascending: false }); if (error) throw error; const cutoff = Date.now() - 90_000; return (data as AcarsSessionRow[]).map(sessionFromRow).map((session) => ({ ...session, connectionHealthy: new Date(session.updatedAt).getTime() >= cutoff })); }
+async function listPersistentAcarsSessionSnapshots(client: SupabaseClient, id: string, pilotId: string) {
+  const session = await getPersistentAcarsSession(client, id);
+  if (!session || session.pilotId !== pilotId) return [];
+  // These are the durable, per-session reports used for the post-flight
+  // debrief.  The short recentSnapshots list remains reserved for live maps.
+  const { data, error } = await client.from("acars_position_reports")
+    .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
+    .eq("session_id", id).order("reported_at", { ascending: true }).limit(6_000);
+  if (error) throw error;
+  return (data as AcarsPositionReportRow[]).map((row) => snapshotFromPositionRow(row, session));
+}
 
 export async function startAcarsSession(input: NewSessionInput) { const client = requirePersistentClient(); return client ? startPersistentAcarsSession(client, input) : startLocalAcarsSession(input); }
 export async function getAcarsSession(id: string) { const client = requirePersistentClient(); return client ? getPersistentAcarsSession(client, id) : getLocalAcarsSession(id); }
 export async function getActiveAcarsSessionForPilot(pilotId: string) { const client = requirePersistentClient(); return client ? getPersistentActiveAcarsSessionForPilot(client, pilotId) : getActiveLocalAcarsSessionForPilot(pilotId); }
 export async function appendAcarsSnapshot(id: string, pilotId: string, snapshot: AcarsFlightSnapshot) { const client = requirePersistentClient(); return client ? appendPersistentAcarsSnapshot(client, id, pilotId, snapshot) : appendLocalAcarsSnapshot(id, pilotId, snapshot); }
 export async function completeAcarsSession(id: string, pilotId: string, landingFpm?: number | null) { const client = requirePersistentClient(); return client ? completePersistentAcarsSession(client, id, pilotId, landingFpm) : completeLocalAcarsSession(id, pilotId, landingFpm); }
+/** Retrieves a pilot's own telemetry history for their private flight debrief. */
+export async function listAcarsSessionSnapshots(id: string, pilotId: string) {
+  const client = requirePersistentClient();
+  if (client) return listPersistentAcarsSessionSnapshots(client, id, pilotId);
+  const session = await getLocalAcarsSession(id);
+  return session?.pilotId === pilotId ? [...(session.recentSnapshots ?? [])].sort((left, right) => left.timestamp.localeCompare(right.timestamp)) : [];
+}
 export async function listLiveAcarsSessions() {
   // BA-Radar is a public, read-only surface. A missing or temporarily
   // unavailable telemetry store must never turn the whole public map into a

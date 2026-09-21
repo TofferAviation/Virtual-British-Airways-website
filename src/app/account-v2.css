@@ -69,6 +69,7 @@
 .account-v2-flight-row:first-child{border-top:0}
 .account-v2-flight-row strong{color:#071d49;font-size:8px}
 .account-v2-flight-row span{min-width:0;white-space:nowrap}
+.account-v2-flight-debrief{display:block;min-width:0}.account-v2-flight-debrief strong{display:block;color:#075aaa}.account-v2-flight-debrief small{display:block;color:#718096;font-size:6.5px;line-height:1.25;margin-top:2px}.account-v2-flight-debrief:hover strong{text-decoration:underline}
 .account-v2-flight-points{color:#0b7a37!important;font-weight:700}
 .account-v2-assignment>strong{display:block;font-size:10px;margin:0 0 7px;color:#071d49}
 .account-v2-assignment>p{font-size:8px;line-height:1.45;color:#657184;margin:0 0 7px}
