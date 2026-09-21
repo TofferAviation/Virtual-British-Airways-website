@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
 import { getEvents } from "@/lib/event-store";
 import { getMatchingBavEvent } from "@/lib/pilot-awards";
-import { applyApprovedPirepStats, getPilotById, getRewardSettings, isFirstFlightAwardEligible } from "@/lib/pilot-store";
+import { applyApprovedPirepStats, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 
@@ -408,7 +408,9 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
       const booking = state.bookings.find((item) => item.id === input.bookingId);
       if (booking) { booking.status = "completed"; await writeState(state); }
     }
-    return pirepFromRow(data as PirepRow);
+    const pirep = pirepFromRow(data as PirepRow);
+    await notifyPilotOfPirepSubmission(pirep);
+    return pirep;
   }
   const state = await readState();
   const pirep: PilotPirep = {
@@ -426,7 +428,34 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
   const booking = input.bookingId ? state.bookings.find((item) => item.id === input.bookingId) : null;
   if (booking) booking.status = "completed";
   await writeState(state);
+  await notifyPilotOfPirepSubmission(pirep);
   return pirep;
+}
+
+async function notifyPilotOfPirepSubmission(pirep: PilotPirep) {
+  const route = `${pirep.flightNumber} · ${pirep.from} → ${pirep.to}`;
+  // The delivery record is informational and must never prevent a completed
+  // ACARS session from producing the underlying PIREP.
+  await createPilotNotification({
+    pilotId: pirep.pilotId,
+    kind: "pirep_review",
+    level: "info",
+    title: "Flight report submitted",
+    body: `${route} has been recorded. BAV Operations will update you here if a review is required.`,
+    href: `/account/flights/${encodeURIComponent(pirep.id)}`,
+  }).catch((error) => console.error("[notifications] Could not create PIREP submission notification.", error));
+}
+
+async function notifyPilotOfPirepReview(pirep: PilotPirep, decision: "accepted" | "rejected" | "changes_requested", staffName: string, comments: string) {
+  const route = `${pirep.flightNumber} · ${pirep.from} → ${pirep.to}`;
+  const content = comments.trim();
+  const notification = decision === "accepted"
+    ? { level: "success" as const, title: "Flight report accepted", body: `${route} was accepted by ${staffName}. Your BAV career credit has been applied.` }
+    : decision === "changes_requested"
+      ? { level: "attention" as const, title: "More information needed for your PIREP", body: content ? `${route}: ${content}` : `${route} needs further information before BAV Operations can accept it.` }
+      : { level: "attention" as const, title: "Flight report not accepted", body: content ? `${route}: ${content}` : `${route} was not accepted by BAV Operations.` };
+  // A notification delivery issue must never undo a completed staff review.
+  await createPilotNotification({ pilotId: pirep.pilotId, kind: "pirep_review", href: `/account/flights/${encodeURIComponent(pirep.id)}`, ...notification }).catch((error) => console.error("[notifications] Could not create PIREP review notification.", error));
 }
 
 export async function reviewPirep(input: { id: string; decision: "accepted" | "rejected" | "changes_requested"; staffName: string; comments: string }) {
@@ -462,7 +491,9 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     }
     const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
     if (error) throw error;
-    return pirepFromRow(data as PirepRow);
+    const reviewed = pirepFromRow(data as PirepRow);
+    await notifyPilotOfPirepReview(reviewed, input.decision, input.staffName, input.comments);
+    return reviewed;
   }
   const state = await readState();
   const pirep = state.pireps.find((item) => item.id === input.id);
@@ -499,5 +530,6 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
   }
 
   await writeState(state);
+  await notifyPilotOfPirepReview(pirep, input.decision, input.staffName, input.comments);
   return pirep;
 }

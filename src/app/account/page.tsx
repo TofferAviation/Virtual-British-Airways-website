@@ -5,7 +5,7 @@ import { RankInsignia } from "@/components/RankInsignia";
 import { getActiveAcarsSessionForPilot } from "@/lib/acars-store";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
-import { getPilotById, getRewardSettings } from "@/lib/pilot-store";
+import { getPilotById, getRewardSettings, unreadPilotNotificationCount } from "@/lib/pilot-store";
 import { formatPilotTypeRatings, nextPilotRank } from "@/lib/pilot-ranks";
 import { getPilotAwardDisplay } from "@/lib/pilot-awards";
 
@@ -25,13 +25,14 @@ export default async function AccountPage() {
   const session = await requirePilotSession();
   const account = await getPilotById(session.pilotId);
   if (!account) redirect("/login");
-  const [assignment, pireps, rewardSettings, activeAcars] = await Promise.all([
+  const [assignment, pireps, rewardSettings, activeAcars, unreadNotifications] = await Promise.all([
     getActivePilotBooking(account.id),
     listPilotPireps(account.id),
     getRewardSettings(),
     // An unavailable telemetry source must never prevent a pilot from opening
     // their account. Ember will report its state again as soon as it reconnects.
     getActiveAcarsSessionForPilot(account.id).catch(() => null),
+    unreadPilotNotificationCount(account.id),
   ]);
   const flightPlan = assignment ? await getPilotFlightPlan(assignment.id, account.id) : null;
   const tierTarget = rewardSettings.tierGoldThreshold;
@@ -66,7 +67,7 @@ export default async function AccountPage() {
 
       <section className="account-v2-hero"><div className="account-v2-container"><p className="account-v2-welcome">Welcome back, {account.name}</p><h1>Your British Airways Virtual account</h1><div className="account-v2-meta"><span className="account-v2-tier-badge">{account.tier} member</span><strong>Pilot ID: {account.pilotNumber}</strong><span className="account-v2-meta-dot">•</span><strong>BAV Operations account</strong></div><div className="account-v2-points" aria-label="Pilot progression summary"><article><span>VA Points</span><strong>{account.points.toLocaleString()}</strong><small>Virtual-airline points earned through your flying</small></article><article><span>Tier points</span><strong>{account.tierPoints.toLocaleString()}</strong><small>Career progression toward your next virtual tier</small></article></div></div></section>
 
-      <nav className="account-v2-tabs" aria-label="Account sections"><div className="account-v2-container account-v2-tabs-inner"><a className="active" href="#trips">Your trips</a><Link href="/account/profile">Account settings</Link><Link href="/handbook">Handbook</Link><a href="#membership">Membership</a><Link href="/support/tickets">Support tickets</Link></div></nav>
+      <nav className="account-v2-tabs" aria-label="Account sections"><div className="account-v2-container account-v2-tabs-inner"><a className="active" href="#trips">Your trips</a><Link href="/account/notifications">Notifications{unreadNotifications ? <span className="account-v2-notification-count">{unreadNotifications}</span> : null}</Link><Link href="/account/profile">Account settings</Link><Link href="/handbook">Handbook</Link><a href="#membership">Membership</a><Link href="/support/tickets">Support tickets</Link></div></nav>
 
       <section className="account-v2-main" id="trips"><div className="account-v2-container"><h2>Your pilot dashboard</h2><p className="account-v2-subtitle">Your career data is maintained directly by British Airways Virtual.</p><section className="account-v2-readiness" aria-label="Flight readiness">
         <header><div><span>YOUR NEXT BAV FLIGHT</span><h3>{assignment ? `${assignment.flightNumber} · ${assignment.from} → ${assignment.to}` : "Ready when you are"}</h3></div>{assignment ? <Link href="/manage-assignment">Open flight desk →</Link> : <Link href="/book">Find a flight →</Link>}</header>

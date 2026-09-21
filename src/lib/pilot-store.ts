@@ -13,7 +13,7 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 6;
+  version: 7;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
@@ -21,6 +21,7 @@ type PilotState = {
   rewardSettings: RewardSettings;
   hourTransferRequests: PilotHourTransferRequest[];
   hourAdjustments: PilotHourAdjustment[];
+  notifications: PilotNotification[];
 };
 
 type PilotPasswordResetToken = {
@@ -84,6 +85,19 @@ export type PilotHourAdjustment = {
   createdAt: string;
 };
 
+/** A private operational notice shared by the BAV website and Ember. */
+export type PilotNotification = {
+  id: string;
+  pilotId: string;
+  kind: "pirep_review" | "transfer_review" | "career_credit" | "operations";
+  level: "info" | "success" | "attention";
+  title: string;
+  body: string;
+  href: string | null;
+  createdAt: string;
+  readAt: string | null;
+};
+
 type PilotStateRow = { state: unknown };
 
 export type PilotAccount = {
@@ -130,7 +144,7 @@ export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersio
 
 function emptyState(): PilotState {
   return {
-    version: 6,
+    version: 7,
     nextPilotNumber: 1,
     pilots: [],
     passwordResetTokens: [],
@@ -138,6 +152,7 @@ function emptyState(): PilotState {
     rewardSettings: { ...DEFAULT_REWARD_SETTINGS },
     hourTransferRequests: [],
     hourAdjustments: [],
+    notifications: [],
   };
 }
 
@@ -315,8 +330,26 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       .filter((item) => pilots.some((pilot) => pilot.id === item.pilotId))
       .slice(-5_000)
     : [];
+  const notifications = Array.isArray(raw?.notifications)
+    ? raw.notifications
+      .filter((item): item is PilotNotification => Boolean(
+        item && typeof item.id === "string" && typeof item.pilotId === "string" &&
+        (item.kind === "pirep_review" || item.kind === "transfer_review" || item.kind === "career_credit" || item.kind === "operations") &&
+        (item.level === "info" || item.level === "success" || item.level === "attention") &&
+        typeof item.title === "string" && typeof item.body === "string" && typeof item.createdAt === "string",
+      ))
+      .map((item) => ({
+        id: item.id, pilotId: item.pilotId, kind: item.kind, level: item.level,
+        title: item.title.trim().slice(0, 140), body: item.body.trim().slice(0, 800),
+        href: typeof item.href === "string" && item.href.startsWith("/") ? item.href.slice(0, 300) : null,
+        createdAt: item.createdAt, readAt: typeof item.readAt === "string" ? item.readAt : null,
+      }))
+      .filter((item) => pilots.some((pilot) => pilot.id === item.pilotId))
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+      .slice(0, 10_000)
+    : [];
   return {
-    version: 6,
+    version: 7,
     nextPilotNumber,
     pilots,
     passwordResetTokens,
@@ -324,6 +357,7 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     rewardSettings: normalizeRewardSettings(raw?.rewardSettings),
     hourTransferRequests,
     hourAdjustments,
+    notifications,
   };
 }
 
@@ -376,6 +410,66 @@ async function writeState(state: PilotState) {
     throw new Error("Pilot account persistence is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY on the website host.");
   }
   await writeLocalState(normalized);
+}
+
+function appendPilotNotification(state: PilotState, input: Omit<PilotNotification, "id" | "createdAt" | "readAt">) {
+  const notification: PilotNotification = {
+    id: randomUUID(),
+    pilotId: input.pilotId,
+    kind: input.kind,
+    level: input.level,
+    title: input.title.trim().slice(0, 140),
+    body: input.body.trim().slice(0, 800),
+    href: input.href?.startsWith("/") ? input.href.slice(0, 300) : null,
+    createdAt: new Date().toISOString(),
+    readAt: null,
+  };
+  state.notifications.unshift(notification);
+  if (state.notifications.length > 10_000) state.notifications.length = 10_000;
+  return notification;
+}
+
+/** Adds a private BAV notification for a real operational event. */
+export async function createPilotNotification(input: Omit<PilotNotification, "id" | "createdAt" | "readAt">) {
+  const state = await readState();
+  if (!state.pilots.some((pilot) => pilot.id === input.pilotId)) return null;
+  const notification = appendPilotNotification(state, input);
+  await writeState(state);
+  return notification;
+}
+
+export async function listPilotNotifications(pilotId: string, limit = 50) {
+  const state = await readState();
+  return state.notifications
+    .filter((notification) => notification.pilotId === pilotId)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, Math.max(1, Math.min(100, Math.floor(limit) || 50)));
+}
+
+export async function unreadPilotNotificationCount(pilotId: string) {
+  const state = await readState();
+  return state.notifications.filter((notification) => notification.pilotId === pilotId && notification.readAt === null).length;
+}
+
+export async function markPilotNotificationRead(pilotId: string, notificationId: string) {
+  const state = await readState();
+  const notification = state.notifications.find((item) => item.id === notificationId && item.pilotId === pilotId);
+  if (!notification) return false;
+  if (notification.readAt === null) {
+    notification.readAt = new Date().toISOString();
+    await writeState(state);
+  }
+  return true;
+}
+
+export async function markAllPilotNotificationsRead(pilotId: string) {
+  const state = await readState();
+  const unread = state.notifications.filter((notification) => notification.pilotId === pilotId && notification.readAt === null);
+  if (!unread.length) return 0;
+  const now = new Date().toISOString();
+  for (const notification of unread) notification.readAt = now;
+  await writeState(state);
+  return unread.length;
 }
 
 /** Returns the live reward framework used for newly accepted BAV PIREPs. */
@@ -693,6 +787,16 @@ export async function reviewPilotHourTransferRequest(input: {
   } else {
     request.creditedHours = null;
   }
+  appendPilotNotification(state, {
+    pilotId: account.id,
+    kind: "transfer_review",
+    level: input.decision === "approved" ? "success" : "attention",
+    title: input.decision === "approved" ? "Transfer credit approved" : "Transfer credit declined",
+    body: input.decision === "approved"
+      ? `${request.creditedHours?.toFixed(1) ?? "0.0"} career hours from ${request.formerVaName} were added by ${reviewedBy}.`
+      : `BAV Operations reviewed your transfer request for ${request.formerVaName}.${reviewNote ? ` ${reviewNote}` : ""}`,
+    href: "/account/profile",
+  });
   await writeState(state);
   return { request, pilot: toPublicPilot(account) };
 }
@@ -715,6 +819,14 @@ export async function addManualPilotHours(pilotId: string, input: {
     throw new Error("The selected transfer request does not belong to this pilot.");
   }
   addCareerHours(state, account, { hours, reason, source: "manual", actorName: addedBy, requestId });
+  appendPilotNotification(state, {
+    pilotId: account.id,
+    kind: "career_credit",
+    level: "success",
+    title: "Career hours added",
+    body: `${hours.toFixed(1)} career hours were added by ${addedBy}. Reason: ${reason}`,
+    href: "/account",
+  });
   await writeState(state);
   return toPublicPilot(account);
 }

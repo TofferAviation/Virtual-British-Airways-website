@@ -33,6 +33,7 @@
 .account-v2-tabs-inner{display:flex;gap:24px}
 .account-v2-tabs a{color:#071d49;font-size:9px;padding:13px 11px 11px;border-bottom:2px solid transparent;white-space:nowrap}
 .account-v2-tabs a.active{color:#075aaa;border-bottom-color:#075aaa}
+.account-v2-notification-count{display:inline-grid;place-items:center;min-width:13px;height:13px;margin-left:4px;padding:0 3px;border-radius:999px;background:#be092f;color:#fff;font-size:7px;font-weight:700;vertical-align:middle}
 
 .account-v2-main{background:#f5f6f8;padding:24px 0 78px;min-height:505px;flex-shrink:0}
 .account-v2-main h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:25px;line-height:1.1;margin:0 0 5px;color:#071d49}

@@ -18,5 +18,6 @@ export async function reviewPirepAction(formData: FormData) {
   }
   revalidatePath("/staff/pireps");
   revalidatePath("/account");
+  revalidatePath("/account/notifications");
   redirect(`/staff/pireps?reviewed=${decision}`);
 }
