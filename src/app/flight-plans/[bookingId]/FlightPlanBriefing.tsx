@@ -1,4 +1,5 @@
 import type { SimbriefBriefing } from "@/lib/pilot-operations-store";
+import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 import { RouteWindBriefing } from "./RouteWindBriefing";
 
 type Detail = { label: string; value: string | null };
@@ -49,7 +50,7 @@ export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate,
     <p className="briefing-intro">This briefing was copied to your BAV assignment when the OFP was synced. It remains available here while you prepare and fly the service.</p>
     <div className="briefing-grid">
       <section><h3>Flight & timing</h3><DetailList items={[
-        { label: "Callsign", value: briefing.callsign }, { label: "Aircraft", value: [briefing.aircraft, briefing.aircraftIcao].filter(Boolean).join(" · ") || null },
+        { label: "Callsign", value: briefing.callsign ? toBritishAirwaysCallsign(briefing.callsign) : null }, { label: "Aircraft", value: [briefing.aircraft, briefing.aircraftIcao].filter(Boolean).join(" · ") || null },
         { label: "AIRAC", value: briefing.airac }, { label: "Scheduled off-block", value: formatTime(briefing.scheduledOut) },
         { label: "Scheduled in-block", value: formatTime(briefing.scheduledIn) }, { label: "Estimated off-block", value: formatTime(briefing.estimatedOut) },
         { label: "Estimated in-block", value: formatTime(briefing.estimatedIn) }, { label: "Block time", value: formatDuration(briefing.blockTime) },

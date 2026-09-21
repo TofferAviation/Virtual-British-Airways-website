@@ -1,4 +1,5 @@
 import { listLiveAcarsSessions } from "@/lib/acars-store";
+import { toBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
 import { getPilotBooking, getPilotFlightPlan } from "@/lib/pilot-operations-store";
 
 export type CurrentFlightStatus = {
@@ -37,12 +38,6 @@ function flightPhase(onGround: boolean | undefined, altitudeFt: number | undefin
   return "Cruise";
 }
 
-function callsignFor(flightNumber: string) {
-  if (/^BAV\d+$/i.test(flightNumber)) return flightNumber.toUpperCase();
-  const number = flightNumber.replace(/^BA/i, "");
-  return /^\d+$/.test(number) ? `BAW${number}` : flightNumber;
-}
-
 /** Public, read-only operational view backed only by active ACARS sessions. */
 export async function listCurrentFlightStatuses(): Promise<CurrentFlightStatus[]> {
   const now = Date.now();
@@ -60,8 +55,8 @@ export async function listCurrentFlightStatuses(): Promise<CurrentFlightStatus[]
       id: session.id,
       pilotName: session.pilotName,
       pilotNumber: session.pilotNumber,
-      flightNumber: session.flightNumber,
-      callsign: callsignFor(session.flightNumber),
+      flightNumber: toBritishAirwaysFlightNumber(session.flightNumber),
+      callsign: toBritishAirwaysCallsign(session.flightNumber),
       from: session.from,
       to: session.to,
       aircraft: session.aircraft,

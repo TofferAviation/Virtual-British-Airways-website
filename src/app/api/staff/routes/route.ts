@@ -51,11 +51,6 @@ function callsign(value: unknown) {
   return /^BAW\d{1,4}[A-Z]{0,2}$/.test(candidate) ? candidate : undefined;
 }
 
-function bavVirtualCallsign(value: unknown) {
-  const candidate = text(value).toUpperCase().replace(/\s+/g, "");
-  return /^BAV\d{3,5}$/.test(candidate) ? candidate : undefined;
-}
-
 function aircraftList(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   const items = value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
@@ -94,16 +89,16 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
 
   const id = existingId || text(raw.id) || `${flightNumber}-${from}-${to}`.toLowerCase();
   const suppliedCallsign = text(raw.callsign);
-  const verifiedCallsign = suppliedCallsign ? (virtualTimetable ? bavVirtualCallsign(suppliedCallsign) : callsign(suppliedCallsign)) : undefined;
+  const verifiedCallsign = suppliedCallsign ? callsign(suppliedCallsign) : undefined;
   if (suppliedCallsign && !verifiedCallsign) {
-    throw new Error(virtualTimetable ? "Use the BAV virtual service reference as its callsign, for example BAV1001." : "Use a verified BAW callsign in the format BAW267.");
+    throw new Error("Use a BAW callsign in the format BAW267.");
   }
   return {
     id,
     from,
     to,
     flightNumber,
-    callsign: verifiedCallsign ?? (virtualTimetable ? flightNumber : `BAW${flightNumber.slice(2)}`),
+    callsign: verifiedCallsign ?? `BAW${flightNumber.replace(/^(?:BAV|BA)/i, "")}`,
     departure,
     arrival,
     duration: text(raw.duration, "2h 00m"),

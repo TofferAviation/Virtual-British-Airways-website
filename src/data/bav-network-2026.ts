@@ -40,7 +40,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-virtual-operational-timetable-2026-09-19-r5";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-virtual-operational-timetable-2026-09-19-r6";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -138,7 +138,7 @@ const virtualOperationalRoutes: BavNetworkRouteSeed[] = (Object.keys(destination
       from,
       to,
       flightNumber,
-      callsign: flightNumber,
+      callsign: toBritishAirwaysCallsign(flightNumber),
       departure: toClock(departureMinutes),
       arrival: toClock(departureMinutes + duration.hours * 60 + duration.minutes),
       duration: `${duration.hours}h ${String(duration.minutes).padStart(2, "0")}m`,
@@ -199,3 +199,4 @@ export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...virtualOperationalRoutes,
   ...verifiedSchedules,
 ];
+import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";

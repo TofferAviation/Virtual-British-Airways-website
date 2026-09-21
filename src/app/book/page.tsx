@@ -9,6 +9,7 @@ import { airportByCode } from "@/data/airports";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getPilotById } from "@/lib/pilot-store";
 import { BAV_NETWORK_ROUTE_COUNTS } from "@/data/bav-network-2026";
+import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 import { bookFlight } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ function airportName(code: string) {
 
 function callsignLabel(flightNumber: string, callsign?: string) {
   const virtualNumber = /^BAV(\d{1,5})$/i.exec(flightNumber.trim())?.[1];
-  if (virtualNumber) return `${callsign ?? `BAV${virtualNumber}`} · BAV virtual service`;
+  if (virtualNumber) return `${toBritishAirwaysCallsign(callsign ?? flightNumber)} · BAV virtual service`;
   const number = /^BA(\d{1,4})$/i.exec(flightNumber.trim())?.[1];
   if (!number) return callsign ?? null;
   return `${callsign ?? `BAW${number}`} · SPEEDBIRD ${number}`;
