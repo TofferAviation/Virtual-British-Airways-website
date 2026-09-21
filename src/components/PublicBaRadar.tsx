@@ -55,7 +55,7 @@ function controllerAge(controller: VatsimStation) {
 function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
   const snapshot = flight.lastSnapshot;
   return <div className="ba-radar-selected-flight ba-radar-flight-tracker-detail">
-    <div className="ba-radar-selected-title"><strong>{flight.flightNumber}</strong><span className={flight.connectionHealthy ? "ba-radar-connection connected" : "ba-radar-connection stale"}>{flight.connectionHealthy ? "Live" : "Delayed"}</span></div>
+    <div className="ba-radar-selected-title"><strong>{flight.callsign}</strong><span className={flight.connectionHealthy ? "ba-radar-connection connected" : "ba-radar-connection stale"}>{flight.connectionHealthy ? "Live" : "Delayed"}</span></div>
     <p className="ba-radar-route"><b>{flight.from}</b><span>→</span><b>{flight.to}</b></p>
     <div className="ba-radar-aircraft-summary">
       {flight.aircraftImage ? <a className="ba-radar-aircraft-photo" href={flight.aircraftImage.sourcePageUrl ?? flight.aircraftImage.url} target="_blank" rel="noreferrer" title={`Photo: ${flight.aircraftImage.source}`}><img src={flight.aircraftImage.url} alt={`${flight.registration ?? flight.aircraft} aircraft`} /></a> : <div className="ba-radar-aircraft-photo ba-radar-aircraft-photo-empty" aria-hidden="true">✈</div>}
@@ -63,6 +63,7 @@ function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
     </div>
     {snapshot ? <>
       <div className="ba-radar-selected-data ba-radar-flight-data">
+        <div><span>Flight number</span><strong>{flight.flightNumber}</strong></div>
         <div><span>Altitude</span><strong>{Math.round(snapshot.altitudeFt).toLocaleString()} ft</strong></div>
         <div><span>Ground speed</span><strong>{Math.round(snapshot.groundSpeedKt)} kt</strong></div>
         <div><span>Indicated airspeed</span><strong>{snapshot.indicatedAirspeedKt == null ? "—" : `${Math.round(snapshot.indicatedAirspeedKt)} kt`}</strong></div>
@@ -177,7 +178,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
 
   const visibleFlights = useMemo(() => flights.filter((flight) => {
     if (filter !== "all" && (!flight.lastSnapshot || (filter === "ground" ? !flight.lastSnapshot.onGround : flight.lastSnapshot.onGround))) return false;
-    return `${flight.flightNumber} ${flight.from} ${flight.to} ${flight.aircraft}`.toLowerCase().includes(query.trim().toLowerCase());
+    return `${flight.flightNumber} ${flight.callsign} ${flight.from} ${flight.to} ${flight.aircraft}`.toLowerCase().includes(query.trim().toLowerCase());
   }), [flights, filter, query]);
 
   const selected = visibleFlights.find((flight) => flight.id === selectedId) ?? visibleFlights[0] ?? null;

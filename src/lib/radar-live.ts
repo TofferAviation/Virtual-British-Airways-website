@@ -1,5 +1,6 @@
 import { listLiveAcarsSessions } from "@/lib/acars-store";
 import type { SupportedSimulator } from "@/lib/acars-contract";
+import { toBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
 import { listFleetAircraft, type FleetAircraftImage } from "@/lib/fleet-service";
 
 export type PublicRadarSnapshot = {
@@ -19,7 +20,10 @@ export type PublicRadarSnapshot = {
 
 export type PublicRadarFlight = {
   id: string;
+  /** BA IATA flight number, for example BA1076. */
   flightNumber: string;
+  /** BA ICAO callsign, for example BAW1076. */
+  callsign: string;
   from: string;
   to: string;
   aircraft: string;
@@ -61,7 +65,8 @@ export async function listPublicRadarFlights(): Promise<PublicRadarFlight[]> {
     const registration = session.lastSnapshot?.registration ?? null;
     return {
       id: session.id,
-      flightNumber: session.flightNumber,
+      flightNumber: toBritishAirwaysFlightNumber(session.flightNumber),
+      callsign: toBritishAirwaysCallsign(session.flightNumber),
       from: session.from,
       to: session.to,
       aircraft: session.aircraft,
