@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { MobileNavigation } from "@/components/MobileNavigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { getStaffSession } from "@/lib/staff-auth";
@@ -47,9 +48,13 @@ export async function SiteHeader() {
   const [pilotSession, staffSession] = await Promise.all([getPilotSession(), getStaffSession()]);
   const isLoggedIn = Boolean(pilotSession);
   const manageHref = staffSession ? "/staff" : pilotSession ? "/manage-assignment" : "/login";
+  const accountHref = staffSession ? "/staff" : pilotSession ? "/account" : "/login";
+  const accountLabel = staffSession ? "Staff Centre" : pilotSession ? "Pilot Centre" : "Pilot log in";
+  const logoutHref = staffSession ? "/api/staff/logout" : pilotSession ? "/api/auth/logout" : undefined;
 
   return (
     <header className="site-header ba-reference-header">
+      <MobileNavigation accountHref={accountHref} accountLabel={accountLabel} isPilotLoggedIn={Boolean(pilotSession)} logoutHref={logoutHref} showPilotRegistration={!staffSession} staffHref={staffSession ? "/staff" : "/staff-login"} />
       <nav className="site-nav site-nav-left" aria-label="Primary navigation">
         <div className="site-nav-item site-nav-discover">
           <Link className="site-nav-trigger" href="/destinations" aria-haspopup="true">Discover</Link>

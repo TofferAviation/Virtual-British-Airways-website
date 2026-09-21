@@ -76,3 +76,14 @@
 :global(html[data-theme="dark"]) .access strong {
   color: #d9eaff;
 }
+
+@media (max-width: 560px) {
+  .downloadButton {
+    align-self: stretch;
+    text-align: center;
+  }
+
+  .access {
+    padding: 12px;
+  }
+}

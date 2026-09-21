@@ -206,6 +206,10 @@
   right:0;
 }
 
+/* The desktop navigation stays exactly as designed. The controls below are
+   only displayed once the full menu no longer fits comfortably on a tablet. */
+.mobile-navigation{display:none}
+
 @media(max-width:1500px){
   .site-header.ba-reference-header{
     grid-template-columns:minmax(0,390px) auto minmax(0,390px);
@@ -230,17 +234,45 @@
   .site-header.ba-reference-header{
     min-height:72px!important;
     height:72px!important;
-    display:flex!important;
-    justify-content:center!important;
+    display:grid!important;
+    grid-template-columns:52px minmax(0,1fr) 52px;
+    column-gap:8px;
+    justify-content:initial!important;
   }
   .ba-reference-header .site-nav-left{display:none!important}
-  .ba-reference-header .site-brand-centered{margin:auto!important}
+  .mobile-navigation{grid-column:1;display:block;justify-self:start}
+  .ba-reference-header .site-brand-centered{grid-column:2;margin:0!important;min-width:0}
   .ba-reference-header .site-brand-centered img{width:160px!important;max-height:60px!important}
   .ba-reference-header .header-actions-right{
-    position:absolute!important;
-    right:16px!important;
+    grid-column:3;
+    justify-self:end;
+    position:static!important;
+    right:auto!important;
+    gap:0!important;
   }
-  .header-logout-button{display:none}
-  .header-user-link{display:none}
-  .header-avatar{width:32px;height:32px;flex-basis:32px}
+  .header-actions-right>:not(.theme-toggle){display:none!important}
+  .mobile-navigation-trigger{display:inline-flex;min-width:44px;min-height:44px;padding:0;border:0;background:transparent;color:#fff;align-items:center;justify-content:center;gap:6px;font:700 10px/1 Arial,sans-serif;letter-spacing:.04em;text-transform:uppercase}
+  .mobile-navigation-trigger-lines{display:grid;gap:4px;width:17px}
+  .mobile-navigation-trigger-lines i{display:block;width:17px;height:1px;background:currentColor}
+  .mobile-navigation-overlay{position:fixed;z-index:500;inset:0;display:grid;grid-template-columns:minmax(42px,1fr) minmax(290px,430px);background:rgba(0,10,28,.54)}
+  .mobile-navigation-backdrop{grid-column:1;border:0;background:transparent;cursor:default}
+  .mobile-navigation-sheet{grid-column:2;min-height:100dvh;overflow-y:auto;padding:max(22px,env(safe-area-inset-top)) 22px max(26px,env(safe-area-inset-bottom));background:#061b39;color:#fff;box-shadow:-18px 0 45px rgba(0,8,25,.28)}
+  .mobile-navigation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:24px;border-bottom:1px solid rgba(174,207,236,.25)}
+  .mobile-navigation-head span,.mobile-navigation-section>span{display:block;color:#8fcaff;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase}
+  .mobile-navigation-head strong{display:block;margin-top:5px;font:400 26px/1 Georgia,'Times New Roman',serif}
+  .mobile-navigation-close{width:44px;height:44px;margin:-9px -8px 0 0;border:0;background:transparent;color:#fff;font:300 35px/1 Arial,sans-serif}
+  .mobile-navigation-primary{display:grid;margin:18px 0;border-bottom:1px solid rgba(174,207,236,.22)}
+  .mobile-navigation-primary a{display:flex;align-items:center;justify-content:space-between;min-height:49px;color:#fff;font-size:16px;font-weight:700}
+  .mobile-navigation-primary a span{color:#8fcaff;font-size:23px;font-weight:400}
+  .mobile-navigation-section{display:grid;gap:2px;padding:18px 0;border-bottom:1px solid rgba(174,207,236,.22)}
+  .mobile-navigation-section>span{margin-bottom:5px}
+  .mobile-navigation-section a{display:flex;align-items:center;min-height:39px;color:#d7e8f7;font-size:13px}
+  .mobile-navigation-logout{display:flex;align-items:center;justify-content:center;min-height:46px;margin-top:22px;border:1px solid rgba(255,255,255,.68);border-radius:5px;color:#fff;font-size:13px;font-weight:700}
+}
+
+@media(max-width:700px){
+  .site-header.ba-reference-header{padding:0 max(10px,env(safe-area-inset-right)) 0 max(10px,env(safe-area-inset-left))!important}
+  .ba-reference-header .site-brand-centered img{width:148px!important;max-height:54px!important}
+  .mobile-navigation-overlay{grid-template-columns:24px minmax(0,1fr)}
+  .mobile-navigation-sheet{padding-left:20px;padding-right:20px}
 }

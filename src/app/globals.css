@@ -117,6 +117,9 @@ button{cursor:pointer}
 
 @media(max-width:700px){
   :root{--site-zoom:1}
+  html{-webkit-text-size-adjust:100%;scroll-padding-top:84px}
+  body{overflow-x:hidden;overscroll-behavior-x:none}
+  input:not([type="checkbox"]):not([type="radio"]),select,textarea{font-size:16px!important}
   .legal-strip{font-size:9px;flex-direction:column;gap:2px}
   .site-header{height:72px;padding:0 16px}.site-brand img{width:235px;height:55px}.header-actions .button{padding:9px 12px;font-size:11px}
   .home-hero{min-height:500px;padding:42px 24px 110px;background-position:60% 50%}.home-hero p{font-size:16px}
