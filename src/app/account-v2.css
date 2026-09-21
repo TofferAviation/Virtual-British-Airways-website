@@ -37,6 +37,22 @@
 .account-v2-main{background:#f5f6f8;padding:24px 0 78px;min-height:505px;flex-shrink:0}
 .account-v2-main h2{font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:25px;line-height:1.1;margin:0 0 5px;color:#071d49}
 .account-v2-subtitle{font-size:9px;line-height:1.4;color:#657184;margin:0 0 17px}
+.account-v2-readiness{background:#fff;border:1px solid #cfd9e6;border-radius:3px;box-shadow:0 3px 9px rgba(12,35,72,.08);margin:0 0 14px;overflow:hidden}
+.account-v2-readiness>header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:13px 14px 12px;border-bottom:1px solid #e4eaf1;background:linear-gradient(100deg,#f7fbff,#fff)}
+.account-v2-readiness>header span{display:block;color:#58708d;font-size:7px;font-weight:700;letter-spacing:.13em;margin-bottom:4px}
+.account-v2-readiness>header h3{color:#071d49;font-size:13px;line-height:1.2;font-weight:400;margin:0}
+.account-v2-readiness>header a{flex:0 0 auto;color:#075aaa;font-size:8px;font-weight:700;text-decoration:underline}
+.account-v2-readiness-grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.account-v2-readiness-grid article{display:flex;gap:8px;min-height:74px;padding:12px 10px;border-left:1px solid #e4eaf1}
+.account-v2-readiness-grid article:first-child{border-left:0}
+.account-v2-readiness-grid i{display:grid;place-items:center;flex:0 0 16px;width:16px;height:16px;border-radius:50%;background:#dce3eb;color:#536275;font-size:8px;font-style:normal;font-weight:700;line-height:1}
+.account-v2-readiness-grid article.complete i{background:#0b7a37;color:#fff}
+.account-v2-readiness-grid article.action i{background:#be092f;color:#fff}
+.account-v2-readiness-grid article span{display:block;color:#6b7b8d;font-size:6.5px;font-weight:700;letter-spacing:.1em;margin-bottom:5px}
+.account-v2-readiness-grid article strong{display:block;color:#071d49;font-size:8.5px;line-height:1.25;text-transform:capitalize;margin-bottom:4px}
+.account-v2-readiness-grid article small{display:block;color:#657184;font-size:7px;line-height:1.35}
+.account-v2-readiness-help{margin:0;padding:9px 14px 10px;background:#f6f9fc;border-top:1px solid #e4eaf1;color:#657184;font-size:7.5px;line-height:1.45}
+.account-v2-readiness-help a{color:#075aaa;font-weight:700;text-decoration:underline}
 .account-v2-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
 .account-v2-stat{background:#fff;border:1px solid #d9e0e9;border-radius:2px;min-height:76px;padding:12px 12px 10px;box-shadow:0 2px 5px rgba(12,35,72,.06)}
 .account-v2-stat-label{display:block;font-size:7.5px;color:#68768a;letter-spacing:.06em;margin-bottom:7px}
@@ -81,6 +97,9 @@
   .account-v2-nav{gap:20px}
   .account-v2-lower{grid-template-columns:1fr}
   .account-v2-stat-grid{grid-template-columns:repeat(2,1fr)}
+  .account-v2-readiness-grid{grid-template-columns:repeat(2,1fr)}
+  .account-v2-readiness-grid article:nth-child(3){border-left:0;border-top:1px solid #e4eaf1}
+  .account-v2-readiness-grid article:nth-child(4){border-top:1px solid #e4eaf1}
   .account-v2-footer-inner{grid-template-columns:1.4fr 1fr 1fr;gap:32px}
   .account-v2-footer-inner>div:last-child{grid-column:2}
 }
@@ -99,6 +118,10 @@
   .account-v2-tabs-inner{gap:8px;overflow:auto}
   .account-v2-stat-grid{grid-template-columns:1fr}
   .account-v2-awards{grid-template-columns:1fr}
+  .account-v2-readiness>header{align-items:flex-end}
+  .account-v2-readiness-grid{grid-template-columns:1fr}
+  .account-v2-readiness-grid article,.account-v2-readiness-grid article:nth-child(3),.account-v2-readiness-grid article:nth-child(4){border-left:0;border-top:1px solid #e4eaf1;min-height:0}
+  .account-v2-readiness-grid article:first-child{border-top:0}
   .account-v2-flight-row{grid-template-columns:.7fr .9fr 1.3fr .7fr}
   .account-v2-flight-row span:nth-last-child(-n+2){display:none}
   .account-v2-footer{padding:42px 0 36px}
