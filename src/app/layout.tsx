@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FirstVisitWelcome } from "@/components/FirstVisitWelcome";
+import { SiteTrafficTracker } from "@/components/SiteTrafficTracker";
 import "./globals.css";
 import "./portal.css";
 import "./pages.css";
@@ -87,6 +88,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
+        <SiteTrafficTracker />
         {children}
         <FirstVisitWelcome />
       </body>

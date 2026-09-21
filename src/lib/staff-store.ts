@@ -13,6 +13,7 @@ import {
 import { getMasterAdminEmail } from "@/lib/staff-owner";
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 import type { ManagedRoute } from "@/lib/route-store";
+import { normalizeSiteTraffic, type SiteTrafficState } from "@/lib/site-traffic-types";
 
 export type StaffAccountStatus = "active" | "invited" | "inactive";
 
@@ -65,6 +66,8 @@ export type StaffState = {
   routeSchedule: ManagedRoute[];
   /** Allows the verified seed schedule to safely replace a previous generated baseline. */
   routeScheduleVersion?: string;
+  /** Aggregate first-party traffic only; no visitor identity or IP address is stored. */
+  siteTraffic?: SiteTrafficState;
 };
 
 const dataDir = path.join(process.cwd(), ".bav-data");
@@ -121,6 +124,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
   const audit = Array.isArray(input?.audit) ? input!.audit! : [];
   const routeSchedule = Array.isArray(input?.routeSchedule) ? input!.routeSchedule! : [];
   const routeScheduleVersion = typeof input?.routeScheduleVersion === "string" ? input.routeScheduleVersion : undefined;
+  const siteTraffic = normalizeSiteTraffic(input?.siteTraffic);
 
   const admin = envAdmin();
   if (admin) {
@@ -149,7 +153,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     }
   }
 
-  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion };
+  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion, siteTraffic };
 }
 
 async function ensureDataDir() {
