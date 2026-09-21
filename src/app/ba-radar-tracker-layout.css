@@ -2,6 +2,8 @@
 .ba-radar-tracker .ba-radar-brand-mark{display:block;width:40px;height:40px;border:0;border-radius:0;object-fit:contain;color:initial;font-size:initial}
 .ba-radar-layer-controls{position:absolute;z-index:700;top:14px;right:16px;display:grid;gap:5px;width:146px;padding:10px;background:rgba(4,25,40,.91);border:1px solid #44657e;box-shadow:0 7px 22px rgba(0,0,0,.28)}.ba-radar-layer-controls strong{padding:1px 2px 4px;color:#e5f3fc;font:800 9px/1 Arial,sans-serif;letter-spacing:.11em;text-transform:uppercase}.ba-radar-layer-controls button{padding:7px 8px;border:1px solid #3a5c76;background:#0b2335;color:#bdd3e3;text-align:left;font:700 9px/1 Arial,sans-serif;cursor:pointer}.ba-radar-layer-controls button:hover{border-color:#70b9e8;color:#fff}.ba-radar-layer-controls button.active{border-color:#42aee7;background:#13527b;color:#fff}.ba-radar-vatsim-summary{display:grid;gap:4px;padding:11px 14px;border-top:1px solid #294c63;border-bottom:1px solid #294c63;background:#0b263a}.ba-radar-vatsim-summary strong{color:#dff1fc;font:800 9px/1 Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase}.ba-radar-vatsim-summary span{color:#a9c4d7;font-size:10px;line-height:1.4}.ba-radar-controller-detail .ba-radar-route{color:#83d8ff}.ba-radar-controller-atis{margin-top:11px;padding:9px 10px;border-left:2px solid #9179ef;background:#10243a}.ba-radar-controller-atis span{display:block;color:#bdaeff;font-size:8px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.ba-radar-controller-atis p{margin:5px 0 0;color:#d0deeb;font-size:10px;line-height:1.45}@media(max-width:720px){.ba-radar-layer-controls{top:10px;right:10px;width:132px;padding:8px}.ba-radar-layer-controls button{padding:6px 7px;font-size:8px}}
 
+.ba-radar-mobile-layer-menu{display:none}
+
 /* Phone-first radar layout: put the interactive map before the long flight
    detail/list so a pilot can immediately inspect the airport or aircraft. */
 @media(max-width:800px){
@@ -12,10 +14,20 @@
   .ba-radar-tracker .ba-radar-sidebar{max-height:none!important}
   .ba-radar-tracker .ba-radar-flight-list{max-height:min(44svh,360px)!important;overflow:auto}
   .ba-radar-tracker .ba-radar-map-footer{padding:10px 12px;gap:7px;flex-wrap:wrap;font-size:8px;line-height:1.35}
+  .ba-radar-layer-controls{display:none!important}
+  .ba-radar-mobile-layer-menu{position:absolute;z-index:700;top:10px;right:10px;display:block;width:min(194px,calc(100% - 20px));border:1px solid #44657e;background:rgba(4,25,40,.94);box-shadow:0 7px 22px rgba(0,0,0,.28)}
+  .ba-radar-mobile-layer-menu summary{display:flex;align-items:center;min-height:42px;padding:0 11px;color:#e5f3fc;cursor:pointer;list-style:none;font:800 10px/1 Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+  .ba-radar-mobile-layer-menu summary::-webkit-details-marker{display:none}
+  .ba-radar-mobile-layer-menu summary b{margin-left:auto;color:#8fcaff;font-size:8px;letter-spacing:.04em}
+  .ba-radar-mobile-layer-menu summary i{margin-left:8px;font-size:16px;font-style:normal;transition:transform .16s ease}
+  .ba-radar-mobile-layer-menu[open] summary{border-bottom:1px solid #3a5c76}
+  .ba-radar-mobile-layer-menu[open] summary i{transform:rotate(180deg)}
+  .ba-radar-mobile-layer-list{display:grid;gap:5px;padding:8px}
+  .ba-radar-mobile-layer-list button{min-height:38px;padding:7px 8px;border:1px solid #3a5c76;background:#0b2335;color:#bdd3e3;text-align:left;font:700 10px/1.2 Arial,sans-serif;cursor:pointer}
+  .ba-radar-mobile-layer-list button.active{border-color:#42aee7;background:#13527b;color:#fff}
 }
 
 @media(max-width:420px){
   .ba-radar-tracker .ba-radar-map-wrap{height:clamp(400px,60svh,530px)}
-  .ba-radar-layer-controls{width:126px}
-  .ba-radar-layer-controls strong{font-size:8px}
+  .ba-radar-mobile-layer-menu{width:min(184px,calc(100% - 20px))}
 }

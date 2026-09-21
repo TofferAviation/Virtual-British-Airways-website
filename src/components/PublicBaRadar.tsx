@@ -247,6 +247,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const selectFlight = (id: string) => { setSelectedController(""); setSelectedId(id); };
   const selectController = (callsign: string) => { setSelectedId(""); setSelectedController(callsign); };
   const toggleLayer = (key: keyof RadarLayers) => setLayers((current) => ({ ...current, [key]: !current[key] }));
+  const activeLayerCount = layerLabels.filter((layer) => layers[layer.key]).length;
   const hasExternalMapData = layers.vatsim || needsWeather || layers.winds || layers.lightning;
 
   return <div className="ba-radar ba-radar-tracker">
@@ -273,6 +274,14 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
             {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
             {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}
           </div>
+          <details className="ba-radar-mobile-layer-menu">
+            <summary aria-label={`Map layers, ${activeLayerCount} active`}><span>Layers</span><b>{activeLayerCount} active</b><i aria-hidden="true">⌄</i></summary>
+            <div className="ba-radar-mobile-layer-list" role="group" aria-label="BA-Radar map layers">
+              {layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
+              {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
+              {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}
+            </div>
+          </details>
           <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
           {!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}
         </div>
