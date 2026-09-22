@@ -12,9 +12,7 @@ const COMING_SOON_PAGE = "/coming-soon";
 
 // Keep the public web site in launch mode until BAV is ready to open new
 // registrations. Existing pilot and staff cookies remain fully functional.
-// This is deliberately source-controlled instead of depending on a hosting
-// setting: a stale environment value must never accidentally open the site.
-const PUBLIC_LAUNCH_MODE = true;
+// Set BAV_PUBLIC_LAUNCH_MODE=open on the host when it is time to launch.
 const PILOT_SESSION_COOKIE = "bav_pilot_session_v5";
 const STAFF_SESSION_COOKIE = "bav_staff_session_v2";
 
@@ -27,7 +25,7 @@ function isPublicPreviewPath(pathname: string) {
 }
 
 function publicLaunchModeEnabled() {
-  return PUBLIC_LAUNCH_MODE;
+  return process.env.BAV_PUBLIC_LAUNCH_MODE?.trim().toLowerCase() !== "open";
 }
 
 function isLaunchAccessPath(pathname: string) {
