@@ -4,7 +4,7 @@
  * before sending it here.
  */
 export const MAX_PROFILE_IMAGE_DATA_LENGTH = 350_000;
-export const MAX_ACCOUNT_BACKGROUND_DATA_LENGTH = 1_750_000;
+export const MAX_ACCOUNT_BACKGROUND_DATA_LENGTH = 3_250_000;
 
 const PROFILE_IMAGE_PATTERN = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
 const ACCOUNT_BACKGROUND_PATTERN = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
@@ -38,7 +38,7 @@ export function validateAccountBackground(value: unknown): string | null {
   if (value == null || value === "") return null;
   const image = normaliseStoredAccountBackground(value);
   if (!image) {
-    throw new Error("Dashboard backgrounds must be a compressed WebP image under 1.3 MB.");
+    throw new Error("Dashboard backgrounds must be a compressed WebP image under 2.3 MB.");
   }
   return image;
 }

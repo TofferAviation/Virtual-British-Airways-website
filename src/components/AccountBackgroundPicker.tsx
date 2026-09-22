@@ -10,8 +10,10 @@ type Props = {
 };
 
 const MAX_INPUT_BYTES = 12 * 1024 * 1024;
-const WIDTH = 1600;
-const HEIGHT = 700;
+// The account page is intentionally wide on desktop. Keep enough pixels for
+// a crisp full-width hero without sending the original photo to the server.
+const WIDTH = 2560;
+const HEIGHT = 960;
 
 function resizeToBackground(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -46,8 +48,9 @@ function resizeToBackground(file: File) {
           return;
         }
 
+        context.imageSmoothingQuality = "high";
         context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, WIDTH, HEIGHT);
-        for (const quality of [0.82, 0.74, 0.66]) {
+        for (const quality of [0.92, 0.88, 0.84, 0.8]) {
           const prepared = canvas.toDataURL("image/webp", quality);
           if (prepared.length <= MAX_ACCOUNT_BACKGROUND_DATA_LENGTH) {
             resolve(prepared);
@@ -107,7 +110,7 @@ export function AccountBackgroundPicker({ value, onChange }: Props) {
 
   return (
     <section className={styles.picker} id="account-background" aria-labelledby="account-background-title">
-      <div className={styles.preview} style={value ? { backgroundImage: `linear-gradient(100deg, rgba(7, 36, 84, .7), rgba(7, 71, 148, .54)), url(${value})` } : undefined} aria-hidden="true">
+      <div className={styles.preview} style={value ? { backgroundImage: `linear-gradient(100deg, rgba(7, 36, 84, .44), rgba(7, 71, 148, .28)), url(${value})` } : undefined} aria-hidden="true">
         <span>{value ? "Personal background" : "BAV blue background"}</span>
       </div>
       <div className={styles.copy}>
