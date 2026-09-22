@@ -240,12 +240,22 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     return `${flight.flightNumber} ${flight.callsign} ${flight.from} ${flight.to} ${flight.aircraft}`.toLowerCase().includes(query.trim().toLowerCase());
   }), [flights, filter, query]);
 
-  const selected = visibleFlights.find((flight) => flight.id === selectedId) ?? visibleFlights[0] ?? null;
+  // A cleared selection must remain clear. Falling back to the first visible
+  // flight made the tracker appear locked after pilots pressed the close
+  // control or clicked their selected aircraft a second time.
+  const selected = selectedId ? visibleFlights.find((flight) => flight.id === selectedId) ?? null : null;
   const controller = vatsim?.controllers.find((entry) => entry.callsign === selectedController) ?? null;
   const positioned = visibleFlights.filter((flight) => flight.lastSnapshot);
   const airborne = flights.filter((flight) => flight.lastSnapshot && !flight.lastSnapshot.onGround).length;
-  const selectFlight = (id: string) => { setSelectedController(""); setSelectedId(id); };
-  const selectController = (callsign: string) => { setSelectedId(""); setSelectedController(callsign); };
+  const clearSelection = () => { setSelectedId(""); setSelectedController(""); };
+  const selectFlight = (id: string) => {
+    setSelectedController("");
+    setSelectedId((current) => current === id ? "" : id);
+  };
+  const selectController = (callsign: string) => {
+    setSelectedId("");
+    setSelectedController((current) => current === callsign ? "" : callsign);
+  };
   const toggleLayer = (key: keyof RadarLayers) => setLayers((current) => ({ ...current, [key]: !current[key] }));
   const activeLayerCount = layerLabels.filter((layer) => layers[layer.key]).length;
   const hasExternalMapData = layers.vatsim || needsWeather || layers.winds || layers.lightning;
@@ -258,7 +268,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     </header>
     <section className="ba-radar-stage" aria-label="BA-Radar live simulator map">
       <aside className="ba-radar-sidebar">
-        <div className="ba-radar-selection-head"><span className="ba-radar-kicker">{controller ? "Selected VATSIM position" : selected ? "Selected live flight" : "Live flights"}</span><button type="button" onClick={() => { setSelectedId(""); setSelectedController(""); }} aria-label="Clear map selection">×</button></div>
+        <div className="ba-radar-selection-head"><span className="ba-radar-kicker">{controller ? "Selected VATSIM position" : selected ? "Selected live flight" : "Live flights"}</span>{selected || controller ? <button type="button" onClick={clearSelection} aria-label="Clear map selection">Clear <b aria-hidden="true">×</b></button> : null}</div>
         {controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <FlightTrackerDetails flight={selected} /> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
         <div className="ba-radar-list-controls"><span>Flight list</span><div>{(["all", "airborne", "ground"] as const).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "airborne" ? "Air" : "Ground"}</button>)}</div></div>
         <div className="ba-radar-flight-list">{visibleFlights.length ? visibleFlights.map((flight) => <button key={flight.id} type="button" onClick={() => selectFlight(flight.id)} className={flight.id === selected?.id && !controller ? "selected" : ""}><i className={flight.connectionHealthy ? "connected" : "stale"} /><span><strong>{flight.flightNumber}</strong><small>{flight.from} → {flight.to}</small></span><em>{flight.lastSnapshot ? `${Math.round(flight.lastSnapshot.altitudeFt).toLocaleString()} ft` : "Pending"}</em></button>) : <p className="ba-radar-none">No flights match this view.</p>}</div>

@@ -31,3 +31,7 @@
   .ba-radar-tracker .ba-radar-map-wrap{height:clamp(400px,60svh,530px)}
   .ba-radar-mobile-layer-menu{width:min(184px,calc(100% - 20px))}
 }
+
+/* The detail panel is optional. Make its clear action visible and usable on
+   touch screens instead of presenting it as a tiny, ambiguous close glyph. */
+.ba-radar-selection-head button{display:inline-flex;align-items:center;gap:5px;border:1px solid #45647a;background:#0d2a3f;color:#d5e6f1;padding:5px 7px;font:700 9px/1 Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}.ba-radar-selection-head button:hover{border-color:#70b9e8;background:#123a57;color:#fff}.ba-radar-selection-head button b{font:400 16px/.55 Arial,sans-serif}
