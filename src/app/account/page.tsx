@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { RankInsignia } from "@/components/RankInsignia";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getActiveAcarsSessionForPilot } from "@/lib/acars-store";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
@@ -62,7 +63,7 @@ export default async function AccountPage() {
       <header className="account-v2-header">
         <nav className="account-v2-nav" aria-label="Pilot account navigation"><Link href="/destinations">Discover</Link><Link href="/book">Book</Link><Link href="/account">Manage</Link><Link href="/support/tickets">Support</Link></nav>
         <Link className="account-v2-brand" href="/" aria-label="British Airways Virtual home"><BrandLogo variant="white" priority /></Link>
-        <div className="account-v2-header-actions"><span className="account-v2-pilot"><span className="account-v2-user-icon" aria-hidden="true" />{account.name}</span><Link href="/api/auth/logout" className="account-v2-logout">Log out</Link><span className="account-v2-avatar" aria-hidden="true" /></div>
+        <div className="account-v2-header-actions"><span className="account-v2-pilot"><span className="account-v2-user-icon" aria-hidden="true" />{account.name}</span><ThemeToggle /><Link href="/api/auth/logout" className="account-v2-logout">Log out</Link><span className="account-v2-avatar" aria-hidden="true" /></div>
       </header>
 
       <section className="account-v2-hero" style={account.accountBackground ? { backgroundImage: `linear-gradient(100deg, rgba(7, 49, 112, .88) 0%, rgba(8, 72, 150, .82) 52%, rgba(8, 43, 94, .88) 100%), url(${account.accountBackground})` } : undefined}><div className="account-v2-container"><p className="account-v2-welcome">Welcome back, {account.name}</p><h1>Your British Airways Virtual account</h1><div className="account-v2-meta"><span className="account-v2-tier-badge">{account.tier} member</span><strong>Pilot ID: {account.pilotNumber}</strong><span className="account-v2-meta-dot">•</span><strong>BAV Operations account</strong></div><div className="account-v2-points" aria-label="Pilot progression summary"><article><span>VA Points</span><strong>{account.points.toLocaleString()}</strong><small>Virtual-airline points earned through your flying</small></article><article><span>Tier points</span><strong>{account.tierPoints.toLocaleString()}</strong><small>Career progression toward your next virtual tier</small></article></div></div></section>

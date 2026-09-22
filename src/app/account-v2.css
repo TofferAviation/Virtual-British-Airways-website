@@ -112,8 +112,9 @@
   .account-v2-brand{justify-self:start;height:64px}
   .account-v2-brand img{width:145px!important;max-height:58px!important}
   .account-v2-pilot{display:none}
+  .account-v2-header-actions{gap:8px}
   .account-v2-logout{min-width:74px;padding:7px 11px}
-  .account-v2-avatar{width:24px;height:24px}
+  .account-v2-avatar{display:none}
   .account-v2-hero{padding:34px 0 42px}
   .account-v2-hero h1{font-size:24px}
   .account-v2-points{grid-template-columns:1fr}
