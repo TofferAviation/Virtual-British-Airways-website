@@ -192,6 +192,36 @@ html[data-theme="dark"] .account-v2-assignment>strong{color:var(--bav-dark-headi
 html[data-theme="dark"] .account-v2-flight-row{color:#c8d5e4!important;border-color:#26394f!important}
 html[data-theme="dark"] .account-v2-tier-box{border-color:var(--bav-dark-line)!important}
 html[data-theme="dark"] .account-v2-progress{background:#26384c!important}
+html[data-theme="dark"] .account-v2-readiness{
+  background:var(--bav-dark-surface)!important;
+  border-color:var(--bav-dark-line)!important;
+  box-shadow:0 4px 12px rgba(0,0,0,.24)!important;
+}
+html[data-theme="dark"] .account-v2-readiness>header{
+  background:linear-gradient(100deg,#17283c,#111e2e)!important;
+  border-color:var(--bav-dark-line)!important;
+}
+html[data-theme="dark"] .account-v2-readiness>header span,
+html[data-theme="dark"] .account-v2-readiness-grid article span{color:#a9c8e8!important}
+html[data-theme="dark"] .account-v2-readiness>header h3,
+html[data-theme="dark"] .account-v2-readiness-grid article strong{color:var(--bav-dark-heading)!important}
+html[data-theme="dark"] .account-v2-readiness>header a{color:var(--bav-dark-link)!important}
+html[data-theme="dark"] .account-v2-readiness-grid article{border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .account-v2-readiness-grid i{background:#2a4059!important;color:#c8d8e9!important}
+html[data-theme="dark"] .account-v2-readiness-grid article.complete i{background:#0b7a37!important;color:#fff!important}
+html[data-theme="dark"] .account-v2-readiness-grid article.action i{background:#be092f!important;color:#fff!important}
+html[data-theme="dark"] .account-v2-readiness-grid article small,
+html[data-theme="dark"] .account-v2-readiness-help{color:var(--bav-dark-muted)!important}
+html[data-theme="dark"] .account-v2-readiness-help{background:var(--bav-dark-surface-2)!important;border-color:var(--bav-dark-line)!important}
+html[data-theme="dark"] .account-v2-readiness-help a{color:var(--bav-dark-link)!important}
+html[data-theme="dark"] .account-v2-award{
+  background:linear-gradient(105deg,#19293b,#111e2d)!important;
+  border-color:#6f5a27!important;
+  box-shadow:0 3px 9px rgba(0,0,0,.2)!important;
+}
+html[data-theme="dark"] .account-v2-award strong{color:#fff2bd!important}
+html[data-theme="dark"] .account-v2-award p{color:#b7c8da!important}
+html[data-theme="dark"] .account-v2-award-kicker{color:#f0c35d!important}
 
 /* Point cards are intentional readable surfaces within the blue account
    hero. Override the hero typography rule when the pilot chooses dark mode. */
