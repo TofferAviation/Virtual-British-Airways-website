@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { usePathname } from "next/navigation";
 
 const storageKey = "bav-first-visit-welcome-dismissed";
 
@@ -23,13 +22,12 @@ function getServerWelcomePreferenceSnapshot() {
 }
 
 export function FirstVisitWelcome() {
-  const pathname = usePathname();
   const welcomePreference = useSyncExternalStore(subscribeToWelcomePreference, getWelcomePreferenceSnapshot, getServerWelcomePreferenceSnapshot);
   const [dismissedForVisit, setDismissedForVisit] = useState(false);
   const [rememberDismissal, setRememberDismissal] = useState(false);
   const continueButton = useRef<HTMLButtonElement>(null);
 
-  const isOpen = pathname !== "/coming-soon" && welcomePreference === "open" && !dismissedForVisit;
+  const isOpen = welcomePreference === "open" && !dismissedForVisit;
 
   const dismiss = useCallback(() => {
     if (rememberDismissal) {
