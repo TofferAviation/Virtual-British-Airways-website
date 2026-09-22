@@ -4,11 +4,18 @@ export type SiteTrafficPage = {
   visits: number;
 };
 
+/** Aggregate session visits from a hosting-edge country code. */
+export type SiteTrafficCountry = {
+  code: string;
+  visits: number;
+};
+
 export type SiteTrafficDay = {
   date: string;
   pageViews: number;
   visits: number;
   pages: SiteTrafficPage[];
+  countries: SiteTrafficCountry[];
 };
 
 export type SiteTrafficState = {
@@ -28,6 +35,7 @@ export function normalizeSiteTraffic(input: unknown): SiteTrafficState {
   const normalized = days.map((day) => {
     const candidate = day && typeof day === "object" ? day as Partial<SiteTrafficDay> : {};
     const pages = Array.isArray(candidate.pages) ? candidate.pages : [];
+    const countries = Array.isArray(candidate.countries) ? candidate.countries : [];
     return {
       date: typeof candidate.date === "string" && isoDate.test(candidate.date) ? candidate.date : "",
       pageViews: count(candidate.pageViews),
@@ -41,6 +49,13 @@ export function normalizeSiteTraffic(input: unknown): SiteTrafficState {
         };
       }).filter((page) => page.path.startsWith("/"))
         .sort((left, right) => right.pageViews - left.pageViews)
+        .slice(0, 80),
+      countries: countries.map((country) => {
+        const item = country && typeof country === "object" ? country as Partial<SiteTrafficCountry> : {};
+        const code = typeof item.code === "string" ? item.code.trim().toUpperCase() : "";
+        return { code, visits: count(item.visits) };
+      }).filter((country) => /^[A-Z]{2}$/.test(country.code) && country.visits > 0)
+        .sort((left, right) => right.visits - left.visits || left.code.localeCompare(right.code))
         .slice(0, 80),
     };
   }).filter((day) => day.date)

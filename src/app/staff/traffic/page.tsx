@@ -21,6 +21,14 @@ function date(value: string, options: Intl.DateTimeFormatOptions = { day: "numer
   return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
 }
 
+function countryName(code: string) {
+  try {
+    return new Intl.DisplayNames("en-GB", { type: "region" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
 export default async function StaffTrafficPage() {
   await requireStaffPermission("settings.view");
   const traffic = await getSiteTrafficSummary();
@@ -41,7 +49,7 @@ export default async function StaffTrafficPage() {
 
         <section className={styles.privacy} aria-label="Privacy note">
           <span aria-hidden="true">⌁</span>
-          <p><strong>Private first-party measurement.</strong> Counts are aggregate only: no names, account IDs, IP addresses, search terms or visitor profiles are retained. A visit means a browser session, not a unique person.</p>
+          <p><strong>Private first-party measurement.</strong> Counts are aggregate only: no names, account IDs, IP addresses, search terms or visitor profiles are retained. When the hosting edge provides it, only a broad country code is added to that day&apos;s session total. A visit means a browser session, not a unique person.</p>
         </section>
 
         <section className={styles.metrics} aria-label="Traffic totals">
@@ -63,9 +71,14 @@ export default async function StaffTrafficPage() {
             <div className={styles.panelHeading}><div><span>All public traffic</span><h2>Popular pages</h2></div><small>By page views</small></div>
             {traffic.popularPages.length ? <div className={styles.tableWrap}><table><thead><tr><th>Page</th><th>Views</th><th>Landing visits</th></tr></thead><tbody>{traffic.popularPages.map((page) => <tr key={page.path}><td><code>{page.path}</code></td><td>{number(page.pageViews)}</td><td>{number(page.visits)}</td></tr>)}</tbody></table></div> : <p className={styles.panelEmpty}>Popular pages will appear after the first public visits.</p>}
           </article>
+
+          <article className={`${styles.panel} ${styles.countries}`}>
+            <div className={styles.panelHeading}><div><span>All country-tagged sessions</span><h2>Top visitor countries</h2></div><small>Top 10 · session visits</small></div>
+            {traffic.topCountries.length ? <div className={styles.tableWrap}><table><thead><tr><th>Rank</th><th>Country</th><th>Session visits</th><th>Share</th></tr></thead><tbody>{traffic.topCountries.map((country, index) => <tr key={country.code}><td>{index + 1}</td><td><span className={styles.countryName}>{countryName(country.code)}</span><code>{country.code}</code></td><td>{number(country.visits)}</td><td>{traffic.countryTrackedVisits ? `${Math.round(country.visits / traffic.countryTrackedVisits * 100)}%` : "—"}</td></tr>)}</tbody></table></div> : <p className={styles.panelEmpty}>Country totals will appear once the hosting edge supplies a country code for public session visits. Existing traffic is not backfilled.</p>}
+          </article>
         </section>
 
-        <p className={styles.started}>Collection began {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(traffic.startedAt))}. Public pages only.</p>
+        <p className={styles.started}>Traffic collection began {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(traffic.startedAt))}. Country totals begin with this release and include only public pages.</p>
       </main>
       <SiteFooter />
     </>

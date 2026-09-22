@@ -79,6 +79,9 @@
 .panel td:not(:first-child), .panel th:not(:first-child) { text-align: right; }
 .panel code { color: #0b4f8a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem; }
 .panelEmpty { padding: 28px 21px; }
+.countries { grid-column: 1 / -1; }
+.countryName { display: inline-block; min-width: 150px; color: #183d63; font-weight: 700; }
+.countries code { margin-left: 9px; color: #69829c; }
 .started { margin-top: 20px; color: #657a92; font-size: .78rem; text-align: center; }
 
 @media (max-width: 840px) {
@@ -114,3 +117,5 @@
 :global(html[data-theme="dark"]) .panel td { border-color: #263d55; }
 :global(html[data-theme="dark"]) .panel th { background: #0d1928; color: #adc0d4; }
 :global(html[data-theme="dark"]) .panel code { color: #9dceff; }
+:global(html[data-theme="dark"]) .countryName { color: #e1edf9; }
+:global(html[data-theme="dark"]) .countries code { color: #a9c2d8; }

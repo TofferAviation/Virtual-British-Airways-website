@@ -16,11 +16,27 @@ function sameOrigin(request: NextRequest) {
   }
 }
 
+/**
+ * Use only a broad country code already supplied by a trusted hosting edge.
+ * We deliberately do not read, persist, or send an IP address to a separate
+ * geolocation service for first-party BAV traffic reporting.
+ */
+function hostingCountryCode(request: NextRequest) {
+  const value = [
+    request.headers.get("cf-ipcountry"),
+    request.headers.get("x-vercel-ip-country"),
+    request.headers.get("cloudfront-viewer-country"),
+    request.headers.get("x-geo-country"),
+  ].find((candidate) => typeof candidate === "string" && /^[A-Za-z]{2}$/.test(candidate.trim()));
+  const code = value?.trim().toUpperCase();
+  return code && code !== "XX" && code !== "T1" ? code : null;
+}
+
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return new NextResponse(null, { status: 403 });
   try {
     const body = await request.json() as { path?: unknown; visit?: unknown };
-    await recordSiteTraffic(body.path, body.visit === true);
+    await recordSiteTraffic(body.path, body.visit === true, hostingCountryCode(request));
   } catch {
     // Analytics must never interrupt the public website when storage is busy.
   }
