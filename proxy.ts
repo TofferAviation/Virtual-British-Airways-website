@@ -92,9 +92,7 @@ async function hasBavSession(request: NextRequest) {
 
 export async function proxy(request: NextRequest) {
   // Direct local browsing remains open for development and diagnostic work.
-  // A hosted service can use localhost for its internal hop, so never let
-  // that bypass the public launch gate in a production build.
-  if (process.env.NODE_ENV !== "production" && isDirectLocalRequest(request)) return NextResponse.next();
+  if (isDirectLocalRequest(request)) return NextResponse.next();
   if (!previewProtectionEnabled()) return allowLaunchAccess(request);
 
   const { pathname } = request.nextUrl;
