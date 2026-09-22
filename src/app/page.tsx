@@ -35,7 +35,7 @@ export default async function HomePage() {
               <Link className="button button-light" href="/book">Browse virtual flights</Link>
               <Link className="button button-radar" href="/ba-radar">Open Live Map · BA-Radar</Link>
             </div>
-            <div className="status-pill"><span /> Virtual operations online · Flight simulation only</div>
+            <div className="status-pill"><span /> Open beta · Virtual operations online · Flight simulation only</div>
           </div>
         </section>
 
