@@ -71,6 +71,7 @@
 .account-v2-flight-row strong{color:#071d49;font-size:8px}
 .account-v2-flight-row span{min-width:0;white-space:nowrap}
 .account-v2-flight-debrief{display:block;min-width:0}.account-v2-flight-debrief strong{display:block;color:#075aaa}.account-v2-flight-debrief small{display:block;color:#718096;font-size:6.5px;line-height:1.25;margin-top:2px}.account-v2-flight-debrief:hover strong{text-decoration:underline}
+.account-v2-flight-row .ops-pirep-chip{display:inline-flex;align-items:center;justify-content:center;justify-self:end;align-self:center;box-sizing:border-box;min-height:16px;padding:3px 6px;border:1px solid currentColor;border-radius:999px;background:rgba(39,130,86,.1);font-size:6.2px;line-height:1;letter-spacing:.045em;white-space:nowrap}.account-v2-flight-row .ops-pirep-chip.pending,.account-v2-flight-row .ops-pirep-chip.changes_requested{background:rgba(155,105,0,.1)}.account-v2-flight-row .ops-pirep-chip.rejected{background:rgba(179,30,61,.1)}
 .account-v2-flight-points{color:#0b7a37!important;font-weight:700}
 .account-v2-assignment>strong{display:block;font-size:10px;margin:0 0 7px;color:#071d49}
 .account-v2-assignment>p{font-size:8px;line-height:1.45;color:#657184;margin:0 0 7px}
