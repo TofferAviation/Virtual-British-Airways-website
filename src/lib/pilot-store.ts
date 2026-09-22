@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { automaticPilotRank, isPilotRank, normalizePilotTypeRatings, type PilotRank, type PilotTypeRating } from "@/lib/pilot-ranks";
-import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
+import { normaliseStoredAccountBackground, normaliseStoredProfileImage, validateAccountBackground, validateProfileImage } from "@/lib/profile-image";
 import { normalizeBavHub } from "@/lib/hubs";
 import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
 import { DEFAULT_REWARD_SETTINGS, normalizeRewardSettings, validateRewardSettings, type RewardSettings } from "@/lib/reward-settings";
@@ -133,6 +133,8 @@ export type PilotAccount = {
   simbriefPilotId: string | null;
   /** Compact, user-selected account avatar stored as a data URL. */
   profileImage: string | null;
+  /** Personal image used only behind the pilot's private account summary. */
+  accountBackground: string | null;
   /** Explicit consent captured when a pilot creates their BAV account. */
   pilotRulesAcceptedAt: string | null;
   pilotRulesVersion: string | null;
@@ -140,7 +142,7 @@ export type PilotAccount = {
   awards: PilotAward[];
 };
 
-export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion">;
+export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion" | "accountBackground">;
 
 function emptyState(): PilotState {
   return {
@@ -205,6 +207,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     streak: Number(raw.streak) || 0,
     simbriefPilotId: normalizeSimbriefPilotId(raw.simbriefPilotId),
     profileImage: normaliseStoredProfileImage(raw.profileImage),
+    accountBackground: normaliseStoredAccountBackground(raw.accountBackground),
     pilotRulesAcceptedAt: typeof raw.pilotRulesAcceptedAt === "string" ? raw.pilotRulesAcceptedAt : null,
     pilotRulesVersion: typeof raw.pilotRulesVersion === "string" ? raw.pilotRulesVersion : null,
     awards: Array.isArray(raw.awards) ? raw.awards.filter((award) => Boolean(
@@ -537,6 +540,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
     profileImage: null,
+    accountBackground: null,
     pilotRulesAcceptedAt: now,
     pilotRulesVersion: PILOT_RULES_VERSION,
     awards: [],
@@ -839,7 +843,7 @@ export async function markPilotLogin(id: string) {
   await writeState(state);
 }
 
-export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; profileImage?: string | null }) {
+export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; profileImage?: string | null; accountBackground?: string | null }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   if (name.length < 2) throw new Error("Please enter your full name.");
@@ -852,6 +856,7 @@ export async function updatePilotProfile(id: string, input: { name: string; emai
   account.email = email;
   if (input.hub !== undefined) account.hub = normalizeBavHub(input.hub);
   if (input.profileImage !== undefined) account.profileImage = validateProfileImage(input.profileImage);
+  if (input.accountBackground !== undefined) account.accountBackground = validateAccountBackground(input.accountBackground);
   await writeState(state);
   return toPublicPilot(account);
 }
@@ -1047,8 +1052,9 @@ export async function applyApprovedPirepStats(pilotId: string, input: {
 }
 
 export function toPublicPilot(account: PilotAccount): PublicPilotAccount {
-  const { passwordHash: _passwordHash, authVersion: _authVersion, ...pilot } = account;
+  const { passwordHash: _passwordHash, authVersion: _authVersion, accountBackground: _accountBackground, ...pilot } = account;
   void _passwordHash;
   void _authVersion;
+  void _accountBackground;
   return pilot;
 }

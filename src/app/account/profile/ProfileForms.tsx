@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { AccountBackgroundPicker } from "@/components/AccountBackgroundPicker";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 import { BAV_HUBS } from "@/lib/hubs";
 import styles from "./ember-download.module.css";
@@ -23,7 +24,7 @@ async function patchProfile(payload: Record<string, string | null>) {
   return body;
 }
 
-export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage, pilotRulesAcceptedAt, pilotRulesVersion }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null }) {
+export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -31,6 +32,7 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
   const [simbriefMessage, setSimbriefMessage] = useState("");
   const [savingSimbrief, setSavingSimbrief] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(initialProfileImage);
+  const [accountBackground, setAccountBackground] = useState<string | null>(initialAccountBackground);
   const router = useRouter();
 
   async function saveProfileImage(nextImage: string | null) {
@@ -45,6 +47,24 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
     } catch (error) {
       setProfileImage(previousImage);
       setProfileMessage(error instanceof Error ? error.message : "Unable to update your profile photo.");
+      throw error;
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function saveAccountBackground(nextBackground: string | null) {
+    const previousBackground = accountBackground;
+    setAccountBackground(nextBackground);
+    setSavingProfile(true);
+    setProfileMessage("");
+    try {
+      await patchProfile({ accountBackground: nextBackground });
+      setProfileMessage("Account background updated.");
+      router.refresh();
+    } catch (error) {
+      setAccountBackground(previousBackground);
+      setProfileMessage(error instanceof Error ? error.message : "Unable to update your account background.");
       throw error;
     } finally {
       setSavingProfile(false);
@@ -113,6 +133,7 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
         <label>Home hub<select className={hubStyles.select} name="hub" defaultValue={hub}>{BAV_HUBS.map((item) => <option key={item.code} value={item.name}>{item.name} ({item.code}) — {item.role}</option>)}</select><small className={hubStyles.hint}>This sets the default departure hub on the BAV flight search. You can change it whenever you like.</small></label>
         <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
+        <AccountBackgroundPicker value={accountBackground} onChange={saveAccountBackground} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
         {profileMessage ? <p className="pilot-profile-message">{profileMessage}</p> : null}
       </form>

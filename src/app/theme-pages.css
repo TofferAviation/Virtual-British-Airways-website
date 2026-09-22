@@ -193,6 +193,47 @@ html[data-theme="dark"] .account-v2-flight-row{color:#c8d5e4!important;border-co
 html[data-theme="dark"] .account-v2-tier-box{border-color:var(--bav-dark-line)!important}
 html[data-theme="dark"] .account-v2-progress{background:#26384c!important}
 
+/* The private pilot dashboard is a fixed British Airways blue-and-white
+   account surface. It should not change its membership label or points-card
+   contrast according to the browser in which a pilot happens to sign in.
+   The rest of the site continues to honour the pilot's dark-mode setting. */
+html[data-theme="dark"] .account-v2-page,
+html[data-theme="dark"] .account-v2-main{
+  background:#f5f6f8!important;
+  color:#071d49!important;
+  color-scheme:light;
+}
+html[data-theme="dark"] .account-v2-tabs,
+html[data-theme="dark"] .account-v2-points article,
+html[data-theme="dark"] .account-v2-stat,
+html[data-theme="dark"] .account-v2-card{
+  background:#fff!important;
+  color:#071d49!important;
+  border-color:#d9e0e9!important;
+}
+html[data-theme="dark"] .account-v2-tier-badge{
+  background:#fff!important;
+  color:#075aaa!important;
+}
+html[data-theme="dark"] .account-v2-main :where(h1,h2,h3,strong){color:#071d49!important}
+html[data-theme="dark"] .account-v2-main :where(p,small,time){color:#657184!important}
+html[data-theme="dark"] .account-v2-main a:not(.button){color:#075aaa!important}
+html[data-theme="dark"] .account-v2-main .account-v2-readiness{background:#fff!important;border-color:#cfd9e6!important}
+html[data-theme="dark"] .account-v2-main .account-v2-readiness>header{background:linear-gradient(100deg,#f7fbff,#fff)!important;border-color:#e4eaf1!important}
+html[data-theme="dark"] .account-v2-main .account-v2-readiness-grid article,
+html[data-theme="dark"] .account-v2-main .account-v2-flight-row{border-color:#e4eaf1!important;color:#14233f!important}
+html[data-theme="dark"] .account-v2-main .account-v2-readiness-grid article :where(span,small){color:#6b7b8d!important}
+html[data-theme="dark"] .account-v2-main .account-v2-readiness-grid article strong,
+html[data-theme="dark"] .account-v2-main .account-v2-flight-row strong,
+html[data-theme="dark"] .account-v2-main .account-v2-assignment>strong{color:#071d49!important}
+html[data-theme="dark"] .account-v2-main .account-v2-tier-box{border-color:#d9e0e9!important}
+html[data-theme="dark"] .account-v2-main .account-v2-progress{background:#dfe5ec!important}
+html[data-theme="dark"] .account-v2-main .account-v2-award{background:linear-gradient(105deg,#fffdf7,#fff8e6)!important;border-color:#e5c778!important}
+html[data-theme="dark"] .account-v2-main .account-v2-award :where(strong){color:#4e3605!important}
+html[data-theme="dark"] .account-v2-main .account-v2-award :where(p){color:#6b5c3a!important}
+html[data-theme="dark"] .account-v2-main .account-v2-award-kicker{color:#92640a!important}
+html[data-theme="dark"] .account-v2-footer :where(h4,a){color:#fff!important}
+
 /* Discover */
 html[data-theme="dark"] .discover-top,
 html[data-theme="dark"] .discover-section.alt,

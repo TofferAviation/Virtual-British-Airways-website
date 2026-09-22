@@ -4,8 +4,10 @@
  * before sending it here.
  */
 export const MAX_PROFILE_IMAGE_DATA_LENGTH = 350_000;
+export const MAX_ACCOUNT_BACKGROUND_DATA_LENGTH = 1_750_000;
 
 const PROFILE_IMAGE_PATTERN = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
+const ACCOUNT_BACKGROUND_PATTERN = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
 
 export function normaliseStoredProfileImage(value: unknown) {
   return typeof value === "string" && value.length <= MAX_PROFILE_IMAGE_DATA_LENGTH && PROFILE_IMAGE_PATTERN.test(value)
@@ -18,6 +20,25 @@ export function validateProfileImage(value: unknown): string | null {
   const image = normaliseStoredProfileImage(value);
   if (!image) {
     throw new Error("Profile photos must be a square WebP image under 250 KB.");
+  }
+  return image;
+}
+
+/** A personal dashboard background is also stored as a locally prepared WebP,
+ * never as an arbitrary remote URL. */
+export function normaliseStoredAccountBackground(value: unknown) {
+  return typeof value === "string" &&
+         value.length <= MAX_ACCOUNT_BACKGROUND_DATA_LENGTH &&
+         ACCOUNT_BACKGROUND_PATTERN.test(value)
+    ? value
+    : null;
+}
+
+export function validateAccountBackground(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const image = normaliseStoredAccountBackground(value);
+  if (!image) {
+    throw new Error("Dashboard backgrounds must be a compressed WebP image under 1.3 MB.");
   }
   return image;
 }

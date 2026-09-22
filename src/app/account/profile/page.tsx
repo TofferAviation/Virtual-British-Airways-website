@@ -29,7 +29,7 @@ export default async function PilotProfilePage() {
           <article><span>MEMBER SINCE</span><strong>{new Date(pilot.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</strong></article>
           <article><span>LAST SIGN IN</span><strong>{pilot.lastLoginAt ? new Date(pilot.lastLoginAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</strong></article>
         </section>
-        <ProfileForms name={pilot.name} email={pilot.email} hub={pilot.hub} simbriefPilotId={pilot.simbriefPilotId ?? ""} profileImage={pilot.profileImage} pilotRulesAcceptedAt={pilot.pilotRulesAcceptedAt} pilotRulesVersion={pilot.pilotRulesVersion} />
+        <ProfileForms name={pilot.name} email={pilot.email} hub={pilot.hub} simbriefPilotId={pilot.simbriefPilotId ?? ""} profileImage={pilot.profileImage} accountBackground={pilot.accountBackground} pilotRulesAcceptedAt={pilot.pilotRulesAcceptedAt} pilotRulesVersion={pilot.pilotRulesVersion} />
         <HourTransferCard requests={transferRequests} />
         <div className={styles.back}><Link href="/account">← Back to pilot dashboard</Link></div>
       </div>
