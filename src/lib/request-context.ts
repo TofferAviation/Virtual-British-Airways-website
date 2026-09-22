@@ -19,13 +19,18 @@ function isLocalHostname(hostname: string) {
 }
 
 export function isDirectLocalRequest(request: NextRequest) {
-  const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
-  if (forwardedHost) return isLocalHostname(hostnameFromAuthority(forwardedHost));
+  // Hosted platforms can route a public request to the app through an
+  // internal `localhost` hop. Treat a request as local only when every host
+  // signal is local; one public host means it came from a real visitor.
+  const hosts = [
+    firstHeaderValue(request.headers.get("x-forwarded-host")),
+    firstHeaderValue(request.headers.get("host")),
+    request.nextUrl.hostname,
+  ]
+    .map(hostnameFromAuthority)
+    .filter(Boolean);
 
-  const host = firstHeaderValue(request.headers.get("host"));
-  if (host) return isLocalHostname(hostnameFromAuthority(host));
-
-  return isLocalHostname(request.nextUrl.hostname.toLowerCase());
+  return hosts.length > 0 && hosts.every(isLocalHostname);
 }
 
 export function requestUsesHttps(request: NextRequest) {
