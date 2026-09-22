@@ -3,8 +3,8 @@ import {
   PREVIEW_ACCESS_COOKIE,
   getPreviewAccessToken,
   previewProtectionEnabled,
-} from "./lib/preview-access";
-import { isDirectLocalRequest, relativeRedirect } from "./lib/request-context";
+} from "./src/lib/preview-access";
+import { isDirectLocalRequest, relativeRedirect } from "./src/lib/request-context";
 
 const ACCESS_PAGE = "/preview-access";
 const ACCESS_API = "/api/preview-access";
