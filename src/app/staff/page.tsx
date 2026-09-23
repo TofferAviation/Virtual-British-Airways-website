@@ -10,6 +10,7 @@ import { getStaffPreferences } from "@/lib/staff-preferences";
 import { getStaffState, hasPermission } from "@/lib/staff-store";
 import { StaffBackgroundControl } from "./StaffBackgroundControl";
 import { StaffCentre } from "./StaffCentre";
+import { StaffOperationsInbox } from "./StaffOperationsInbox";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,11 @@ export default async function StaffPage() {
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
+          <StaffOperationsInbox
+            canReviewPireps={canViewRoutes}
+            canReviewTransfers={canEditPilots}
+            canViewSupport={canViewSupport}
+          />
           <div className="staff-shell staff-permissions-launch-wrap">
             <Link className="staff-permissions-launch" href="/staff/sop">
               <span className="staff-permissions-launch-icon" aria-hidden="true">▤</span>
