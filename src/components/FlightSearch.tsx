@@ -42,6 +42,12 @@ function airportCodeFromSearch(value: string, choices: AirportChoice[]) {
   return choices.find((airport) => airportOptionLabel(airport).toLocaleLowerCase() === normalisedQuery)?.code ?? null;
 }
 
+function durationHoursFromInput(value: string) {
+  if (!value.trim()) return null;
+  const hours = Number(value);
+  return Number.isFinite(hours) && hours >= 0 && hours <= 24 ? hours : null;
+}
+
 export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }) {
   const router = useRouter();
   const [from, setFrom] = useState<BavHubCode>(initialHub);
@@ -49,6 +55,8 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
   const [toSearch, setToSearch] = useState(() => airportOptionLabel(airports.find((airport) => airport.code === "OSL") ?? airports[0]));
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [aircraft, setAircraft] = useState("Any aircraft");
+  const [minimumHours, setMinimumHours] = useState("");
+  const [maximumHours, setMaximumHours] = useState("");
   const [airportSearchError, setAirportSearchError] = useState<string | null>(null);
 
   const orderedAirports = useMemo(() => {
@@ -75,10 +83,22 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
       setAirportSearchError("Choose different departure and arrival airports.");
       return;
     }
+    const minimum = durationHoursFromInput(minimumHours);
+    const maximum = durationHoursFromInput(maximumHours);
+    if ((minimumHours.trim() && minimum === null) || (maximumHours.trim() && maximum === null)) {
+      setAirportSearchError("Enter a flight time between 0 and 24 hours, or leave the field blank.");
+      return;
+    }
+    if (minimum !== null && maximum !== null && minimum > maximum) {
+      setAirportSearchError("Set the first flight-time value at or below the second value.");
+      return;
+    }
     setAirportSearchError(null);
     setFrom(departure as BavHubCode);
     const params = new URLSearchParams({ from: departure, to: arrival, date });
     if (aircraft !== "Any aircraft") params.set("aircraft", aircraft);
+    if (minimum !== null) params.set("minHours", String(minimum));
+    if (maximum !== null) params.set("maxHours", String(maximum));
     router.push(`/book?${params.toString()}`);
   }
 
@@ -130,6 +150,13 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
           </select>
         </div>
         <button className="button button-primary search-submit" type="submit">Find flights</button>
+      </div>
+      <div className="flight-search-duration">
+        <div className="flight-search-duration-copy"><strong>Flight time</strong><span>Optional — show routes within the hours you have available.</span></div>
+        <div className="flight-search-duration-fields">
+          <label htmlFor="minimum-hours"><span>From</span><input id="minimum-hours" type="number" min="0" max="24" step="1" inputMode="numeric" placeholder="Any" value={minimumHours} onChange={(event) => { setMinimumHours(event.target.value); setAirportSearchError(null); }} /><em>hours</em></label>
+          <label htmlFor="maximum-hours"><span>To</span><input id="maximum-hours" type="number" min="0" max="24" step="1" inputMode="numeric" placeholder="Any" value={maximumHours} onChange={(event) => { setMaximumHours(event.target.value); setAirportSearchError(null); }} /><em>hours</em></label>
+        </div>
       </div>
       <div id="airport-search-help" className="airport-search-help" aria-live="polite">
         {airportSearchError ?? "Search by city, airport name or three-letter airport code, then choose a suggested airport."}
