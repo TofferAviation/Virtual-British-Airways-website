@@ -29,6 +29,10 @@ export type AcarsFlightSnapshot = {
   // a parked aircraft from being logged as a completed PIREP.
   flightStarted: boolean;
   registration: string | null;
+  /** Airport reported by a native simulator adapter when the aircraft is on the ground. */
+  detectedAirport: string | null;
+  /** Diversion airport declared by the pilot in Ember while the flight remains live. */
+  diversionAirport: string | null;
 };
 
 export type AcarsCompletedFlight = {

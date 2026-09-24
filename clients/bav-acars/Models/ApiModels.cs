@@ -8,7 +8,9 @@ public sealed record AssignmentEnvelope(Assignment? Assignment);
 public sealed record Assignment(string Id, string FlightNumber, string From, string To, string Aircraft, string Departure, string Arrival, string Duration, string Date, string Status);
 public sealed record StartEnvelope(AcarsSession Session);
 public sealed record AcarsSession(string Id, string FlightNumber, string From, string To, string Aircraft, string Simulator);
-public sealed record EndEnvelope(bool Ok, string? Message, object? Pirep);
+public sealed record ArrivalResolution(string Status, string PlannedStation, string? ActualStation, string Detection, string Message, bool CanUpdateFleet);
+public sealed record FleetArrivalReconciliation(string Status, string Message);
+public sealed record EndEnvelope(AcarsSession? Session, object? Pirep, ArrivalResolution? Arrival, FleetArrivalReconciliation? Fleet);
 
 public sealed record TelemetryPayload(
     double Latitude,
@@ -20,7 +22,9 @@ public sealed record TelemetryPayload(
     bool EnginesRunning,
     bool ParkingBrakeSet,
     bool OnGround,
-    double? VerticalSpeedFpm);
+    double? VerticalSpeedFpm,
+    string? DetectedAirport = null,
+    string? DiversionAirport = null);
 
 public sealed record AppSettings(string BaseUrl, string Email)
 {

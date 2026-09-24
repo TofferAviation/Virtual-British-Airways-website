@@ -16,6 +16,8 @@ export type PublicRadarSnapshot = {
   enginesRunning: boolean;
   onGround: boolean;
   verticalSpeedFpm: number | null;
+  detectedAirport: string | null;
+  diversionAirport: string | null;
 };
 
 export type PublicRadarFlight = {
@@ -33,14 +35,16 @@ export type PublicRadarFlight = {
   updatedAt: string;
   distanceNm: number;
   connectionHealthy: boolean;
+  /** The pilot-declared live diversion destination, if Ember has one. */
+  diversionAirport: string | null;
   lastSnapshot: PublicRadarSnapshot | null;
   recentSnapshots: PublicRadarSnapshot[];
 };
 
 function publicSnapshot(snapshot: Awaited<ReturnType<typeof listLiveAcarsSessions>>[number]["lastSnapshot"]): PublicRadarSnapshot | null {
   if (!snapshot) return null;
-  const { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm } = snapshot;
-  return { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm };
+  const { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm, detectedAirport, diversionAirport } = snapshot;
+  return { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm, detectedAirport, diversionAirport };
 }
 
 /**
@@ -76,6 +80,7 @@ export async function listPublicRadarFlights(): Promise<PublicRadarFlight[]> {
       updatedAt: session.updatedAt,
       distanceNm: session.distanceNm,
       connectionHealthy: session.connectionHealthy,
+      diversionAirport: session.lastSnapshot?.diversionAirport ?? null,
       lastSnapshot: publicSnapshot(session.lastSnapshot),
       recentSnapshots: (session.recentSnapshots ?? []).map(publicSnapshot).filter((snapshot): snapshot is PublicRadarSnapshot => snapshot != null),
     };

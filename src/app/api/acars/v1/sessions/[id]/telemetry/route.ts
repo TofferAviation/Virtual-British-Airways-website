@@ -16,6 +16,11 @@ function optionalRegistration(value: unknown) {
   return /^[A-Z0-9-]{2,16}$/.test(registration) ? registration : null;
 }
 
+function optionalAirport(value: unknown) {
+  const airport = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[A-Z0-9]{3,4}$/.test(airport) ? airport : null;
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAcarsBearer(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -47,6 +52,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     verticalSpeedFpm: optionalFinite(body.verticalSpeedFpm, -20_000, 20_000),
     flightStarted: Boolean(body.flightStarted),
     registration: optionalRegistration(body.registration),
+    detectedAirport: optionalAirport(body.detectedAirport),
+    diversionAirport: optionalAirport(body.diversionAirport),
   };
   const session = await appendAcarsSnapshot(id, auth.account.id, snapshot);
   if (!session) return NextResponse.json({ error: "Session is no longer active." }, { status: 409 });

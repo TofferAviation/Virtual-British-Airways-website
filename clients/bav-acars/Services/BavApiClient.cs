@@ -58,10 +58,12 @@ public sealed class BavApiClient : IDisposable
         await EnsureSuccess(response);
     }
 
-    public async Task EndSessionAsync(string sessionId, int landingFpm, string comments, CancellationToken cancellationToken = default)
+    public async Task<EndEnvelope> EndSessionAsync(string sessionId, int landingFpm, string comments, CancellationToken cancellationToken = default)
     {
         var response = await _http.PostAsJsonAsync($"api/acars/v1/sessions/{sessionId}/end", new { landingFpm, pilotComments = comments }, cancellationToken);
         await EnsureSuccess(response);
+        return await response.Content.ReadFromJsonAsync<EndEnvelope>(cancellationToken: cancellationToken)
+               ?? throw new InvalidOperationException("BAV returned an empty completed-flight response.");
     }
 
     public string UrlFor(string path) => _baseUrl + (path.StartsWith('/') ? path : "/" + path);

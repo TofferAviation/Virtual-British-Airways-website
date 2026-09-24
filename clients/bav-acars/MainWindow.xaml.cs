@@ -179,6 +179,16 @@ public partial class MainWindow : Window
             var totalMinutes = ParseDurationMinutes(_assignment?.Duration) ?? 480;
             var progress = Math.Clamp(elapsed.TotalMinutes / totalMinutes, 0, 1);
             var payload = simulator.CreateDevelopmentTelemetry(progress, elapsed);
+            var diversionAirport = NormaliseAirport(DiversionAirportText.Text);
+            if (diversionAirport is not null)
+            {
+                payload = payload with { DiversionAirport = diversionAirport };
+                ArrivalCodeText.Text = diversionAirport;
+            }
+            else if (_assignment is not null)
+            {
+                ArrivalCodeText.Text = _assignment.To;
+            }
             UpdateTelemetryUi(payload, elapsed, progress);
 
             try
@@ -240,9 +250,25 @@ public partial class MainWindow : Window
         try
         {
             await FlushQueueAsync(_session.Id);
-            await _api.EndSessionAsync(_session.Id, -150, "Submitted automatically by FreeFlight BAV ACARS v1.0 desktop client.");
+            var endResponse = await _api.EndSessionAsync(_session.Id, -150, "Submitted automatically by FreeFlight BAV ACARS v1.0 desktop client.");
             AddEvent("Flight complete", "Automatic ACARS PIREP submitted to BAV Operations");
-            PirepStatusText.Text = "Submitted · pending staff review";
+            if (endResponse.Arrival is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(endResponse.Arrival.ActualStation)) ArrivalCodeText.Text = endResponse.Arrival.ActualStation;
+                RouteDetailText.Text = endResponse.Arrival.Message;
+                AddEvent("Arrival reconciliation", endResponse.Arrival.Message);
+                PirepStatusText.Text = endResponse.Arrival.Status switch
+                {
+                    "arrived_as_planned" => "Submitted · arrival verified",
+                    "returned_to_origin" => "Submitted · returned to origin",
+                    "diverted" => "Submitted · diversion recorded",
+                    _ => "Submitted · arrival needs review",
+                };
+            }
+            else
+            {
+                PirepStatusText.Text = "Submitted · pending staff review";
+            }
             AcarsStatusText.Text = "Completed";
             FlightPhaseText.Text = "BLOCK ON";
             FooterStatusText.Text = "●  Flight complete · PIREP submitted";
@@ -325,6 +351,12 @@ public partial class MainWindow : Window
         }
         var total = hours * 60 + minutes;
         return total > 0 ? total : null;
+    }
+
+    private static string? NormaliseAirport(string? value)
+    {
+        var airport = value?.Trim().ToUpperInvariant() ?? string.Empty;
+        return airport.Length is 3 or 4 && airport.All(char.IsLetterOrDigit) ? airport : null;
     }
 
     private static string FriendlyError(Exception ex)

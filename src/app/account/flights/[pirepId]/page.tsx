@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { parsePirepArrivalReconciliation } from "@/lib/acars-arrival";
 import { getAcarsSession, listAcarsSessionSnapshots } from "@/lib/acars-store";
 import type { AcarsFlightSnapshot, SupportedSimulator } from "@/lib/acars-contract";
 import { getPirep } from "@/lib/pilot-operations-store";
@@ -52,6 +53,7 @@ export default async function FlightDebriefPage({ params }: { params: Promise<{ 
   const maxGroundSpeed = maximum(snapshots, "groundSpeedKt");
   const registration = session?.lastSnapshot?.registration ?? null;
   const reportCount = snapshots.length;
+  const arrivalReconciliation = parsePirepArrivalReconciliation(pirep.pilotComments);
 
   return <><SiteHeader /><main className="page-shell debrief-page"><div className="page-container debrief-container">
     <nav className="debrief-breadcrumb" aria-label="Breadcrumb"><Link href="/account">Pilot dashboard</Link><span>›</span><span>Flight debrief</span></nav>
@@ -66,6 +68,7 @@ export default async function FlightDebriefPage({ params }: { params: Promise<{ 
       <article><span>LANDING RATE</span><strong>{pirep.landingFpm == null ? "—" : `${pirep.landingFpm} fpm`}</strong><small>{pirep.landingFpm == null ? "Not supplied by the simulator" : "Recorded at arrival"}</small></article>
       <article><span>FUEL USED</span><strong>{pirep.fuelUsedKg == null ? "—" : `${pirep.fuelUsedKg.toLocaleString()} kg`}</strong><small>{pirep.fuelUsedKg == null ? "Not supplied by the simulator" : "Recorded by ACARS"}</small></article>
     </section>
+    {arrivalReconciliation ? <section className={`debrief-arrival-reconciliation ${arrivalReconciliation.outcome}`}><strong>{arrivalReconciliation.outcome === "returned_to_origin" ? "Returned to departure airport" : arrivalReconciliation.outcome === "diverted" ? "Diversion recorded" : "Arrival airport needs verification"}</strong><span>{arrivalReconciliation.outcome === "arrival_unverified" ? `Planned arrival ${arrivalReconciliation.plannedStation} was not verified by Ember. Fleet was not moved.` : `Planned ${arrivalReconciliation.plannedStation} · actual ${arrivalReconciliation.actualStation ?? "not verified"}.`}</span></section> : null}
 
     <div className="debrief-grid">
       <section className="debrief-card"><span className="debrief-label">FLIGHT TIMELINE</span><h2>What Ember recorded</h2><ol className="debrief-timeline">
