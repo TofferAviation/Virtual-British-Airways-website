@@ -234,7 +234,7 @@
             </Grid>
         </Grid>
 
-        <Border Grid.Row="2" Background="#061323" BorderBrush="#173B5C" BorderThickness="0,1,0,0"><DockPanel Margin="18,0"><TextBlock x:Name="FooterStatusText" Text="●  ACARS ready" Foreground="{StaticResource GreenBrush}" VerticalAlignment="Center" FontSize="11" /><TextBlock DockPanel.Dock="Right" Text="British Airways Virtual   |   FreeFlight Systems   |   automatic PIREPs" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="10" /></DockPanel></Border>
+        <Border Grid.Row="2" Background="#061323" BorderBrush="#173B5C" BorderThickness="0,1,0,0"><DockPanel Margin="18,0"><TextBlock x:Name="FooterStatusText" Text="●  ACARS ready" Foreground="{StaticResource GreenBrush}" VerticalAlignment="Center" FontSize="11" /><TextBlock Text="© Ember Systems. All rights reserved 2026" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="10" Margin="18,0,0,0" /><TextBlock DockPanel.Dock="Right" Text="British Airways Virtual   |   FreeFlight Systems   |   automatic PIREPs" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="10" /></DockPanel></Border>
 
         <StackPanel Visibility="Collapsed"><TextBlock x:Name="WebsiteStatusText" Text="Offline" /><TextBlock x:Name="WebsiteSyncText" Text="Sign in to connect" /><TextBlock x:Name="AssignmentSyncText" Text="Waiting" /><TextBlock x:Name="PirepStatusText" Text="Ready after flight completion" /></StackPanel>
 
