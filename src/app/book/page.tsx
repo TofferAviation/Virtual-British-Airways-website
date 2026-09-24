@@ -30,6 +30,22 @@ function callsignLabel(flightNumber: string, callsign?: string) {
   return `${callsign ?? `BAW${number}`} · SPEEDBIRD ${number}`;
 }
 
+function durationToMinutes(value: string) {
+  const match = /^(\d+)\s*h(?:\s*(\d+)\s*m)?$/i.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2] ?? 0);
+}
+
+function durationHoursParam(value: string | string[] | undefined) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const hours = Number(value);
+  return Number.isFinite(hours) && hours >= 0 && hours <= 24 ? hours : null;
+}
+
+function hourLabel(hours: number) {
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
 export default async function BookPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const aircraft = typeof params.aircraft === "string" ? params.aircraft : "";
@@ -39,6 +55,10 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   const hub = getBavHub(typeof params.hub === "string" ? params.hub : null);
   const date = typeof params.date === "string" ? params.date : getTomorrowIsoDate();
   const flexible = params.flexible === "1";
+  const minimumHours = durationHoursParam(params.minHours);
+  const maximumHours = durationHoursParam(params.maxHours);
+  const hasDurationFilter = minimumHours !== null || maximumHours !== null;
+  const invalidDurationRange = minimumHours !== null && maximumHours !== null && minimumHours > maximumHours;
   const scheduledFlights = hub
     ? await getFlightsFromHub(hub.code, date, { includeVirtualFlexible: flexible })
     : hasCityPair && from !== to
@@ -46,9 +66,17 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
       : aircraft
         ? await getFlightsForAircraft(aircraft, date)
         : [];
-  const flights = aircraft && (hub || hasCityPair)
+  const aircraftFlights = aircraft && (hub || hasCityPair)
     ? scheduledFlights.filter((flight) => flight.aircraft === aircraft)
     : scheduledFlights;
+  const flights = invalidDurationRange ? [] : aircraftFlights.filter((flight) => {
+    if (!hasDurationFilter) return true;
+    if (flight.catalogueOnly) return false;
+    const minutes = durationToMinutes(flight.duration);
+    return minutes !== null &&
+      (minimumHours === null || minutes >= minimumHours * 60) &&
+      (maximumHours === null || minutes <= maximumHours * 60);
+  });
   const distinctRouteCount = new Set(flights.map((flight) => `${flight.from}-${flight.to}`)).size;
   const hubRouteCount = hub ? BAV_NETWORK_ROUTE_COUNTS[hub.code] : null;
   const hubCode = hub?.code ?? null;
@@ -61,6 +89,20 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   if (hub) flexibleParams.set("hub", hub.code);
   else if (hasCityPair) { flexibleParams.set("from", from); flexibleParams.set("to", to); }
   if (aircraft) flexibleParams.set("aircraft", aircraft);
+  if (minimumHours !== null) flexibleParams.set("minHours", String(minimumHours));
+  if (maximumHours !== null) flexibleParams.set("maxHours", String(maximumHours));
+  const clearDurationFilterParams = new URLSearchParams({ date });
+  if (hub) clearDurationFilterParams.set("hub", hub.code);
+  else if (hasCityPair) { clearDurationFilterParams.set("from", from); clearDurationFilterParams.set("to", to); }
+  if (aircraft) clearDurationFilterParams.set("aircraft", aircraft);
+  if (flexible) clearDurationFilterParams.set("flexible", "1");
+  const durationRangeLabel = minimumHours !== null && maximumHours !== null
+    ? `${hourLabel(minimumHours)} to ${hourLabel(maximumHours)}`
+    : minimumHours !== null
+      ? `${hourLabel(minimumHours)} or longer`
+      : maximumHours !== null
+        ? `up to ${hourLabel(maximumHours)}`
+        : null;
 
   return (
     <>
@@ -82,9 +124,23 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
           {unavailable ? <div className="integration-note"><strong>Flight no longer available:</strong> the selected BAV assignment may have filled or been disabled by Operations. Choose another available service.</div> : null}
           {qualificationError ? <div className="integration-note"><strong>Qualification required:</strong> this service is outside your current rank or type-rating approval. Review your pilot profile or contact Operations after meeting the required criteria.</div> : null}
           {aircraftError ? <div className="integration-note"><strong>Aircraft selection unavailable:</strong> choose the published scheduled aircraft or an Operations-approved virtual substitute that your current rank and type ratings permit.</div> : null}
+          <form className="booking-duration-filter card" action="/book">
+            {hub ? <input type="hidden" name="hub" value={hub.code} /> : null}
+            {hasCityPair ? <><input type="hidden" name="from" value={from} /><input type="hidden" name="to" value={to} /></> : null}
+            {aircraft ? <input type="hidden" name="aircraft" value={aircraft} /> : null}
+            <input type="hidden" name="date" value={date} />
+            {flexible ? <input type="hidden" name="flexible" value="1" /> : null}
+            <div className="booking-duration-copy"><strong>Filter by flight time</strong><span>Set a range in hours to find routes that fit your available flying time.</span></div>
+            <div className="booking-duration-fields">
+              <label><span>From</span><input type="number" name="minHours" min="0" max="24" step="1" inputMode="numeric" placeholder="Any" defaultValue={minimumHours ?? ""} /><em>hours</em></label>
+              <label><span>To</span><input type="number" name="maxHours" min="0" max="24" step="1" inputMode="numeric" placeholder="Any" defaultValue={maximumHours ?? ""} /><em>hours</em></label>
+            </div>
+            <div className="booking-duration-actions"><button className="button button-primary" type="submit">Apply filter</button>{hasDurationFilter ? <Link className="button button-outline" href={`/book?${clearDurationFilterParams.toString()}`}>Clear</Link> : null}</div>
+          </form>
+          {invalidDurationRange ? <div className="integration-note"><strong>Check the flight-time range:</strong> the minimum duration must be less than or equal to the maximum duration.</div> : null}
           <div className="booking-results-heading">
             <h2>{aircraft && !hasCityPair && !hub ? `Current routes for ${aircraft}` : hub ? `Available departures from ${hub.code}` : "Available BAV routes"}</h2>
-            <p>{distinctRouteCount} BAV airport-pair route{distinctRouteCount === 1 ? "" : "s"} found{hubRouteCount && hubCode ? ` of ${hubRouteCount} published from ${hubCode}` : ""}.</p>
+            <p>{distinctRouteCount} BAV airport-pair route{distinctRouteCount === 1 ? "" : "s"} found{hubRouteCount && hubCode ? ` of ${hubRouteCount} published from ${hubCode}` : ""}{durationRangeLabel ? ` · ${durationRangeLabel}` : ""}.</p>
           </div>
           <div className="flight-results">
             {flights.length ? flights.map((flight) => {
@@ -106,7 +162,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                   </form> : flight.slots > 0 && eligibility && !eligibility.eligible ? <div className="pilot-qualification-lock"><button className="button button-primary" type="button" disabled>Qualification required</button><span>{eligibility.reason}</span></div> : <button className="button button-primary" type="button" disabled>Flight full</button>
                 ) : <Link className="button button-primary" href="/login">Log in to book</Link>}
               </article>;
-            }) : <div className="empty-state card"><h2>{aircraft ? "No current routes published for this airframe" : "No BAV route published"}</h2><p>{aircraft ? `Operations has not published an active BAV service using ${aircraft} for this date.` : hub ? `There is currently no active British Airways Virtual route departing ${hub.name}.` : "There is currently no active British Airways Virtual route for this city pair."}</p>{!flexible && (hub || hasCityPair) ? <><p>You can still book a real BAV service as a virtual-flexible assignment and fly it when it suits you.</p><Link className="button button-primary" href={`/book?${flexibleParams.toString()}`}>Show virtual-flexible services</Link></> : <Link className="button button-primary" href="/">Return to flight search</Link>}</div>}
+            }) : <div className="empty-state card"><h2>{invalidDurationRange ? "Choose a valid flight-time range" : hasDurationFilter ? "No BAV routes in this flight-time range" : aircraft ? "No current routes published for this airframe" : "No BAV route published"}</h2><p>{invalidDurationRange ? "Set the first hour at or below the second hour, then apply the filter again." : hasDurationFilter ? "Try a wider range or clear the filter to see every available route." : aircraft ? `Operations has not published an active BAV service using ${aircraft} for this date.` : hub ? `There is currently no active British Airways Virtual route departing ${hub.name}.` : "There is currently no active British Airways Virtual route for this city pair."}</p>{!hasDurationFilter && !flexible && (hub || hasCityPair) ? <><p>You can still book a real BAV service as a virtual-flexible assignment and fly it when it suits you.</p><Link className="button button-primary" href={`/book?${flexibleParams.toString()}`}>Show virtual-flexible services</Link></> : <Link className="button button-primary" href={hasDurationFilter ? `/book?${clearDurationFilterParams.toString()}` : "/"}>{hasDurationFilter ? "Clear flight-time filter" : "Return to flight search"}</Link>}</div>}
           </div>
           <div className="integration-note"><strong>Route coverage and schedule accuracy:</strong> every city pair in this catalogue is maintained as part of the BAV London-hub network. A BAV virtual service is bookable now with a BAV service reference, a UTC planning window and rank-approved aircraft; it is not presented as a real BA flight number, callsign or timetable. When Operations verifies a BA service, its real flight number, callsign, local times and scheduled aircraft replace the virtual service. Pilots may fly every BAV service at a simulator-friendly time.</div>
         </div>

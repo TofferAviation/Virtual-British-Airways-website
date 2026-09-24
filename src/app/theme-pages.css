@@ -147,6 +147,10 @@ html[data-theme="dark"] .result-availability span{color:#bac9da!important}
 html[data-theme="dark"] .result-line i{background:#6d8298!important}
 html[data-theme="dark"] .result-availability strong{color:#55d79a!important}
 html[data-theme="dark"] .booking-results-heading p{color:#bac9da!important}
+html[data-theme="dark"] .booking-duration-copy strong{color:#f4f7fb!important}
+html[data-theme="dark"] .booking-duration-copy span,
+html[data-theme="dark"] .booking-duration-fields label,
+html[data-theme="dark"] .booking-duration-fields em{color:#bac9da!important}
 html[data-theme="dark"] .page-shell .button-outline{
   background:#10233a!important;
   border-color:#5a95cb!important;
