@@ -24,12 +24,32 @@ const aircraftTypes = [
   "Embraer E190",
 ];
 
+type AirportChoice = (typeof airports)[number] | (typeof baseAirports)[number];
+
+function airportOptionLabel(airport: AirportChoice) {
+  return `${airport.name} (${airport.code}) — ${airport.country}`;
+}
+
+function airportCodeFromSearch(value: string, choices: AirportChoice[]) {
+  const query = value.trim();
+  if (!query) return null;
+
+  const code = /^([A-Za-z0-9]{3})$/.exec(query)?.[1]?.toUpperCase()
+    ?? /\(([A-Za-z0-9]{3})\)/.exec(query)?.[1]?.toUpperCase();
+  if (code && choices.some((airport) => airport.code === code)) return code;
+
+  const normalisedQuery = query.toLocaleLowerCase();
+  return choices.find((airport) => airportOptionLabel(airport).toLocaleLowerCase() === normalisedQuery)?.code ?? null;
+}
+
 export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }) {
   const router = useRouter();
   const [from, setFrom] = useState<BavHubCode>(initialHub);
-  const [to, setTo] = useState("OSL");
+  const [fromSearch, setFromSearch] = useState(() => airportOptionLabel(baseAirports.find((airport) => airport.code === initialHub) ?? baseAirports[0]));
+  const [toSearch, setToSearch] = useState(() => airportOptionLabel(airports.find((airport) => airport.code === "OSL") ?? airports[0]));
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [aircraft, setAircraft] = useState("Any aircraft");
+  const [airportSearchError, setAirportSearchError] = useState<string | null>(null);
 
   const orderedAirports = useMemo(() => {
     const merged = [
@@ -45,7 +65,19 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const params = new URLSearchParams({ from, to, date });
+    const departure = airportCodeFromSearch(fromSearch, baseAirports);
+    const arrival = airportCodeFromSearch(toSearch, orderedAirports);
+    if (!departure || !arrival) {
+      setAirportSearchError("Choose an airport from the search suggestions, or enter its three-letter airport code.");
+      return;
+    }
+    if (departure === arrival) {
+      setAirportSearchError("Choose different departure and arrival airports.");
+      return;
+    }
+    setAirportSearchError(null);
+    setFrom(departure as BavHubCode);
+    const params = new URLSearchParams({ from: departure, to: arrival, date });
     if (aircraft !== "Any aircraft") params.set("aircraft", aircraft);
     router.push(`/book?${params.toString()}`);
   }
@@ -60,23 +92,31 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
       <div className="flight-search-body">
         <div className="field">
           <label htmlFor="from">From</label>
-          <select id="from" value={from} onChange={(event) => setFrom(event.target.value as BavHubCode)}>
+          <input id="from" type="search" list="bav-departure-airports" value={fromSearch} placeholder="Search departure airport" autoComplete="off" onChange={(event) => {
+            const value = event.target.value;
+            setFromSearch(value);
+            const code = airportCodeFromSearch(value, baseAirports);
+            if (code) setFrom(code as BavHubCode);
+            setAirportSearchError(null);
+          }} aria-describedby="airport-search-help" />
+          <datalist id="bav-departure-airports">
             {baseAirports.map((airport) => (
-              <option key={`from-${airport.code}`} value={airport.code}>
-                {airport.name} ({airport.code}) — {airport.country}
-              </option>
+              <option key={`from-${airport.code}`} value={airportOptionLabel(airport)} />
             ))}
-          </select>
+          </datalist>
         </div>
         <div className="field">
           <label htmlFor="to">To</label>
-          <select id="to" value={to} onChange={(event) => setTo(event.target.value)}>
+          <input id="to" type="search" list="bav-destination-airports" value={toSearch} placeholder="Search destination or airport code" autoComplete="off" onChange={(event) => {
+            const value = event.target.value;
+            setToSearch(value);
+            setAirportSearchError(null);
+          }} aria-describedby="airport-search-help" />
+          <datalist id="bav-destination-airports">
             {orderedAirports.map((airport) => (
-              <option key={`to-${airport.code}`} value={airport.code}>
-                {airport.name} ({airport.code}) — {airport.country}
-              </option>
+              <option key={`to-${airport.code}`} value={airportOptionLabel(airport)} />
             ))}
-          </select>
+          </datalist>
         </div>
         <div className="field">
           <label htmlFor="date">Departure</label>
@@ -90,6 +130,9 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
           </select>
         </div>
         <button className="button button-primary search-submit" type="submit">Find flights</button>
+      </div>
+      <div id="airport-search-help" className="airport-search-help" aria-live="polite">
+        {airportSearchError ?? "Search by city, airport name or three-letter airport code, then choose a suggested airport."}
       </div>
       <div className="search-helper">
         <span><strong>{BAV_NETWORK_ROUTE_COUNTS.total} BA London-hub airport-pair routes</strong> loaded: {BAV_NETWORK_ROUTE_COUNTS.LHR} Heathrow, {BAV_NETWORK_ROUTE_COUNTS.LGW} Gatwick and {BAV_NETWORK_ROUTE_COUNTS.LCY} City.</span>
