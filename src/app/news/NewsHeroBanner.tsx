@@ -64,7 +64,6 @@ export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, desc
           {latestUpdate ? <time>{latestUpdate.date}</time> : null}
           {latestUpdate ? <Link href={latestUpdate.href}>Read update <span aria-hidden="true">→</span></Link> : null}
         </div>
-        <div className="news-hero-route-field" aria-hidden="true"><i className="news-route-line line-one" /><i className="news-route-line line-two" /><i className="news-route-line line-three" /><b className="news-route-point point-one" /><b className="news-route-point point-two" /><b className="news-route-point point-three" /><small className="news-route-label label-one">BAV NETWORK</small><small className="news-route-label label-two">OPS · 01</small></div>
       </div>
     </section>
   );
