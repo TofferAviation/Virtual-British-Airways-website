@@ -165,7 +165,7 @@ export default async function NewsPage() {
           description={settings.heroDescription}
           sideTitle={settings.heroSideTitle}
           sideText={settings.heroSideText}
-          tagline={settings.heroTagline}
+          latestUpdate={articles[0] ? { title: articles[0].title, href: articleHref(articles[0]), date: formatDate(articles[0].date) } : null}
         />
 
         <nav className="news-section-nav" aria-label="News sections">

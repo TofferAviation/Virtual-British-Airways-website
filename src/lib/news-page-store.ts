@@ -41,7 +41,7 @@ export type NewsPageSettings = {
 };
 
 export const defaultNewsPageSettings: NewsPageSettings = {
-  heroMode: "image",
+  heroMode: "editable",
   heroImage: "/branding/news-announcements-hero.png",
   heroImagePosition: "center 55%",
   heroKicker: "Newsroom",
@@ -126,7 +126,7 @@ export function normalizeNewsPageSettings(input?: Partial<NewsPageSettings>): Ne
   return {
     ...defaultNewsPageSettings,
     ...raw,
-    heroMode: raw.heroMode === "editable" ? "editable" : "image",
+    heroMode: raw.heroMode === "image" ? "image" : "editable",
     heroImage: normalizedHeroImage,
     heroImagePosition,
     mainSections,

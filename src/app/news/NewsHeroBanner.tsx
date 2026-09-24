@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 const DEFAULT_NEWS_HERO = "/branding/news-announcements-hero.png";
@@ -13,10 +14,10 @@ type Props = {
   description: string;
   sideTitle: string;
   sideText: string;
-  tagline: string;
+  latestUpdate: { title: string; href: string; date: string } | null;
 };
 
-export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, description, sideTitle, sideText, tagline }: Props) {
+export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, description, sideTitle, sideText, latestUpdate }: Props) {
   const [failedImages, setFailedImages] = useState<string[]>([]);
 
   const preferredImage = image || DEFAULT_NEWS_HERO;
@@ -58,13 +59,12 @@ export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, desc
           <p>{description}</p>
         </div>
         <div className="news-hero-latest">
-          <strong>{sideTitle}</strong>
-          <span>{sideText}</span>
-          <i />
-          <small>{tagline}</small>
+          <span className="news-hero-latest-label">{sideTitle}</span>
+          <h2>{latestUpdate?.title ?? sideText}</h2>
+          {latestUpdate ? <time>{latestUpdate.date}</time> : null}
+          {latestUpdate ? <Link href={latestUpdate.href}>Read update <span aria-hidden="true">→</span></Link> : null}
         </div>
-        <div className="news-hero-network" aria-hidden="true"><span /><span /><span /><span /><span /><span /></div>
-        <div className="news-hero-tag" aria-hidden="true">People<br />Routes<br />Community<br />Opportunity</div>
+        <div className="news-hero-route-field" aria-hidden="true"><i className="news-route-line line-one" /><i className="news-route-line line-two" /><i className="news-route-line line-three" /><b className="news-route-point point-one" /><b className="news-route-point point-two" /><b className="news-route-point point-three" /><small className="news-route-label label-one">BAV NETWORK</small><small className="news-route-label label-two">OPS · 01</small></div>
       </div>
     </section>
   );
