@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
 import { getEvents } from "@/lib/event-store";
 import { getMatchingBavEvent } from "@/lib/pilot-awards";
-import { applyApprovedPirepStats, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible } from "@/lib/pilot-store";
+import { applyApprovedPirepStats, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible, readPilotOperationsState, writePilotOperationsState } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 
@@ -215,28 +215,42 @@ function normalizePirep(pirep: Partial<PilotPirep> & Pick<PilotPirep, "id" | "pi
   };
 }
 
-async function readState(): Promise<OperationsState> {
+function normalizeState(raw: unknown): OperationsState {
+  const parsed = raw && typeof raw === "object"
+    ? raw as { bookings?: PilotBooking[]; flightPlans?: PilotFlightPlan[]; pireps?: PilotPirep[] }
+    : {};
+  return {
+    version: 4,
+    bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
+    flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans.map(normalizeFlightPlan) : [],
+    pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
+  };
+}
+
+async function readLegacyLocalState(): Promise<OperationsState | null> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     const raw = await fs.readFile(FILE, "utf8");
-    const parsed = JSON.parse(raw) as { bookings?: PilotBooking[]; flightPlans?: PilotFlightPlan[]; pireps?: PilotPirep[] };
-    return {
-      version: 4,
-      bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
-      flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans.map(normalizeFlightPlan) : [],
-      pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
-    };
+    return normalizeState(JSON.parse(raw));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const state: OperationsState = { version: 4, bookings: [], flightPlans: [], pireps: [] };
-    await fs.writeFile(FILE, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-    return state;
+    return null;
   }
 }
 
+async function readState(): Promise<OperationsState> {
+  const durableState = await readPilotOperationsState();
+  if (durableState !== null) return normalizeState(durableState);
+
+  // One-time migration for an existing local development/Render state. From
+  // this read onward, the selected flight lives with the pilot in Supabase.
+  const migratedState = await readLegacyLocalState() ?? { version: 4, bookings: [], flightPlans: [], pireps: [] };
+  await writePilotOperationsState(migratedState);
+  return migratedState;
+}
+
 async function writeState(state: OperationsState) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(FILE, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await writePilotOperationsState(normalizeState(state));
 }
 
 export async function createPilotBooking(input: Omit<PilotBooking, "id" | "createdAt" | "status">) {

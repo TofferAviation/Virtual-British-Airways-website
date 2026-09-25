@@ -22,6 +22,11 @@ type PilotState = {
   hourTransferRequests: PilotHourTransferRequest[];
   hourAdjustments: PilotHourAdjustment[];
   notifications: PilotNotification[];
+  /**
+   * Flight bookings and SimBrief links share the same durable record as the
+   * pilot identity. Kept opaque here so the operations module owns its shape.
+   */
+  operationsState: unknown | null;
 };
 
 type PilotPasswordResetToken = {
@@ -155,6 +160,7 @@ function emptyState(): PilotState {
     hourTransferRequests: [],
     hourAdjustments: [],
     notifications: [],
+    operationsState: null,
   };
 }
 
@@ -361,6 +367,9 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     hourTransferRequests,
     hourAdjustments,
     notifications,
+    operationsState: raw?.operationsState && typeof raw.operationsState === "object"
+      ? structuredClone(raw.operationsState)
+      : null,
   };
 }
 
@@ -413,6 +422,24 @@ async function writeState(state: PilotState) {
     throw new Error("Pilot account persistence is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY on the website host.");
   }
   await writeLocalState(normalized);
+}
+
+/**
+ * The pilot-operations module uses this slot for the selected service and
+ * SimBrief briefing. It deliberately uses the same Supabase-backed state as
+ * pilot identity data, rather than Render's disposable service filesystem.
+ */
+export async function readPilotOperationsState(): Promise<unknown | null> {
+  const state = await readState();
+  return state.operationsState === null ? null : structuredClone(state.operationsState);
+}
+
+export async function writePilotOperationsState(operationsState: unknown) {
+  const state = await readState();
+  state.operationsState = operationsState && typeof operationsState === "object"
+    ? structuredClone(operationsState)
+    : null;
+  await writeState(state);
 }
 
 function appendPilotNotification(state: PilotState, input: Omit<PilotNotification, "id" | "createdAt" | "readAt">) {
