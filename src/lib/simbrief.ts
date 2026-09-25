@@ -63,6 +63,10 @@ function buildSimbriefDispatchFields(booking: PilotBooking, pilotName: string, s
     date: simbriefDate(booking.date),
     cpt: pilotName,
     pid: simbriefPilotId,
+    // SimBrief's Dispatch Redirect/API accepts `reg` as the aircraft
+    // registration. Only send it once BAV has already reserved the matching
+    // Fleet airframe; a later Ember-only choice must not be guessed here.
+    ...(booking.registration ? { reg: booking.registration } : {}),
     planformat: "LIDO",
     units: "KGS",
     navlog: "1",
