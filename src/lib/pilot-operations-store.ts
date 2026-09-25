@@ -11,6 +11,7 @@ import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
+const REJECTED_PIREP_STAFF_RETENTION_MS = 5 * 60 * 60 * 1000;
 
 /**
  * Production requires the accompanying numeric-column migration before a
@@ -83,6 +84,17 @@ export class ActivePilotBookingError extends Error {
     super(`An active BAV flight already exists: ${booking.flightNumber} ${booking.from} → ${booking.to}.`);
     this.name = "ActivePilotBookingError";
   }
+}
+
+/**
+ * Rejections stay available to the pilot as a private operational record, but
+ * leave staff queues after a short review window so completed work does not
+ * accumulate indefinitely.
+ */
+function isRejectedPirepExpiredForStaff(pirep: Pick<PilotPirep, "status" | "reviewedAt" | "createdAt">, now = Date.now()) {
+  if (pirep.status !== "rejected") return false;
+  const reviewedAt = Date.parse(pirep.reviewedAt ?? pirep.createdAt);
+  return Number.isFinite(reviewedAt) && reviewedAt <= now - REJECTED_PIREP_STAFF_RETENTION_MS;
 }
 
 /** A compact operational briefing copied from a generated SimBrief OFP. */
@@ -421,10 +433,10 @@ export async function listAllPireps() {
   if (client) {
     const { data, error } = await client.from("pilot_pireps").select("*").order("created_at", { ascending: false });
     if (error) throw error;
-    return (data as PirepRow[]).map(pirepFromRow);
+    return (data as PirepRow[]).map(pirepFromRow).filter((pirep) => !isRejectedPirepExpiredForStaff(pirep));
   }
   const state = await readState();
-  return [...state.pireps].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return state.pireps.filter((pirep) => !isRejectedPirepExpiredForStaff(pirep)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getPirep(id: string) {
