@@ -53,12 +53,15 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
   const [from, setFrom] = useState<BavHubCode>(initialHub);
   const [fromSearch, setFromSearch] = useState(() => airportOptionLabel(baseAirports.find((airport) => airport.code === initialHub) ?? baseAirports[0]));
   const [toSearch, setToSearch] = useState(() => airportOptionLabel(airports.find((airport) => airport.code === "OSL") ?? airports[0]));
+  const [destinationTouched, setDestinationTouched] = useState(false);
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [aircraft, setAircraft] = useState("Any aircraft");
   const [minimumHours, setMinimumHours] = useState("");
   const [maximumHours, setMaximumHours] = useState("");
   const [airportSearchError, setAirportSearchError] = useState<string | null>(null);
   const durationFilterActive = Boolean(minimumHours.trim() || maximumHours.trim());
+  const aircraftHubSearch = aircraft !== "Any aircraft" && !toSearch.trim();
+  const hubSearchActive = durationFilterActive || aircraftHubSearch;
 
   const orderedAirports = useMemo(() => {
     const merged = [
@@ -75,8 +78,8 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const departure = airportCodeFromSearch(fromSearch, baseAirports);
-    const arrival = durationFilterActive ? null : airportCodeFromSearch(toSearch, orderedAirports);
-    if (!departure || (!durationFilterActive && !arrival)) {
+    const arrival = hubSearchActive ? null : airportCodeFromSearch(toSearch, orderedAirports);
+    if (!departure || (!hubSearchActive && !arrival)) {
       setAirportSearchError("Choose an airport from the search suggestions, or enter its three-letter airport code.");
       return;
     }
@@ -96,7 +99,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
     }
     setAirportSearchError(null);
     setFrom(departure as BavHubCode);
-    const params = new URLSearchParams(durationFilterActive ? { hub: departure, date } : { from: departure, to: arrival!, date });
+    const params = new URLSearchParams(hubSearchActive ? { hub: departure, date } : { from: departure, to: arrival!, date });
     if (aircraft !== "Any aircraft") params.set("aircraft", aircraft);
     if (minimum !== null) params.set("minHours", String(minimum));
     if (maximum !== null) params.set("maxHours", String(maximum));
@@ -127,10 +130,11 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
           </datalist>
         </div>
         <div className="field">
-          <label htmlFor="to">{durationFilterActive ? "To — set by flight time" : "To"}</label>
+          <label htmlFor="to">{durationFilterActive ? "To — set by flight time" : aircraft !== "Any aircraft" ? "To — optional with aircraft" : "To"}</label>
           <input id="to" type="search" list="bav-destination-airports" value={durationFilterActive ? "" : toSearch} placeholder={durationFilterActive ? "All matching destinations" : "Search destination or airport code"} autoComplete="off" disabled={durationFilterActive} onChange={(event) => {
             const value = event.target.value;
             setToSearch(value);
+            setDestinationTouched(true);
             setAirportSearchError(null);
           }} aria-describedby="airport-search-help" />
           <datalist id="bav-destination-airports">
@@ -145,7 +149,11 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
         </div>
         <div className="field">
           <label htmlFor="aircraft">Aircraft</label>
-          <select id="aircraft" value={aircraft} onChange={(event) => setAircraft(event.target.value)}>
+          <select id="aircraft" value={aircraft} onChange={(event) => {
+            const selection = event.target.value;
+            setAircraft(selection);
+            if (selection !== "Any aircraft" && !destinationTouched) setToSearch("");
+          }}>
             <option>Any aircraft</option>
             {aircraftTypes.map((type) => <option key={type}>{type}</option>)}
           </select>
@@ -164,7 +172,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
       </div>
       <div className="search-helper">
         <span><strong>{BAV_NETWORK_ROUTE_COUNTS.total} BA London-hub airport-pair routes</strong> loaded: {BAV_NETWORK_ROUTE_COUNTS.LHR} Heathrow, {BAV_NETWORK_ROUTE_COUNTS.LGW} Gatwick and {BAV_NETWORK_ROUTE_COUNTS.LCY} City.</span>
-        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ hub: from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : <span>{aircraft} · filter this city pair by the aircraft scheduled for that service</span>}
+        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ hub: from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : aircraftHubSearch ? <span>{aircraft} · showing every route from {from} that can operate with this airframe</span> : <span>{aircraft} · filter this city pair by the aircraft scheduled for that service</span>}
       </div>
     </form>
   );
