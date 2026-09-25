@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createFlightPlanForBooking, createPilotBooking } from "@/lib/pilot-operations-store";
+import { ActivePilotBookingError, createFlightPlanForBooking, createPilotBooking, getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
@@ -35,19 +35,38 @@ export async function bookFlight(formData: FormData) {
     redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=qualification`);
   }
 
-  const booking = await createPilotBooking({
-    pilotId: session.pilotId,
-    routeId: flight.routeId,
-    flightNumber: flight.number,
-    from,
-    to,
-    aircraft: selectedAircraft,
-    departure: flight.departure,
-    arrival: flight.arrival,
-    duration: flight.duration,
-    date,
-    scheduleScoringEnabled: flight.scheduleScoringEnabled === true,
-  });
+  // A double-click, stale page, or a second browser must not be able to
+  // replace the pilot's live Ember assignment. Send them back to the existing
+  // briefing instead; an explicit future cancellation flow is required to
+  // change it.
+  const activeBooking = await getActivePilotBooking(session.pilotId);
+  if (activeBooking) {
+    redirect(`/flight-plans/${encodeURIComponent(activeBooking.id)}?protected=1`);
+  }
+
+  let booking;
+  try {
+    booking = await createPilotBooking({
+      pilotId: session.pilotId,
+      routeId: flight.routeId,
+      flightNumber: flight.number,
+      from,
+      to,
+      aircraft: selectedAircraft,
+      departure: flight.departure,
+      arrival: flight.arrival,
+      duration: flight.duration,
+      date,
+      scheduleScoringEnabled: flight.scheduleScoringEnabled === true,
+    });
+  } catch (error) {
+    // Covers two submissions racing each other between the check above and
+    // the write. The existing assignment remains untouched.
+    if (error instanceof ActivePilotBookingError) {
+      redirect(`/flight-plans/${encodeURIComponent(error.booking.id)}?protected=1`);
+    }
+    throw error;
+  }
 
   const simbriefPilotId = pilot?.simbriefPilotId ?? null;
   await createFlightPlanForBooking({

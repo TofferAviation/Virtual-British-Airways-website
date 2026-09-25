@@ -23,6 +23,7 @@ export default async function FlightPlanPage({ params, searchParams }: { params:
   if (!booking || !pilot || !flightPlan) notFound();
   if (booking.status === "cancelled") redirect("/book");
   const error = typeof query.error === "string" ? query.error : "";
+  const protectedAssignment = query.protected === "1";
   const synced = query.synced === "1";
   const aircraftUpdated = query.aircraftUpdated === "1";
   const aircraftError = ["aircraft-change", "aircraft-qualification", "aircraft-started"].includes(error);
@@ -37,6 +38,7 @@ export default async function FlightPlanPage({ params, searchParams }: { params:
   return <><SiteHeader /><main className="page-shell flight-plan-page"><div className="page-container flight-plan-container">
     <div className="booking-steps"><div className="booking-step"><span>1</span>Choose virtual flight</div><div className="booking-step active"><span>2</span>Flight briefing</div><div className="booking-step"><span>3</span>Confirm assignment</div></div>
     <section className="flight-plan-hero"><div><span className="section-kicker">BAV FLIGHT PLANNING</span><h1>{booking.flightNumber} · {booking.from} → {booking.to}</h1><p>Your BAV assignment is saved. Prepare the dispatch below before you fly.</p></div><Link className="button button-outline" href="/account">View account</Link></section>
+    {protectedAssignment ? <div className="flight-plan-notice success"><strong>Your active BAV flight is protected.</strong> It was kept in place instead of being replaced. Complete it before selecting another service.</div> : null}
     {synced ? <div className="flight-plan-notice success"><strong>Flight plan saved to your BAV account.</strong> The latest matching SimBrief OFP is now linked to this assignment.</div> : null}
     {aircraftUpdated ? <div className="flight-plan-notice success"><strong>Virtual aircraft updated.</strong> Generate a fresh SimBrief OFP for {booking.aircraft} before beginning the Ember flight.</div> : null}
     {aircraftError ? <div className="flight-plan-notice error"><strong>Aircraft change unavailable.</strong> {error === "aircraft-started" ? "The aircraft is locked once an Ember flight has begun." : error === "aircraft-qualification" ? "Your BAV rank or type ratings do not permit that aircraft." : "Choose the published aircraft or an Operations-approved virtual substitute."}</div> : null}

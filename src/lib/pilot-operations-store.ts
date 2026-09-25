@@ -70,6 +70,18 @@ export type PilotBooking = {
   createdAt: string;
 };
 
+/**
+ * A booking is the durable authority for an Ember/ACARS operation.  Creating
+ * another booking must never silently invalidate one that a pilot is already
+ * preparing or operating.
+ */
+export class ActivePilotBookingError extends Error {
+  public constructor(public readonly booking: PilotBooking) {
+    super(`An active BAV flight already exists: ${booking.flightNumber} ${booking.from} → ${booking.to}.`);
+    this.name = "ActivePilotBookingError";
+  }
+}
+
 /** A compact operational briefing copied from a generated SimBrief OFP. */
 export type SimbriefRoutePoint = {
   name: string;
@@ -229,8 +241,18 @@ async function writeState(state: OperationsState) {
 
 export async function createPilotBooking(input: Omit<PilotBooking, "id" | "createdAt" | "status">) {
   const state = await readState();
-  for (const booking of state.bookings) {
-    if (booking.pilotId === input.pilotId && ["booked", "in_progress"].includes(booking.status)) booking.status = "cancelled";
+  const activeBooking = [...state.bookings].reverse().find((booking) =>
+    booking.pilotId === input.pilotId && ["booked", "in_progress"].includes(booking.status),
+  );
+  if (activeBooking) {
+    const isSameBooking = activeBooking.routeId === input.routeId &&
+      activeBooking.flightNumber === input.flightNumber &&
+      activeBooking.from === input.from &&
+      activeBooking.to === input.to &&
+      activeBooking.date === input.date &&
+      activeBooking.aircraft === input.aircraft;
+    if (isSameBooking) return activeBooking;
+    throw new ActivePilotBookingError(activeBooking);
   }
   const booking: PilotBooking = { ...input, id: randomUUID(), createdAt: new Date().toISOString(), status: "booked" };
   state.bookings.push(booking);
