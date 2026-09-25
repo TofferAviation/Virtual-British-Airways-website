@@ -58,6 +58,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
   const [minimumHours, setMinimumHours] = useState("");
   const [maximumHours, setMaximumHours] = useState("");
   const [airportSearchError, setAirportSearchError] = useState<string | null>(null);
+  const durationFilterActive = Boolean(minimumHours.trim() || maximumHours.trim());
 
   const orderedAirports = useMemo(() => {
     const merged = [
@@ -74,12 +75,12 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const departure = airportCodeFromSearch(fromSearch, baseAirports);
-    const arrival = airportCodeFromSearch(toSearch, orderedAirports);
-    if (!departure || !arrival) {
+    const arrival = durationFilterActive ? null : airportCodeFromSearch(toSearch, orderedAirports);
+    if (!departure || (!durationFilterActive && !arrival)) {
       setAirportSearchError("Choose an airport from the search suggestions, or enter its three-letter airport code.");
       return;
     }
-    if (departure === arrival) {
+    if (arrival && departure === arrival) {
       setAirportSearchError("Choose different departure and arrival airports.");
       return;
     }
@@ -95,7 +96,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
     }
     setAirportSearchError(null);
     setFrom(departure as BavHubCode);
-    const params = new URLSearchParams({ from: departure, to: arrival, date });
+    const params = new URLSearchParams(durationFilterActive ? { hub: departure, date } : { from: departure, to: arrival!, date });
     if (aircraft !== "Any aircraft") params.set("aircraft", aircraft);
     if (minimum !== null) params.set("minHours", String(minimum));
     if (maximum !== null) params.set("maxHours", String(maximum));
@@ -126,8 +127,8 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
           </datalist>
         </div>
         <div className="field">
-          <label htmlFor="to">To</label>
-          <input id="to" type="search" list="bav-destination-airports" value={toSearch} placeholder="Search destination or airport code" autoComplete="off" onChange={(event) => {
+          <label htmlFor="to">{durationFilterActive ? "To — set by flight time" : "To"}</label>
+          <input id="to" type="search" list="bav-destination-airports" value={durationFilterActive ? "" : toSearch} placeholder={durationFilterActive ? "All matching destinations" : "Search destination or airport code"} autoComplete="off" disabled={durationFilterActive} onChange={(event) => {
             const value = event.target.value;
             setToSearch(value);
             setAirportSearchError(null);
@@ -152,7 +153,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
         <button className="button button-primary search-submit" type="submit">Find flights</button>
       </div>
       <div className="flight-search-duration">
-        <div className="flight-search-duration-copy"><strong>Flight time</strong><span>Optional — show routes within the hours you have available.</span></div>
+        <div className="flight-search-duration-copy"><strong>Flight time</strong><span>{durationFilterActive ? `Searching every matching destination from ${from}.` : "Optional — show routes within the hours you have available."}</span></div>
         <div className="flight-search-duration-fields">
           <label htmlFor="minimum-hours"><span>From</span><input id="minimum-hours" type="number" min="0" max="24" step="1" inputMode="numeric" placeholder="Any" value={minimumHours} onChange={(event) => { setMinimumHours(event.target.value); setAirportSearchError(null); }} /><em>hours</em></label>
           <label htmlFor="maximum-hours"><span>To</span><input id="maximum-hours" type="number" min="0" max="24" step="1" inputMode="numeric" placeholder="Any" value={maximumHours} onChange={(event) => { setMaximumHours(event.target.value); setAirportSearchError(null); }} /><em>hours</em></label>
