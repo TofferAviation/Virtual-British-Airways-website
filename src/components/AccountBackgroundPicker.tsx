@@ -10,18 +10,27 @@ type Props = {
 };
 
 const MAX_INPUT_BYTES = 12 * 1024 * 1024;
-// The account page is intentionally wide on desktop. Keep enough pixels for
-// a crisp full-width hero without sending the original photo to the server.
-const WIDTH = 2560;
-const HEIGHT = 960;
+// Only resize when an original cannot be retained. The dashboard handles the
+// final responsive crop, so preparing a fixed banner here would unnecessarily
+// crop and upscale the pilot's image before it ever reaches the account page.
+const MAX_RENDER_WIDTH = 3200;
+const MAX_RENDER_HEIGHT = 1800;
 
-function resizeToBackground(file: File) {
+function prepareBackground(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("That image could not be read."));
     reader.onload = () => {
       if (typeof reader.result !== "string") {
         reject(new Error("That image could not be read."));
+        return;
+      }
+
+      // Preserve the supplied image byte-for-byte whenever it already fits
+      // the private account-state limit. This avoids canvas resampling and
+      // WebP recompression of perfectly suitable dashboard photos.
+      if (reader.result.length <= MAX_ACCOUNT_BACKGROUND_DATA_LENGTH) {
+        resolve(reader.result);
         return;
       }
 
@@ -33,15 +42,14 @@ function resizeToBackground(file: File) {
           return;
         }
 
-        const sourceRatio = image.naturalWidth / image.naturalHeight;
-        const targetRatio = WIDTH / HEIGHT;
-        const sourceWidth = sourceRatio > targetRatio ? image.naturalHeight * targetRatio : image.naturalWidth;
-        const sourceHeight = sourceRatio > targetRatio ? image.naturalHeight : image.naturalWidth / targetRatio;
-        const sourceX = (image.naturalWidth - sourceWidth) / 2;
-        const sourceY = (image.naturalHeight - sourceHeight) / 2;
+        const scale = Math.min(
+          1,
+          MAX_RENDER_WIDTH / image.naturalWidth,
+          MAX_RENDER_HEIGHT / image.naturalHeight,
+        );
         const canvas = document.createElement("canvas");
-        canvas.width = WIDTH;
-        canvas.height = HEIGHT;
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
         const context = canvas.getContext("2d");
         if (!context) {
           reject(new Error("Your browser could not prepare that image."));
@@ -49,15 +57,15 @@ function resizeToBackground(file: File) {
         }
 
         context.imageSmoothingQuality = "high";
-        context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, WIDTH, HEIGHT);
-        for (const quality of [0.92, 0.88, 0.84, 0.8]) {
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        for (const quality of [0.98, 0.95, 0.92, 0.88]) {
           const prepared = canvas.toDataURL("image/webp", quality);
           if (prepared.length <= MAX_ACCOUNT_BACKGROUND_DATA_LENGTH) {
             resolve(prepared);
             return;
           }
         }
-        reject(new Error("That image is too detailed to use as a dashboard background. Please choose a simpler image."));
+        reject(new Error("That image is too large for a private dashboard background. Choose a JPG or WebP under 2.4 MB for original-quality display."));
       };
       image.src = reader.result;
     };
@@ -86,7 +94,7 @@ export function AccountBackgroundPicker({ value, onChange }: Props) {
     setBusy(true);
     setMessage("Preparing dashboard background…");
     try {
-      await onChange(await resizeToBackground(file));
+      await onChange(await prepareBackground(file));
       setMessage("Dashboard background updated.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not prepare that image.");
@@ -115,7 +123,7 @@ export function AccountBackgroundPicker({ value, onChange }: Props) {
       </div>
       <div className={styles.copy}>
         <strong id="account-background-title">Account background</strong>
-        <small>Add a personal image behind the blue account welcome panel. It is shown only on your signed-in dashboard, never on public pages or in Ember.</small>
+        <small>Add a landscape image behind the account welcome panel. A JPG, PNG or WebP that fits within 2.4 MB keeps its original quality; larger images are reduced without stretching or pre-cropping. It is shown only on your signed-in dashboard, never on public pages or in Ember.</small>
       </div>
       <input className={styles.input} ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} hidden />
       <div className={styles.actions}>
