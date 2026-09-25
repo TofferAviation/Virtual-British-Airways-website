@@ -8,13 +8,16 @@ import { getPilotById } from "@/lib/pilot-store";
 import { supportedSimulatorLabels } from "@/lib/acars-contract";
 import { getPilotAwardDisplay } from "@/lib/pilot-awards";
 import { reviewPirepAction } from "./actions";
+import { PirepReviewForm } from "./PirepReviewForm";
+import styles from "./PirepReview.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "PIREP Centre" };
 
-export default async function StaffPirepsPage() {
+export default async function StaffPirepsPage({ searchParams }: { searchParams: Promise<{ reviewed?: string; error?: string }> }) {
   await requireStaffPermission("routes.view");
-  const pireps = await listAllPireps();
+  const [pireps, params] = await Promise.all([listAllPireps(), searchParams]);
+  const reviewed = params.reviewed === "accepted" || params.reviewed === "rejected" || params.reviewed === "changes_requested" ? params.reviewed : null;
   const pilots = new Map<string, Awaited<ReturnType<typeof getPilotById>>>();
   for (const pirep of pireps) if (!pilots.has(pirep.pilotId)) pilots.set(pirep.pilotId, await getPilotById(pirep.pilotId));
   const pending = pireps.filter((p) => p.status === "pending").length;
@@ -27,9 +30,11 @@ export default async function StaffPirepsPage() {
       <section className="ops-hero"><div className="ops-shell"><span className="ops-kicker">Staff Operations</span><h1>PIREP Centre</h1><p>Review flight reports from BAV pilots. Manual fallback reports and automatic Ember ACARS submissions from X-Plane 12, MSFS 2020 and MSFS 2024 use the same queue.</p></div></section>
       <section className="ops-shell ops-summary"><div><strong>{pending}</strong><span>Pending</span></div><div><strong>{changes}</strong><span>Changes requested</span></div><div><strong>{accepted}</strong><span>Accepted</span></div><Link className="ops-secondary" href="/staff">Back to Staff Centre</Link></section>
       <section className="ops-shell ops-pirep-list">
+        {reviewed ? <div className={`${styles.feedback} ${styles.success}`} role="status"><strong>{reviewed === "accepted" ? "PIREP accepted" : reviewed === "rejected" ? "PIREP rejected" : "Changes requested"}</strong><span>{reviewed === "accepted" ? "The pilot’s career credit and notification have been updated." : reviewed === "rejected" ? "The decision and pilot notification have been recorded." : "The pilot has been notified that more information is required."}</span></div> : null}
+        {params.error === "review" ? <div className={`${styles.feedback} ${styles.error}`} role="alert"><strong>PIREP was not updated.</strong><span>Refresh the queue and try again. The existing report has not been changed.</span></div> : null}
         {pireps.length ? pireps.map((pirep) => {
           const pilot = pilots.get(pirep.pilotId);
-          const canReview = pirep.status !== "accepted";
+          const canReview = pirep.status === "pending" || pirep.status === "changes_requested";
           const careerAwards = pilot?.awards.filter((award) => award.sourcePirepId === pirep.id) ?? [];
           const arrivalReconciliation = parsePirepArrivalReconciliation(pirep.pilotComments);
           return <article className="ops-card ops-review-card" key={pirep.id}>
@@ -38,7 +43,7 @@ export default async function StaffPirepsPage() {
             {arrivalReconciliation ? <div className="ops-comments"><strong>{arrivalReconciliation.outcome === "returned_to_origin" ? "Returned to origin" : arrivalReconciliation.outcome === "diverted" ? "Diversion" : "Arrival verification required"}</strong><p>{arrivalReconciliation.outcome === "arrival_unverified" ? `Planned ${arrivalReconciliation.plannedStation}; Ember could not verify the final airport and did not move the Fleet registration.` : `Planned ${arrivalReconciliation.plannedStation}; actual ${arrivalReconciliation.actualStation ?? "not verified"}.`}</p></div> : null}
             {pirep.pilotComments ? <div className="ops-comments"><strong>Pilot comments</strong><p>{pirep.pilotComments}</p></div> : null}
             {pirep.staffComments ? <div className="ops-comments staff"><strong>Staff comments</strong><p>{pirep.staffComments}</p></div> : null}
-            {canReview ? <form action={reviewPirepAction} className="ops-review-form"><input type="hidden" name="id" value={pirep.id} /><label><span>Review comments</span><textarea name="comments" rows={3} maxLength={2000} placeholder="Optional for approval; recommended for rejection or changes." /></label><div className="ops-actions"><button className="ops-secondary" name="decision" value="changes_requested" type="submit">Request changes</button><button className="ops-danger" name="decision" value="rejected" type="submit">Reject</button><button className="ops-primary" name="decision" value="accepted" type="submit">Accept PIREP</button></div></form> : <div className="ops-approved-note">Approved by {pirep.reviewedBy ?? "BAV Staff"} · +{pirep.pointsAwarded.toFixed(1)} VA Points{pirep.lateStartPenaltyPoints > 0 ? ` · −${pirep.lateStartPenaltyPoints.toFixed(1)} late-start adjustment` : ""} · +{pirep.tierPointsAwarded} Tier Points{careerAwards.length ? ` · ★ ${careerAwards.map((award) => getPilotAwardDisplay(award).title).join(" · ")}` : ""}</div>}
+            {canReview ? <PirepReviewForm pirepId={pirep.id} action={reviewPirepAction} /> : pirep.status === "rejected" ? <div className={styles.rejected}>Rejected by {pirep.reviewedBy ?? "BAV Staff"}{pirep.reviewedAt ? ` · ${new Date(pirep.reviewedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : ""}</div> : <div className="ops-approved-note">Approved by {pirep.reviewedBy ?? "BAV Staff"} · +{pirep.pointsAwarded.toFixed(1)} VA Points{pirep.lateStartPenaltyPoints > 0 ? ` · −${pirep.lateStartPenaltyPoints.toFixed(1)} late-start adjustment` : ""} · +{pirep.tierPointsAwarded} Tier Points{careerAwards.length ? ` · ★ ${careerAwards.map((award) => getPilotAwardDisplay(award).title).join(" · ")}` : ""}</div>}
           </article>;
         }) : <div className="ops-card ops-empty"><h2>No PIREPs yet</h2><p>Submitted pilot flight reports will appear here.</p></div>}
       </section>

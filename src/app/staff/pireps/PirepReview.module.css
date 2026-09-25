@@ -1,0 +1,16 @@
+.form :global(.ops-actions) button{transition:transform .14s ease,filter .14s ease,opacity .14s ease}
+.form :global(.ops-actions) button:not(:disabled):active{transform:translateY(1px) scale(.97);filter:brightness(.9)}
+.form :global(.ops-actions) button:focus-visible{outline:3px solid rgba(24,105,170,.38);outline-offset:2px}
+.form :global(.ops-actions) button:disabled{cursor:wait;opacity:.72}
+.pending{gap:7px}
+.pending::after{content:"";width:10px;height:10px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:review-spin .7s linear infinite}
+.submission{min-height:17px;margin:0;color:#56708c;font-size:12px;font-weight:700;opacity:0;transition:opacity .14s ease}
+.submission.submitting{opacity:1}
+.feedback{display:flex;align-items:center;gap:9px;border:1px solid;padding:12px 14px;font-size:12px}
+.feedback span{font-weight:400}
+.success{background:#e8f7ef;border-color:#9fd0b5;color:#17633b}
+.error{background:#fdecef;border-color:#edb8c3;color:#8e1831}
+.rejected{background:#fdecef;color:#8e1831;padding:12px 14px;font-size:12px;font-weight:700}
+@keyframes review-spin{to{transform:rotate(360deg)}}
+:global(html[data-theme="dark"]) .success{background:#113224;border-color:#286544;color:#bce8ce}
+:global(html[data-theme="dark"]) .error,:global(html[data-theme="dark"]) .rejected{background:#351524;border-color:#743044;color:#ffd1da}
