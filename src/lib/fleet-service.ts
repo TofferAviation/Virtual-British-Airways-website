@@ -21,6 +21,44 @@ export type FleetAircraftSummary = {
   image: FleetAircraftImage | null;
 };
 
+function normaliseAircraftType(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function aircraftIcaoForVirtualType(value: string | null | undefined) {
+  const normalized = normaliseAircraftType(value).toUpperCase();
+  if (normalized.includes("777200") || normalized.includes("B772") || normalized.includes("B77E")) return "B772";
+  if (normalized.includes("777300") || normalized.includes("B773") || normalized.includes("B77W")) return "B773";
+  if (normalized.includes("7878") || normalized.includes("B788")) return "B788";
+  if (normalized.includes("7879") || normalized.includes("B789")) return "B789";
+  if (normalized.includes("78710") || normalized.includes("B78X")) return "B78X";
+  if (normalized.includes("A319")) return "A319";
+  if (normalized.includes("A320NEO") || normalized.includes("A20N")) return "A20N";
+  if (normalized.includes("A320")) return "A320";
+  if (normalized.includes("A321NEO") || normalized.includes("A21N")) return "A21N";
+  if (normalized.includes("A321")) return "A321";
+  if (normalized.includes("A350") || normalized.includes("A359") || normalized.includes("A35K")) return "A359";
+  if (normalized.includes("E190")) return "E190";
+  return null;
+}
+
+/** Matches a BAV service's approved virtual aircraft with a physical Fleet record. */
+export function fleetAircraftMatchesVirtualType(aircraft: Pick<FleetAircraftSummary, "aircraftModel" | "icaoType">, virtualAircraft: string) {
+  const requested = normaliseAircraftType(virtualAircraft);
+  const fleetType = normaliseAircraftType(aircraft.aircraftModel);
+  const requestedIcao = aircraftIcaoForVirtualType(virtualAircraft);
+  if (requestedIcao && aircraft.icaoType?.toUpperCase() === requestedIcao) return true;
+  return Boolean(requested && fleetType && (requested === fleetType || requested.includes(fleetType) || fleetType.includes(requested)));
+}
+
+/** A booking selector only offers registrations that Fleet currently marks safe to dispatch. */
+export function isFleetAircraftBookable(aircraft: FleetAircraftSummary) {
+  return aircraft.operationalStatus === "available" &&
+    aircraft.technicalStatus === "serviceable" &&
+    aircraft.dispatchStatus === "dispatchable" &&
+    !aircraft.nextAssignedFlightReference;
+}
+
 export type FleetAircraftImage = {
   url: string;
   source: string;

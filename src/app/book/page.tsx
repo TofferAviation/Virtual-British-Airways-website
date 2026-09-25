@@ -10,7 +10,9 @@ import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getPilotById } from "@/lib/pilot-store";
 import { BAV_NETWORK_ROUTE_COUNTS } from "@/data/bav-network-2026";
 import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { fleetAircraftMatchesVirtualType, isFleetAircraftBookable, listFleetAircraft } from "@/lib/fleet-service";
 import { bookFlight } from "./actions";
+import { BookingAssignmentControls } from "./BookingAssignmentControls";
 
 export const dynamic = "force-dynamic";
 
@@ -82,9 +84,12 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   const hubCode = hub?.code ?? null;
   const pilotSession = await getPilotSession();
   const pilot = pilotSession ? await getPilotById(pilotSession.pilotId) : null;
+  const fleetAircraft = pilot ? await listFleetAircraft().catch(() => []) : [];
   const unavailable = params.error === "unavailable";
   const qualificationError = params.error === "qualification";
   const aircraftError = params.error === "aircraft";
+  const registrationError = params.error === "registration";
+  const fleetError = params.error === "fleet";
   const flexibleParams = new URLSearchParams({ date, flexible: "1" });
   if (hub) flexibleParams.set("hub", hub.code);
   else if (hasCityPair) { flexibleParams.set("from", from); flexibleParams.set("to", to); }
@@ -115,7 +120,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
               <div className="section-kicker">BAV London-hub network</div>
               <h1>{aircraft && !hasCityPair && !hub ? `${aircraft} routes` : hub ? `Flights departing ${hub.name} (${hub.code})` : `${airportName(from)} (${from}) → ${airportName(to)} (${to})`}</h1>
               <p>{date} · {flexible ? "virtual-flexible BAV service catalogue" : "BAV London-hub route catalogue"} · flight-simulation planning times</p>
-              {aircraft ? <p>Showing only routes that can operate with {aircraft}. Reserve a matching registration in Ember after choosing a service.</p> : null}
+              {aircraft ? <p>Showing only routes that can operate with {aircraft}. Choose a matching registration while booking, or let Ember select one later.</p> : null}
               {hub ? <p>{hub.role}. {hubRouteCount} published airport-pair routes are available from this hub. A confirmed BA timetable replaces the BAV virtual service when Operations publishes it.</p> : null}
               {flexible ? <p><strong>Fly when it suits you:</strong> schedules are simulator-flexible references, not a required departure time.</p> : null}
             </div>
@@ -124,6 +129,8 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
           {unavailable ? <div className="integration-note"><strong>Flight no longer available:</strong> the selected BAV assignment may have filled or been disabled by Operations. Choose another available service.</div> : null}
           {qualificationError ? <div className="integration-note"><strong>Qualification required:</strong> this service is outside your current rank or type-rating approval. Review your pilot profile or contact Operations after meeting the required criteria.</div> : null}
           {aircraftError ? <div className="integration-note"><strong>Aircraft selection unavailable:</strong> choose the published scheduled aircraft or an Operations-approved virtual substitute that your current rank and type ratings permit.</div> : null}
+          {registrationError ? <div className="integration-note"><strong>Registration no longer available:</strong> choose another listed registration or let Ember select one when you are ready to fly.</div> : null}
+          {fleetError ? <div className="integration-note"><strong>Fleet service unavailable:</strong> the flight can still be booked without a registration. Try selecting an airframe again in Ember once Fleet is available.</div> : null}
           <form className="booking-duration-filter card" action="/book">
             {hub ? <input type="hidden" name="hub" value={hub.code} /> : null}
             {hasCityPair ? <><input type="hidden" name="from" value={from} /><input type="hidden" name="to" value={to} /></> : null}
@@ -150,6 +157,9 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
               const approvedAircraft = catalogueOnly ? [] : Array.from(new Set([flight.aircraft, ...(flight.aircraftOptions ?? [])]));
               const eligibleAircraft = pilot ? approvedAircraft.filter((candidate) => getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: candidate }).eligible) : [];
               const selectedAircraft = aircraft && eligibleAircraft.includes(aircraft) ? aircraft : eligibleAircraft.includes(flight.aircraft) ? flight.aircraft : (eligibleAircraft[0] ?? flight.aircraft);
+              const registrationOptions = Object.fromEntries(eligibleAircraft.map((candidate) => [candidate, fleetAircraft
+                .filter((item) => isFleetAircraftBookable(item) && fleetAircraftMatchesVirtualType(item, candidate))
+                .map((item) => ({ id: item.id, registration: item.registration, aircraft: item.aircraftModel, station: item.currentStation }))]));
               return <article className="result-flight card" key={flight.routeId}>
                 <div className="result-times"><div><strong>{catalogueOnly ? "BA" : flight.departure}</strong><span>{flight.from}</span></div><div className="result-line"><span>{catalogueOnly ? "Network route" : flight.duration}</span><i /></div><div><strong>{catalogueOnly ? "Route" : flight.arrival}</strong><span>{flight.to}</span></div></div>
                 <div className="result-meta"><strong>{catalogueOnly ? "British Airways network city pair" : virtualTimetable ? `${flight.number} · BAV virtual service` : `${flight.number} · British Airways`}</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{catalogueOnly ? "Flight number, local airport times and aircraft will appear once Operations publishes a verified schedule." : `${callsignLabel(flight.number, flight.callsign) ?? "Callsign pending"} · ${flight.aircraft} · ${virtualTimetable ? "BAV UTC reference schedule" : flight.scheduledForSelectedDate ? "Scheduled equipment" : "Virtual-flexible assignment"}`}</span></div>
@@ -157,7 +167,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                 {catalogueOnly ? <button className="button button-outline" type="button" disabled>Awaiting verified timetable</button> : pilotSession && pilot ? (
                   flight.slots > 0 && eligibleAircraft.length > 0 ? <form action={bookFlight}>
                     <input type="hidden" name="from" value={flight.from} /><input type="hidden" name="to" value={flight.to} /><input type="hidden" name="date" value={date} /><input type="hidden" name="flightNumber" value={flight.number} /><input type="hidden" name="routeId" value={flight.routeId} />{flexible ? <input type="hidden" name="flexible" value="1" /> : null}
-                    {eligibleAircraft.length > 1 ? <label className="booking-aircraft-choice"><span>Virtual aircraft</span><select name="aircraft" defaultValue={selectedAircraft}>{eligibleAircraft.map((candidate) => <option key={candidate} value={candidate}>{candidate}{candidate === flight.aircraft ? " · scheduled" : " · approved substitute"}</option>)}</select></label> : <input type="hidden" name="aircraft" value={selectedAircraft} />}
+                    <BookingAssignmentControls aircraft={eligibleAircraft} selectedAircraft={selectedAircraft} registrationOptions={registrationOptions} />
                     <button className="button button-primary" type="submit">{virtualTimetable ? "Select BAV service" : "Select flight"}</button>
                   </form> : flight.slots > 0 && eligibility && !eligibility.eligible ? <div className="pilot-qualification-lock"><button className="button button-primary" type="button" disabled>Qualification required</button><span>{eligibility.reason}</span></div> : <button className="button button-primary" type="button" disabled>Flight full</button>
                 ) : <Link className="button button-primary" href="/login">Log in to book</Link>}

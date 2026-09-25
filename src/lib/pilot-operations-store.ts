@@ -60,6 +60,9 @@ export type PilotBooking = {
   from: string;
   to: string;
   aircraft: string;
+  /** Fleet airframe chosen at booking time; null means Ember may select an available matching registration. */
+  fleetAircraftId: string | null;
+  registration: string | null;
   departure: string;
   arrival: string;
   duration: string;
@@ -180,14 +183,20 @@ export type PilotPirep = {
 };
 
 type OperationsState = {
-  version: 4;
+  version: 5;
   bookings: PilotBooking[];
   flightPlans: PilotFlightPlan[];
   pireps: PilotPirep[];
 };
 
 function normalizeBooking(booking: PilotBooking): PilotBooking {
-  return { ...booking, routeId: booking.routeId ?? null, scheduleScoringEnabled: booking.scheduleScoringEnabled === true };
+  return {
+    ...booking,
+    routeId: booking.routeId ?? null,
+    fleetAircraftId: typeof booking.fleetAircraftId === "string" && booking.fleetAircraftId.trim() ? booking.fleetAircraftId.trim() : null,
+    registration: typeof booking.registration === "string" && booking.registration.trim() ? booking.registration.trim().toUpperCase() : null,
+    scheduleScoringEnabled: booking.scheduleScoringEnabled === true,
+  };
 }
 
 function normalizeFlightPlan(plan: PilotFlightPlan): PilotFlightPlan {
@@ -220,7 +229,7 @@ function normalizeState(raw: unknown): OperationsState {
     ? raw as { bookings?: PilotBooking[]; flightPlans?: PilotFlightPlan[]; pireps?: PilotPirep[] }
     : {};
   return {
-    version: 4,
+    version: 5,
     bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
     flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans.map(normalizeFlightPlan) : [],
     pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
@@ -244,7 +253,7 @@ async function readState(): Promise<OperationsState> {
 
   // One-time migration for an existing local development/Render state. From
   // this read onward, the selected flight lives with the pilot in Supabase.
-  const migratedState = await readLegacyLocalState() ?? { version: 4, bookings: [], flightPlans: [], pireps: [] };
+  const migratedState = await readLegacyLocalState() ?? { version: 5, bookings: [], flightPlans: [], pireps: [] };
   await writePilotOperationsState(migratedState);
   return migratedState;
 }
@@ -253,7 +262,12 @@ async function writeState(state: OperationsState) {
   await writePilotOperationsState(normalizeState(state));
 }
 
-export async function createPilotBooking(input: Omit<PilotBooking, "id" | "createdAt" | "status">) {
+type NewPilotBooking = Omit<PilotBooking, "id" | "createdAt" | "status" | "fleetAircraftId" | "registration"> & {
+  fleetAircraftId?: string | null;
+  registration?: string | null;
+};
+
+export async function createPilotBooking(input: NewPilotBooking) {
   const state = await readState();
   const activeBooking = [...state.bookings].reverse().find((booking) =>
     booking.pilotId === input.pilotId && ["booked", "in_progress"].includes(booking.status),
@@ -264,11 +278,19 @@ export async function createPilotBooking(input: Omit<PilotBooking, "id" | "creat
       activeBooking.from === input.from &&
       activeBooking.to === input.to &&
       activeBooking.date === input.date &&
-      activeBooking.aircraft === input.aircraft;
+      activeBooking.aircraft === input.aircraft &&
+      activeBooking.fleetAircraftId === (input.fleetAircraftId ?? null);
     if (isSameBooking) return activeBooking;
     throw new ActivePilotBookingError(activeBooking);
   }
-  const booking: PilotBooking = { ...input, id: randomUUID(), createdAt: new Date().toISOString(), status: "booked" };
+  const booking: PilotBooking = {
+    ...input,
+    fleetAircraftId: input.fleetAircraftId ?? null,
+    registration: input.registration ?? null,
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    status: "booked",
+  };
   state.bookings.push(booking);
   await writeState(state);
   return booking;
@@ -297,6 +319,7 @@ export async function updatePilotBookingAircraft(input: { bookingId: string; pil
   const booking = state.bookings.find((item) => item.id === input.bookingId && item.pilotId === input.pilotId);
   if (!booking) throw new Error("Flight assignment not found.");
   if (booking.status !== "booked") throw new Error("Aircraft can only be changed before the Ember flight begins.");
+  if (booking.fleetAircraftId) throw new Error("The aircraft is locked because a registration has already been reserved for this flight.");
 
   booking.aircraft = input.aircraft;
   const flightPlan = state.flightPlans.find((item) => item.bookingId === input.bookingId && item.pilotId === input.pilotId);
@@ -466,6 +489,18 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
   await writeState(state);
   await notifyPilotOfPirepSubmission(pirep);
   return pirep;
+}
+
+/** Clears a failed website reservation attempt without cancelling the pilot's protected flight booking. */
+export async function clearPilotBookingFleetSelection(input: { bookingId: string; pilotId: string }) {
+  const state = await readState();
+  const booking = state.bookings.find((item) => item.id === input.bookingId && item.pilotId === input.pilotId);
+  if (!booking) throw new Error("Flight assignment not found.");
+  if (booking.status !== "booked") throw new Error("Registration selection can only change before the Ember flight begins.");
+  booking.fleetAircraftId = null;
+  booking.registration = null;
+  await writeState(state);
+  return booking;
 }
 
 async function notifyPilotOfPirepSubmission(pirep: PilotPirep) {

@@ -23,6 +23,7 @@ export async function changeBookingAircraft(formData: FormData) {
   ]);
   if (!booking || !pilot || !requestedAircraft) redirect(`${flightPlanPath(bookingId)}?error=aircraft-change`);
   if (booking.status !== "booked") redirect(`${flightPlanPath(bookingId)}?error=aircraft-started`);
+  if (booking.fleetAircraftId) redirect(`${flightPlanPath(bookingId)}?error=registration-locked`);
 
   const route = booking.routeId ? routes.find((item) => item.id === booking.routeId && item.active && !item.catalogueOnly) : null;
   const approvedAircraft = new Set(route ? [route.aircraft, ...(route.aircraftOptions ?? [])] : [booking.aircraft]);
