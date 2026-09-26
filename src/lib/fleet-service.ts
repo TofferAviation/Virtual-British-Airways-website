@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
 
 const ORGANIZATION_CODE = "BAV";
 
@@ -57,6 +58,20 @@ export function isFleetAircraftBookable(aircraft: FleetAircraftSummary) {
     aircraft.technicalStatus === "serviceable" &&
     aircraft.dispatchStatus === "dispatchable" &&
     !aircraft.nextAssignedFlightReference;
+}
+
+const iataByIcao = new Map(Object.entries(BAV_NETWORK_ICAO_BY_IATA).map(([iata, icao]) => [icao, iata]));
+
+function normaliseStation(value: string | null | undefined) {
+  const station = value?.trim().toUpperCase() ?? "";
+  return station ? iataByIcao.get(station) ?? station : null;
+}
+
+/** Treat an unassigned station as deployable, otherwise require the airframe to be at the departure airport. */
+export function fleetAircraftIsAtStation(aircraft: Pick<FleetAircraftSummary, "currentStation">, departureStation: string) {
+  const currentStation = normaliseStation(aircraft.currentStation);
+  const departure = normaliseStation(departureStation);
+  return !currentStation || !departure || currentStation === departure;
 }
 
 export type FleetAircraftImage = {

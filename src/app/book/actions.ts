@@ -7,7 +7,7 @@ import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
-import { ensureFleetMembership, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
+import { ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
 
 export async function bookFlight(formData: FormData) {
   const session = await requirePilotSession();
@@ -52,6 +52,9 @@ export async function bookFlight(formData: FormData) {
         !fleetAircraftMatchesVirtualType(selectedFleetAircraft, selectedAircraft) ||
         !isFleetAircraftBookable(selectedFleetAircraft)) {
       redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=registration`);
+    }
+    if (!fleetAircraftIsAtStation(selectedFleetAircraft, from)) {
+      redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=station`);
     }
   }
 

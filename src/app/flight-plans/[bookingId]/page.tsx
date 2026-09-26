@@ -6,7 +6,7 @@ import { getPilotBooking, getPilotFlightPlan } from "@/lib/pilot-operations-stor
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
-import { getManagedRoutes } from "@/lib/route-store";
+import { getBookableRoute } from "@/lib/route-store";
 import { getSimbriefCodes, isSimbriefApiConfigured } from "@/lib/simbrief";
 import { changeBookingAircraft, openSimbriefDispatch, syncSimbriefFlightPlan } from "./actions";
 import { SimbriefDispatchButton } from "./SimbriefDispatchButton";
@@ -19,7 +19,7 @@ export const metadata = { title: "Flight planning" };
 export default async function FlightPlanPage({ params, searchParams }: { params: Promise<{ bookingId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [{ bookingId }, query] = await Promise.all([params, searchParams]);
   const session = await requirePilotSession();
-  const [booking, pilot, flightPlan, routes] = await Promise.all([getPilotBooking(bookingId, session.pilotId), getPilotById(session.pilotId), getPilotFlightPlan(bookingId, session.pilotId), getManagedRoutes()]);
+  const [booking, pilot, flightPlan] = await Promise.all([getPilotBooking(bookingId, session.pilotId), getPilotById(session.pilotId), getPilotFlightPlan(bookingId, session.pilotId)]);
   if (!booking || !pilot || !flightPlan) notFound();
   if (booking.status === "cancelled") redirect("/book");
   const error = typeof query.error === "string" ? query.error : "";
@@ -28,7 +28,8 @@ export default async function FlightPlanPage({ params, searchParams }: { params:
   const aircraftUpdated = query.aircraftUpdated === "1";
   const aircraftError = ["aircraft-change", "aircraft-qualification", "aircraft-started", "registration-locked"].includes(error);
   const registrationUnavailable = error === "registration-unavailable";
-  const route = booking.routeId ? routes.find((item) => item.id === booking.routeId && item.active && !item.catalogueOnly) : null;
+  const matchingRoute = booking.routeId ? await getBookableRoute(booking.routeId) : null;
+  const route = matchingRoute?.active && !matchingRoute.catalogueOnly ? matchingRoute : null;
   const approvedAircraft = route ? Array.from(new Set([route.aircraft, ...(route.aircraftOptions ?? [])])) : [booking.aircraft];
   const eligibleAircraft = approvedAircraft.filter((aircraft) => getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft }).eligible);
   const codes = getSimbriefCodes(booking);

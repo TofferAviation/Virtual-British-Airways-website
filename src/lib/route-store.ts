@@ -148,6 +148,74 @@ export async function deleteManagedRoute(id: string) {
   await saveManagedRoutes(next);
 }
 
+function clockToMinutes(value: string) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function minutesToClock(value: number) {
+  const normalised = ((value % 1440) + 1440) % 1440;
+  return `${String(Math.floor(normalised / 60)).padStart(2, "0")}:${String(normalised % 60).padStart(2, "0")}`;
+}
+
+function durationToMinutes(value: string) {
+  const match = /^(\d+)\s*h(?:\s*(\d+)\s*m)?$/i.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2] ?? 0);
+}
+
+/**
+ * BAV virtual services are deliberately generated from the published
+ * London-hub network. A pilot who takes one of those airframes away from a
+ * hub must also be able to bring it back. These return legs are BAV virtual
+ * services (never presented as a verified BA schedule), use the same
+ * approved equipment, and are kept out of Staff Centre's editable route list.
+ */
+function virtualReturnService(route: ManagedRoute): ManagedRoute | null {
+  if (!route.virtualTimetable || route.catalogueOnly) return null;
+  const departure = clockToMinutes(route.arrival);
+  const duration = durationToMinutes(route.duration);
+  const flightNumberMatch = /^BAV(\d{1,5})$/i.exec(route.flightNumber);
+  if (departure === null || duration === null || !flightNumberMatch) return null;
+
+  // 6000–8999 are reserved for the generated return side of BAV's
+  // 1000–3999 outbound virtual schedules. This preserves a readable and
+  // stable BAW callsign without imitating a real BA flight number.
+  const returnFlightNumber = `BAV${Number(flightNumberMatch[1]) + 5000}`;
+  const returnDeparture = departure + 60; // virtual turnaround allowance
+  return {
+    ...route,
+    id: `${route.id}-return`,
+    from: route.to,
+    to: route.from,
+    flightNumber: returnFlightNumber,
+    callsign: toBritishAirwaysCallsign(returnFlightNumber),
+    departure: minutesToClock(returnDeparture),
+    arrival: minutesToClock(returnDeparture + duration),
+  };
+}
+
+/** Includes generated BAV return services while leaving editable routes unchanged. */
+export async function getBookableRoutes(): Promise<ManagedRoute[]> {
+  const routes = await getManagedRoutes();
+  const existingPairs = new Set(routes.filter((route) => route.virtualTimetable).map((route) => `${route.from}-${route.to}`));
+  const existingIds = new Set(routes.map((route) => route.id));
+  const returns = routes.flatMap((route) => {
+    const returnRoute = virtualReturnService(route);
+    if (!returnRoute || existingPairs.has(`${returnRoute.from}-${returnRoute.to}`) || existingIds.has(returnRoute.id)) return [];
+    return [returnRoute];
+  });
+  return [...routes, ...returns];
+}
+
+export async function getBookableRoute(id: string) {
+  return (await getBookableRoutes()).find((route) => route.id === id) ?? null;
+}
+
 async function withAvailability(routes: ManagedRoute[], date?: string) {
   return Promise.all(routes.map(async (route) => {
     const reserved = date ? await countActiveScheduleBookings(route.id, date) : 0;
@@ -180,7 +248,7 @@ type FlightSearchOptions = {
 };
 
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
-  const matching = (await getManagedRoutes()).filter((route) => route.active && route.from === from && route.to === to);
+  const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from && route.to === to);
   const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
   const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
   const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
@@ -190,9 +258,9 @@ export async function getFlightsForRoute(from: string, to: string, date?: string
   return withAvailability([...verified, ...virtual], date);
 }
 
-/** Lists every active BAV service departing a selected BAV hub. */
-export async function getFlightsFromHub(from: string, date?: string, options: FlightSearchOptions = {}) {
-  const matching = (await getManagedRoutes()).filter((route) => route.active && route.from === from);
+/** Lists every active BAV service departing the selected station. */
+export async function getFlightsFromStation(from: string, date?: string, options: FlightSearchOptions = {}) {
+  const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from);
   const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
   const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
   const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
@@ -200,7 +268,12 @@ export async function getFlightsFromHub(from: string, date?: string, options: Fl
   return withAvailability([...verified, ...virtual, ...catalogue], date);
 }
 
+/** @deprecated Use getFlightsFromStation; retained for hub links. */
+export async function getFlightsFromHub(from: string, date?: string, options: FlightSearchOptions = {}) {
+  return getFlightsFromStation(from, date, options);
+}
+
 export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = (await getManagedRoutes()).filter((route) => route.active && !route.catalogueOnly && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)) && (route.virtualTimetable || routeOperatesOn(route, date)));
+  const managed = (await getBookableRoutes()).filter((route) => route.active && !route.catalogueOnly && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)) && (route.virtualTimetable || routeOperatesOn(route, date)));
   return withAvailability(managed, date);
 }
