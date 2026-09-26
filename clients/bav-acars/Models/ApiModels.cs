@@ -5,7 +5,7 @@ namespace FreeFlight.BavAcars.Models;
 public sealed record PilotIdentity(string Id, string PilotNumber, string Name, string Email);
 public sealed record AuthResponse(string Token, PilotIdentity Pilot, int ExpiresInSeconds);
 public sealed record AssignmentEnvelope(Assignment? Assignment);
-public sealed record Assignment(string Id, string FlightNumber, string From, string To, string Aircraft, string Departure, string Arrival, string Duration, string Date, string Status);
+public sealed record Assignment(string Id, string FlightNumber, string From, string To, string Aircraft, string Departure, string Arrival, string Duration, string Date, string Status, string? CareerNotice = null);
 public sealed record StartEnvelope(AcarsSession Session);
 public sealed record AcarsSession(string Id, string FlightNumber, string From, string To, string Aircraft, string Simulator);
 public sealed record ArrivalResolution(string Status, string PlannedStation, string? ActualStation, string Detection, string Message, bool CanUpdateFleet);
@@ -24,7 +24,11 @@ public sealed record TelemetryPayload(
     bool OnGround,
     double? VerticalSpeedFpm,
     string? DetectedAirport = null,
-    string? DiversionAirport = null);
+    string? DiversionAirport = null,
+    double? IndicatedAirspeedKt = null,
+    double? TrueAirspeedKt = null,
+    string? Squawk = null,
+    bool BeaconOn = false);
 
 public sealed record AppSettings(string BaseUrl, string Email)
 {

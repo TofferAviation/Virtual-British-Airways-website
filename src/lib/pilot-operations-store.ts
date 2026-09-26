@@ -8,6 +8,7 @@ import { getMatchingBavEvent } from "@/lib/pilot-awards";
 import { applyApprovedPirepStats, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible, readPilotOperationsState, writePilotOperationsState } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
+import { creditAcceptedPirepSalary } from "@/lib/pilot-career";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
@@ -541,6 +542,32 @@ async function notifyPilotOfPirepReview(pirep: PilotPirep, decision: "accepted" 
   await createPilotNotification({ pilotId: pirep.pilotId, kind: "pirep_review", href: `/account/flights/${encodeURIComponent(pirep.id)}`, ...notification }).catch((error) => console.error("[notifications] Could not create PIREP review notification.", error));
 }
 
+/**
+ * Finance is deliberately a follow-up to the durable PIREP decision. The
+ * ledger uses the PIREP ID as an idempotency key, so a retry can never pay the
+ * same accepted virtual flight twice. A missing career migration must not
+ * undo an Operations review of an otherwise valid PIREP.
+ */
+async function processAcceptedPirepFinance(pirep: PilotPirep) {
+  try {
+    const pilot = await getPilotById(pirep.pilotId);
+    if (!pilot) return;
+    const result = await creditAcceptedPirepSalary(pilot, pirep);
+    if (result.posted) {
+      await createPilotNotification({
+        pilotId: pilot.id,
+        kind: "career_credit",
+        level: "success",
+        title: "Virtual flight pay credited",
+        body: `${pirep.flightNumber} ${pirep.from} → ${pirep.to}: £${result.transaction.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })} was posted to your virtual account.`,
+        href: "/account/finances",
+      });
+    }
+  } catch (error) {
+    console.error("[pilot-career] Could not post accepted-PIREP virtual flight pay", { pirepId: pirep.id, error });
+  }
+}
+
 export async function reviewPirep(input: { id: string; decision: "accepted" | "rejected" | "changes_requested"; staffName: string; comments: string }) {
   const client = getPirepClient();
   if (client) {
@@ -575,6 +602,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
     if (error) throw error;
     const reviewed = pirepFromRow(data as PirepRow);
+    if (input.decision === "accepted") await processAcceptedPirepFinance(reviewed);
     await notifyPilotOfPirepReview(reviewed, input.decision, input.staffName, input.comments);
     return reviewed;
   }
@@ -613,6 +641,7 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
   }
 
   await writeState(state);
+  if (input.decision === "accepted") await processAcceptedPirepFinance(pirep);
   await notifyPilotOfPirepReview(pirep, input.decision, input.staffName, input.comments);
   return pirep;
 }

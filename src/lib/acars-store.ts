@@ -56,6 +56,7 @@ function snapshotFromStorage(value: unknown, session: Pick<AcarsSession, "id" | 
   const altitudeFt = asNumber(snapshot.altitudeFt); const groundSpeedKt = asNumber(snapshot.groundSpeedKt); const headingDeg = asNumber(snapshot.headingDeg);
   if (latitude == null || longitude == null || altitudeFt == null || groundSpeedKt == null || headingDeg == null || typeof snapshot.timestamp !== "string") return null;
   const indicatedAirspeedKt = asNumber(snapshot.indicatedAirspeedKt);
+  const trueAirspeedKt = asNumber(snapshot.trueAirspeedKt);
   const squawk = typeof snapshot.squawk === "string" && /^[0-7]{4}$/.test(snapshot.squawk) ? snapshot.squawk : null;
   const registration = typeof snapshot.registration === "string" && /^[A-Z0-9-]{2,16}$/i.test(snapshot.registration.trim())
     ? snapshot.registration.trim().toUpperCase()
@@ -66,7 +67,7 @@ function snapshotFromStorage(value: unknown, session: Pick<AcarsSession, "id" | 
   const diversionAirport = typeof snapshot.diversionAirport === "string" && /^[A-Z0-9]{3,4}$/i.test(snapshot.diversionAirport.trim())
     ? snapshot.diversionAirport.trim().toUpperCase()
     : null;
-  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration, detectedAirport, diversionAirport };
+  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration, detectedAirport, diversionAirport };
 }
 function sessionFromRow(row: AcarsSessionRow): AcarsSession {
   if (!isSupportedSimulator(row.simulator)) throw new Error(`Unsupported ACARS simulator returned from storage: ${row.simulator}`);
@@ -79,7 +80,7 @@ function snapshotFromPositionRow(row: AcarsPositionReportRow, session: Pick<Acar
   return {
     simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId,
     timestamp: row.reported_at, latitude: row.latitude, longitude: row.longitude, altitudeFt: row.altitude_ft,
-    groundSpeedKt: row.ground_speed_kt, headingDeg: row.heading_deg, indicatedAirspeedKt: null, squawk: null,
+    groundSpeedKt: row.ground_speed_kt, headingDeg: row.heading_deg, indicatedAirspeedKt: null, trueAirspeedKt: null, squawk: null,
     beaconOn: false, fuelKg: asNumber(row.fuel_kg), enginesRunning: row.engines_running,
     parkingBrakeSet: row.parking_brake_set, onGround: row.on_ground,
     verticalSpeedFpm: asNumber(row.vertical_speed_fpm), flightStarted: !row.on_ground, registration: null,

@@ -18,6 +18,8 @@ export type AcarsFlightSnapshot = {
   groundSpeedKt: number;
   headingDeg: number;
   indicatedAirspeedKt: number | null;
+  /** True airspeed when the connected simulator exposes it. */
+  trueAirspeedKt: number | null;
   squawk: string | null;
   beaconOn: boolean;
   fuelKg: number | null;

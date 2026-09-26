@@ -48,6 +48,7 @@ import "./live-operations-tracker.css";
 import "./pilot-auth.css";
 import "./pilot-rules.css";
 import "./pilot-progression.css";
+import "./pilot-career.css";
 import "./rank-insignia.css";
 import "./reward-settings.css";
 import "./ba-radar.css";

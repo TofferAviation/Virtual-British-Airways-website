@@ -104,9 +104,12 @@ public partial class MainWindow : Window
             ScheduleText.Text = $"{_assignment.Date} · {_assignment.Departure}–{_assignment.Arrival} UTC · {_assignment.Duration}";
             DepartureCodeText.Text = _assignment.From;
             ArrivalCodeText.Text = _assignment.To;
-            AssignmentSyncText.Text = $"{_assignment.FlightNumber} synced from BAV website";
+            AssignmentSyncText.Text = string.IsNullOrWhiteSpace(_assignment.CareerNotice)
+                ? $"{_assignment.FlightNumber} synced from BAV website"
+                : _assignment.CareerNotice;
             StartFlightButton.IsEnabled = _session is null;
             AddEvent("Assignment sync", $"Loaded {_assignment.FlightNumber} {_assignment.From}–{_assignment.To}");
+            if (!string.IsNullOrWhiteSpace(_assignment.CareerNotice)) AddEvent("Qualification", _assignment.CareerNotice);
         }
         catch (Exception ex)
         {

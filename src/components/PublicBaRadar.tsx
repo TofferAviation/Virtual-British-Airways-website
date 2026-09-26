@@ -13,6 +13,15 @@ const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module)
 
 type FlightFilter = "all" | "airborne" | "ground";
 
+type FlightWeatherReport = {
+  icao: string;
+  metar: string | null;
+  taf: string | null;
+  sourceUrl: string;
+  fetchedAt: string;
+  available: boolean;
+};
+
 export type RadarLayers = {
   vatsim: boolean;
   precipitation: boolean;
@@ -61,6 +70,13 @@ function position(value: number, positive: string, negative: string) {
   return `${Math.abs(value).toFixed(4)}°${value >= 0 ? positive : negative}`;
 }
 
+function remainingTime(minutes: number | null) {
+  if (minutes == null) return "—";
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours > 0 ? `${hours}h ${remainder}m` : `${remainder} min`;
+}
+
 function historyLine(snapshots: PublicRadarSnapshot[], valueFor: (snapshot: PublicRadarSnapshot) => number | null) {
   const values = snapshots.map(valueFor);
   const usable = values.filter((value): value is number => value != null && Number.isFinite(value));
@@ -100,7 +116,7 @@ function TrackerSection({ title, children, open = false }: { title: string; chil
   </details>;
 }
 
-function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
+function FlightTrackerDetails({ flight, weatherReports }: { flight: PublicRadarFlight; weatherReports: FlightWeatherReport[] }) {
   const snapshot = flight.lastSnapshot;
   return <div className="ba-radar-selected-flight ba-radar-flight-tracker-detail">
     <header className="ba-radar-tracker-flight-head">
@@ -116,8 +132,24 @@ function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
       <TrackerSection title="Route trace">
         {flight.plannedRoute ? <p className="ba-radar-route-trace"><strong>{flight.plannedRoute.source === "simbrief" ? "SimBrief planned route" : "Direct airport route"}</strong><span>{flight.plannedRoute.points.length.toLocaleString()} plotted route points. The dashed blue line is the planned route; the solid gold line is the aircraft’s recorded track.</span></p> : <p className="ba-radar-route-trace"><strong>Planned route pending</strong><span>Sync the SimBrief OFP for this assignment to show its planned route on BA-Radar. The recorded track remains available.</span></p>}
       </TrackerSection>
+      <TrackerSection title="Flight timeline" open>
+        {flight.journeyProgress ? <div className="ba-radar-flight-timeline">
+          <div className="ba-radar-timeline-label"><strong>{flight.journeyProgress.progressPercent.toFixed(0)}% complete</strong><span>{flight.diversionAirport ? "Progress remains against the planned route" : "Projected from the live simulator position"}</span></div>
+          <div className="ba-radar-timeline-track" role="progressbar" aria-label="Flight progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(flight.journeyProgress.progressPercent)}><i style={{ width: `${flight.journeyProgress.progressPercent}%` }} /></div>
+          <div className="ba-radar-tracker-aircraft ba-radar-timeline-data"><div><span>Distance remaining</span><strong>{Math.round(flight.journeyProgress.remainingDistanceNm).toLocaleString()} NM</strong></div><div><span>Estimated time remaining</span><strong>{remainingTime(flight.journeyProgress.estimatedRemainingMinutes)}</strong></div><div><span>Planned distance</span><strong>{Math.round(flight.journeyProgress.plannedDistanceNm).toLocaleString()} NM</strong></div><div><span>Distance flown</span><strong>{Math.round(flight.distanceNm).toLocaleString()} NM</strong></div></div>
+        </div> : <p className="ba-radar-telemetry-empty">Timeline will appear after an active SimBrief route and a live aircraft position are available.</p>}
+      </TrackerSection>
       <TrackerSection title="Aircraft">
         <div className="ba-radar-tracker-aircraft"><div><span>Registration</span><strong>{flight.registration ?? "Pending"}</strong></div><div><span>Aircraft type</span><strong>{flight.aircraft}</strong></div><div><span>Simulator</span><strong>{simulatorLabels[flight.simulator]}</strong></div></div>
+      </TrackerSection>
+      <TrackerSection title="Live METAR & TAF">
+        {flight.weatherStations.length ? <div className="ba-radar-flight-weather">{flight.weatherStations.map((station) => {
+          const report = weatherReports.find((entry) => entry.icao === station.icao);
+          return <article key={`${station.role}-${station.icao}`}>
+            <header><span>{station.role}</span><strong>{station.icao}</strong>{report?.available ? <a href={report.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a> : null}</header>
+            {report ? report.available ? <><p><b>METAR</b>{report.metar ?? "No current METAR published."}</p><p><b>TAF</b>{report.taf ?? "No current TAF published."}</p><small>Fetched {telemetryTime(report.fetchedAt)}</small></> : <p className="unavailable">Live report temporarily unavailable. <a href={report.sourceUrl} target="_blank" rel="noreferrer">Open AllMetsat ↗</a></p> : <p className="loading">Loading current aviation weather…</p>}
+          </article>;
+        })}</div> : <p className="ba-radar-telemetry-empty">Sync a SimBrief OFP to include its alternate; departure and arrival weather will then refresh here.</p>}
       </TrackerSection>
       <TrackerSection title="Live flight data" open>
         <div className="ba-radar-selected-data ba-radar-flight-data">
@@ -125,6 +157,7 @@ function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
           <div><span>Vertical speed</span><strong>{snapshot.verticalSpeedFpm == null ? "—" : `${Math.round(snapshot.verticalSpeedFpm).toLocaleString()} fpm`}</strong></div>
           <div><span>Ground speed</span><strong>{Math.round(snapshot.groundSpeedKt)} kt</strong></div>
           <div><span>Indicated airspeed</span><strong>{snapshot.indicatedAirspeedKt == null ? "—" : `${Math.round(snapshot.indicatedAirspeedKt)} kt`}</strong></div>
+          <div><span>True airspeed</span><strong>{snapshot.trueAirspeedKt == null ? "—" : `${Math.round(snapshot.trueAirspeedKt)} kt`}</strong></div>
           <div><span>Heading</span><strong>{Math.round(snapshot.headingDeg)}°</strong></div>
           <div><span>Squawk</span><strong>{snapshot.squawk ?? "—"}</strong></div>
           <div><span>Beacon</span><strong>{snapshot.beaconOn ? "On" : "Off"}</strong></div>
@@ -155,6 +188,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [windError, setWindError] = useState("");
   const [windRendererStatus, setWindRendererStatus] = useState<"loading" | "ready" | "unsupported">("loading");
   const [selectedController, setSelectedController] = useState("");
+  const [flightWeather, setFlightWeather] = useState<{ stationKey: string; reports: FlightWeatherReport[] }>({ stationKey: "", reports: [] });
 
   useEffect(() => {
     let mounted = true;
@@ -263,6 +297,27 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const toggleLayer = (key: keyof RadarLayers) => setLayers((current) => ({ ...current, [key]: !current[key] }));
   const activeLayerCount = layerLabels.filter((layer) => layers[layer.key]).length;
   const hasExternalMapData = layers.vatsim || needsWeather || layers.winds || layers.lightning;
+  const weatherStationKey = selected?.weatherStations.map((station) => station.icao).join(",") ?? "";
+
+  useEffect(() => {
+    if (!weatherStationKey) {
+      return;
+    }
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/radar/flight-weather?stations=${encodeURIComponent(weatherStationKey)}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as { reports?: FlightWeatherReport[] };
+        if (mounted && Array.isArray(payload.reports)) setFlightWeather({ stationKey: weatherStationKey, reports: payload.reports });
+      } catch {
+        // Retain the last verified airport weather if the supplier is briefly unavailable.
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 5 * 60_000);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, [weatherStationKey]);
 
   return <div className="ba-radar ba-radar-tracker">
     <header className="ba-radar-toolbar">
@@ -273,7 +328,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     <section className="ba-radar-stage" aria-label="BA-Radar live simulator map">
       <aside className="ba-radar-sidebar">
         <div className="ba-radar-selection-head"><span className="ba-radar-kicker">{controller ? "Selected VATSIM position" : selected ? "Selected live flight" : "Live flights"}</span>{selected || controller ? <button type="button" onClick={clearSelection} aria-label="Clear map selection">Clear <b aria-hidden="true">×</b></button> : null}</div>
-        {controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <FlightTrackerDetails flight={selected} /> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
+        {controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <FlightTrackerDetails flight={selected} weatherReports={flightWeather.stationKey === weatherStationKey ? flightWeather.reports : []} /> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
         <div className="ba-radar-list-controls"><span>Flight list</span><div>{(["all", "airborne", "ground"] as const).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "airborne" ? "Air" : "Ground"}</button>)}</div></div>
         <div className="ba-radar-flight-list">{visibleFlights.length ? visibleFlights.map((flight) => <button key={flight.id} type="button" onClick={() => selectFlight(flight.id)} className={flight.id === selected?.id && !controller ? "selected" : ""}><i className={flight.connectionHealthy ? "connected" : "stale"} /><span><strong>{flight.flightNumber}</strong><small>{flight.from} → {flight.diversionAirport ?? flight.to}{flight.diversionAirport ? " · DIVERTING" : ""}</small></span><em>{flight.lastSnapshot ? `${Math.round(flight.lastSnapshot.altitudeFt).toLocaleString()} ft` : "Pending"}</em></button>) : <p className="ba-radar-none">No flights match this view.</p>}</div>
         <div className="ba-radar-vatsim-summary"><strong>VATSIM network</strong><span>{layers.vatsim ? vatsim?.available === false ? "Live feed unavailable — BAV tracking remains online." : `${vatsim?.onlineCount ?? 0} controllers currently online` : "ATC layer is switched off."}</span></div>

@@ -5,6 +5,7 @@ import { ActivePilotBookingError, clearPilotBookingFleetSelection, createFlightP
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
+import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
 import { ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
@@ -32,7 +33,11 @@ export async function bookFlight(formData: FormData) {
   if (!approvedAircraft.has(selectedAircraft)) {
     redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=aircraft`);
   }
-  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: selectedAircraft });
+  const legacyEligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: selectedAircraft });
+  const careerEligibility = process.env.BAV_CAREER_ENFORCEMENT === "true"
+    ? await checkAircraftCareerEligibility(pilot, selectedAircraft)
+    : null;
+  const eligibility = careerEligibility ? { eligible: careerEligibility.eligible } : legacyEligibility;
   if (!eligibility.eligible) {
     redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=qualification`);
   }

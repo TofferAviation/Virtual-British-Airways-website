@@ -1,6 +1,7 @@
 import { listLiveAcarsSessionTrackSnapshots, listLiveAcarsSessions } from "@/lib/acars-store";
 import type { SupportedSimulator } from "@/lib/acars-contract";
 import { toBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
+import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
 import { listFleetAircraft, type FleetAircraftImage } from "@/lib/fleet-service";
 import { getPilotFlightPlan, type SimbriefBriefing } from "@/lib/pilot-operations-store";
 
@@ -12,6 +13,7 @@ export type PublicRadarSnapshot = {
   groundSpeedKt: number;
   headingDeg: number;
   indicatedAirspeedKt: number | null;
+  trueAirspeedKt: number | null;
   squawk: string | null;
   beaconOn: boolean;
   enginesRunning: boolean;
@@ -35,6 +37,22 @@ export type PublicRadarPlannedRoute = {
   points: PublicRadarRoutePoint[];
 };
 
+export type PublicRadarJourneyProgress = {
+  /** Total planned route distance, calculated from the active SimBrief route. */
+  plannedDistanceNm: number;
+  /** Distance still left along the planned route, not the straight-line distance. */
+  remainingDistanceNm: number;
+  /** Progress projected onto the planned route. */
+  progressPercent: number;
+  /** Current groundspeed estimate. Null when the aircraft is stationary or data is not usable. */
+  estimatedRemainingMinutes: number | null;
+};
+
+export type PublicRadarWeatherStation = {
+  role: "Departure" | "Arrival" | "Alternate";
+  icao: string;
+};
+
 export type PublicRadarFlight = {
   id: string;
   /** BA IATA flight number, for example BA1076. */
@@ -56,14 +74,18 @@ export type PublicRadarFlight = {
   recentSnapshots: PublicRadarSnapshot[];
   /** The pilot's saved SimBrief routing, shown only while the flight is live. */
   plannedRoute: PublicRadarPlannedRoute | null;
+  /** Progress derived from the live aircraft position and its plotted route. */
+  journeyProgress: PublicRadarJourneyProgress | null;
+  /** ICAO stations whose live METAR/TAF can be read for this flight. */
+  weatherStations: PublicRadarWeatherStation[];
   /** A reduced, durable history for the map path (separate from chart history). */
   trackSnapshots: PublicRadarTrackPoint[];
 };
 
 function publicSnapshot(snapshot: Awaited<ReturnType<typeof listLiveAcarsSessions>>[number]["lastSnapshot"]): PublicRadarSnapshot | null {
   if (!snapshot) return null;
-  const { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm, detectedAirport, diversionAirport } = snapshot;
-  return { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm, detectedAirport, diversionAirport };
+  const { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm, detectedAirport, diversionAirport } = snapshot;
+  return { timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn, enginesRunning, onGround, verticalSpeedFpm, detectedAirport, diversionAirport };
 }
 
 function publicTrackPoint(snapshot: Awaited<ReturnType<typeof listLiveAcarsSessions>>[number]["lastSnapshot"]): PublicRadarTrackPoint | null {
@@ -103,6 +125,71 @@ function reduceRoutePoints(points: PublicRadarRoutePoint[], limit = 240) {
   return Array.from({ length: limit }, (_, index) => points[Math.round(index * lastIndex / (limit - 1))]);
 }
 
+const EARTH_RADIUS_NM = 3_440.065;
+
+function radians(value: number) {
+  return value * Math.PI / 180;
+}
+
+function longitudeDelta(from: number, to: number) {
+  return ((to - from + 540) % 360) - 180;
+}
+
+function distanceNm(from: PublicRadarRoutePoint, to: PublicRadarRoutePoint) {
+  const latitudeDelta = radians(to.latitude - from.latitude);
+  const longitudeDeltaRadians = radians(longitudeDelta(from.longitude, to.longitude));
+  const latitudeOne = radians(from.latitude);
+  const latitudeTwo = radians(to.latitude);
+  const a = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(latitudeOne) * Math.cos(latitudeTwo) * Math.sin(longitudeDeltaRadians / 2) ** 2;
+  return EARTH_RADIUS_NM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Return the nearest point along a plotted route. This intentionally uses a
+ * local projection per segment: it is stable across the dateline while the
+ * route's leg distances are still calculated as great-circle distances.
+ */
+function routeProgressAtPosition(points: PublicRadarRoutePoint[], position: PublicRadarRoutePoint, groundSpeedKt: number): PublicRadarJourneyProgress | null {
+  if (points.length < 2) return null;
+  let plannedDistanceNm = 0;
+  let closestDistanceSquared = Number.POSITIVE_INFINITY;
+  let closestAlongNm = 0;
+  let distanceBeforeLegNm = 0;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index];
+    const to = points[index + 1];
+    const legDistanceNm = distanceNm(from, to);
+    if (!Number.isFinite(legDistanceNm) || legDistanceNm <= 0.0001) continue;
+
+    const latitudeScale = Math.cos(radians((from.latitude + to.latitude + position.latitude) / 3));
+    const segmentX = longitudeDelta(from.longitude, to.longitude) * latitudeScale;
+    const segmentY = to.latitude - from.latitude;
+    const positionX = longitudeDelta(from.longitude, position.longitude) * latitudeScale;
+    const positionY = position.latitude - from.latitude;
+    const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+    const fraction = segmentLengthSquared <= 0 ? 0 : Math.max(0, Math.min(1, (positionX * segmentX + positionY * segmentY) / segmentLengthSquared));
+    const deltaX = positionX - segmentX * fraction;
+    const deltaY = positionY - segmentY * fraction;
+    const candidateDistanceSquared = deltaX * deltaX + deltaY * deltaY;
+    if (candidateDistanceSquared < closestDistanceSquared) {
+      closestDistanceSquared = candidateDistanceSquared;
+      closestAlongNm = distanceBeforeLegNm + legDistanceNm * fraction;
+    }
+
+    distanceBeforeLegNm += legDistanceNm;
+    plannedDistanceNm += legDistanceNm;
+  }
+
+  if (!Number.isFinite(plannedDistanceNm) || plannedDistanceNm < 1) return null;
+  const remainingDistanceNm = Math.max(0, plannedDistanceNm - closestAlongNm);
+  const progressPercent = Math.max(0, Math.min(100, closestAlongNm / plannedDistanceNm * 100));
+  const estimatedRemainingMinutes = groundSpeedKt >= 70 && remainingDistanceNm >= 1
+    ? Math.max(1, Math.round(remainingDistanceNm / groundSpeedKt * 60))
+    : null;
+  return { plannedDistanceNm, remainingDistanceNm, progressPercent, estimatedRemainingMinutes };
+}
+
 function plannedRouteFromBriefing(briefing: SimbriefBriefing | null): PublicRadarPlannedRoute | null {
   if (!briefing) return null;
   const origin = { latitude: briefing.originLatitude, longitude: briefing.originLongitude };
@@ -114,6 +201,26 @@ function plannedRouteFromBriefing(briefing: SimbriefBriefing | null): PublicRada
     .filter((point, index, all) => index === 0 || routeDistanceSquared(point, all[index - 1]) > 0.00000001);
   if (points.length > 2) return { source: "simbrief", points: reduceRoutePoints(points) };
   return { source: "direct", points: Array.from({ length: 49 }, (_, index) => greatCirclePoint(origin, destination, index / 48)) };
+}
+
+function toIcao(station: string | null | undefined) {
+  const normalised = station?.trim().toUpperCase() ?? "";
+  if (/^[A-Z]{4}$/.test(normalised)) return normalised;
+  return BAV_NETWORK_ICAO_BY_IATA[normalised] ?? null;
+}
+
+function weatherStationsForFlight(from: string, to: string, alternate: string | null | undefined) {
+  const candidates: Array<[PublicRadarWeatherStation["role"], string | null]> = [
+    ["Departure", toIcao(from)],
+    ["Arrival", toIcao(to)],
+    ["Alternate", toIcao(alternate)],
+  ];
+  const seen = new Set<string>();
+  return candidates.flatMap(([role, icao]) => {
+    if (!icao || seen.has(icao)) return [];
+    seen.add(icao);
+    return [{ role, icao }];
+  });
 }
 
 /**
@@ -129,14 +236,17 @@ export async function listPublicRadarFlights(): Promise<PublicRadarFlight[]> {
     Promise.all(sessions.map(async (session) => {
       try {
         const plan = await getPilotFlightPlan(session.bookingId, session.pilotId);
-        return [session.id, plannedRouteFromBriefing(plan?.simbriefBriefing ?? null)] as const;
+        return [session.id, {
+          plannedRoute: plannedRouteFromBriefing(plan?.simbriefBriefing ?? null),
+          alternate: plan?.alternate ?? null,
+        }] as const;
       } catch (error) {
         console.error(`[radar] Could not load the planned route for ${session.id}.`, error);
-        return [session.id, null] as const;
+        return [session.id, { plannedRoute: null, alternate: null }] as const;
       }
     })),
   ]);
-  const plannedRoutesBySession = new Map(plans);
+  const flightPlansBySession = new Map(plans);
   try {
     for (const aircraft of await listFleetAircraft()) {
       fleetByRegistration.set(aircraft.registration.toUpperCase(), aircraft.image);
@@ -165,7 +275,14 @@ export async function listPublicRadarFlights(): Promise<PublicRadarFlight[]> {
       diversionAirport: session.lastSnapshot?.diversionAirport ?? null,
       lastSnapshot: publicSnapshot(session.lastSnapshot),
       recentSnapshots: (session.recentSnapshots ?? []).map(publicSnapshot).filter((snapshot): snapshot is PublicRadarSnapshot => snapshot != null),
-      plannedRoute: plannedRoutesBySession.get(session.id) ?? null,
+      plannedRoute: flightPlansBySession.get(session.id)?.plannedRoute ?? null,
+      journeyProgress: session.lastSnapshot && flightPlansBySession.get(session.id)?.plannedRoute
+        ? routeProgressAtPosition(
+          flightPlansBySession.get(session.id)!.plannedRoute!.points,
+          { latitude: session.lastSnapshot.latitude, longitude: session.lastSnapshot.longitude },
+          session.lastSnapshot.groundSpeedKt)
+        : null,
+      weatherStations: weatherStationsForFlight(session.from, session.to, flightPlansBySession.get(session.id)?.alternate),
       trackSnapshots: (tracksBySession.get(session.id) ?? []).map(publicTrackPoint).filter((snapshot): snapshot is PublicRadarTrackPoint => snapshot != null),
     };
   });

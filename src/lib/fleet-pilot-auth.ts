@@ -1,6 +1,7 @@
 import { requireAcarsBearer } from "@/lib/acars-auth";
 import { ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, getFleetAircraft, type FleetActor } from "@/lib/fleet-service";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
+import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { getPilotById } from "@/lib/pilot-store";
 
@@ -33,7 +34,13 @@ export async function requireFleetPilotAircraftEligibility(actor: FleetPilotActo
   const [pilot, aircraft] = await Promise.all([getPilotById(actor.pilotId), getFleetAircraft(aircraftId)]);
   if (!pilot) throw new FleetServiceError("Your BAV pilot account could not be found. Refresh your BAV profile and try again.", 401);
   if (!aircraft) throw new FleetServiceError("Aircraft not found.", 404);
-  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: aircraft.aircraftModel });
+  const legacyEligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: aircraft.aircraftModel });
+  const careerEligibility = process.env.BAV_CAREER_ENFORCEMENT === "true"
+    ? await checkAircraftCareerEligibility(pilot, aircraft.aircraftModel)
+    : null;
+  const eligibility = careerEligibility
+    ? { eligible: careerEligibility.eligible, category: legacyEligibility.category, requiredRating: legacyEligibility.requiredRating, reason: careerEligibility.reasons[0] ?? `Eligible as ${careerEligibility.role.replaceAll("_", " ")}.` }
+    : legacyEligibility;
   if (!eligibility.eligible) throw new FleetServiceError(eligibility.reason, 403);
   return { pilot, aircraft, eligibility };
 }

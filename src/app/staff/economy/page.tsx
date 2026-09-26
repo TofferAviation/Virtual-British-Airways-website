@@ -1,0 +1,17 @@
+import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
+import { SiteHeader } from "@/components/SiteHeader";
+import { getCareerEconomySettings } from "@/lib/pilot-career";
+import { requireStaffPermission } from "@/lib/staff-auth";
+import { saveCareerEconomyAction } from "./actions";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Pilot Economy" };
+const ranks = ["Cadet", "Second Officer", "First Officer", "Senior First Officer", "Captain", "Senior Captain", "Training Captain"] as const;
+const families = ["E190", "A320_FAMILY", "A320_NEO", "B777", "B787", "A350", "A380"] as const;
+
+export default async function StaffEconomyPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
+  await requireStaffPermission("settings.edit");
+  const [settings, params] = await Promise.all([getCareerEconomySettings(), searchParams]);
+  return <><SiteHeader /><main className="career-page"><div className="career-shell"><nav className="career-breadcrumbs"><Link href="/staff">Staff Centre</Link><span>›</span><strong>Pilot economy</strong></nav><header className="career-hero"><div><span>STAFF SETTINGS</span><h1>Pilot economy</h1><p>Configure fictional British Airways Virtual economy values. They are career-balance settings only and never real airline pay, fees or employment terms.</p></div><Link href="/staff/training">Training & qualifications →</Link></header>{params.saved ? <p className="career-feedback success">Economy settings saved. New accepted PIREPs use these values; historic ledger entries are preserved.</p> : null}{params.error ? <p className="career-feedback error">The economy settings were not saved.</p> : null}<form action={saveCareerEconomyAction} className="career-card staff-economy-form"><section><div className="career-card-head"><div><span>RANK PAY</span><h2>Hourly virtual salary</h2></div></div><div className="staff-economy-grid">{ranks.map((rank) => <label key={rank}><span>{rank}</span><div><b>£</b><input name={`rank-${rank}`} type="number" min="0" max="1000" step="0.01" defaultValue={settings.rankHourlyRates[rank]} /></div></label>)}</div></section><section><div className="career-card-head"><div><span>FLEET BALANCE</span><h2>Aircraft multipliers</h2></div></div><div className="staff-economy-grid">{families.map((family) => <label key={family}><span>{family.replaceAll("_", " ")}</span><div><b>×</b><input name={`fleet-${family}`} type="number" min="0.1" max="3" step="0.01" defaultValue={settings.aircraftMultipliers[family]} /></div></label>)}</div></section><section><div className="career-card-head"><div><span>FLIGHT COMPONENTS</span><h2>Allowances & operational roles</h2></div></div><div className="staff-economy-grid">{(["sectorAllowance", "longHaulAllowance", "commandBonus", "instructorBonus", "longHaulThresholdMinutes"] as const).map((key) => <label key={key}><span>{key === "sectorAllowance" ? "Sector allowance" : key === "longHaulAllowance" ? "Long-haul allowance" : key === "commandBonus" ? "Command bonus" : key === "instructorBonus" ? "Instructor bonus" : "Long-haul threshold (minutes)"}</span><div><b>{key === "longHaulThresholdMinutes" ? "min" : "£"}</b><input name={key} type="number" min="0" max={key === "longHaulThresholdMinutes" ? "1200" : "5000"} step="1" defaultValue={settings[key]} /></div></label>)}</div></section><footer><Link href="/staff">Cancel</Link><button className="career-button" type="submit">Save pilot economy</button></footer></form></div></main><SiteFooter /></>;
+}

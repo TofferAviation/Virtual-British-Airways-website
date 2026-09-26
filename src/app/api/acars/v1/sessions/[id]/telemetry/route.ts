@@ -43,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     groundSpeedKt: body.groundSpeedKt,
     headingDeg: body.headingDeg,
     indicatedAirspeedKt: optionalFinite(body.indicatedAirspeedKt, 0, 1_000),
+    trueAirspeedKt: optionalFinite(body.trueAirspeedKt, 0, 1_000),
     squawk: optionalSquawk(body.squawk),
     beaconOn: Boolean(body.beaconOn),
     fuelKg: optionalFinite(body.fuelKg, 0, 1_000_000),
