@@ -136,7 +136,10 @@ export function BaRadarMap({
 }) {
   const positioned = flights.filter((flight) => flight.lastSnapshot);
   const selected = positioned.find((flight) => flight.id === selectedId) ?? null;
-  const trail: Position[] = (selected?.recentSnapshots ?? [])
+  const plannedRoute: Position[] = (selected?.plannedRoute?.points ?? [])
+    .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+    .map((point) => [point.latitude, point.longitude]);
+  const track: Position[] = (selected?.trackSnapshots?.length ? selected.trackSnapshots : selected?.recentSnapshots ?? [])
     .filter((snapshot) => Number.isFinite(snapshot.latitude) && Number.isFinite(snapshot.longitude))
     .map((snapshot) => [snapshot.latitude, snapshot.longitude]);
 
@@ -149,7 +152,8 @@ export function BaRadarMap({
       maxZoom={19}
     />
     <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
-    {trail.length > 1 ? <Polyline positions={trail} pathOptions={{ color: "#e9ba2f", weight: 3, opacity: 0.9 }} /> : null}
+    {plannedRoute.length > 1 ? <Polyline positions={plannedRoute} pathOptions={{ color: "#73bdf1", weight: 2.5, opacity: 0.8, dashArray: "7 10", lineCap: "round", lineJoin: "round", className: "ba-radar-planned-route" }} /> : null}
+    {track.length > 1 ? <Polyline positions={track} pathOptions={{ color: "#f1c84c", weight: 3.5, opacity: 0.96, lineCap: "round", lineJoin: "round", className: "ba-radar-recorded-track" }} /> : null}
     {positioned.map((flight) => <Marker key={flight.id} position={[flight.lastSnapshot!.latitude, flight.lastSnapshot!.longitude]} icon={aircraftIcon(flight, flight.id === selectedId)} eventHandlers={{ click: () => onSelect(flight.id) }} />)}
   </MapContainer>;
 }

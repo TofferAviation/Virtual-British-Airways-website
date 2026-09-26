@@ -113,6 +113,9 @@ function FlightTrackerDetails({ flight }: { flight: PublicRadarFlight }) {
     </div>
     {flight.diversionAirport ? <div className="ba-radar-diversion-notice"><strong>DIVERTING</strong><span>Ember reports {flight.diversionAirport} as the diversion airport.</span></div> : null}
     {snapshot ? <>
+      <TrackerSection title="Route trace">
+        {flight.plannedRoute ? <p className="ba-radar-route-trace"><strong>{flight.plannedRoute.source === "simbrief" ? "SimBrief planned route" : "Direct airport route"}</strong><span>{flight.plannedRoute.points.length.toLocaleString()} plotted route points. The dashed blue line is the planned route; the solid gold line is the aircraft's recorded track.</span></p> : <p className="ba-radar-route-trace"><strong>Planned route pending</strong><span>Sync the SimBrief OFP for this assignment to show its planned route on BA-Radar. The recorded track remains available.</span></p>}
+      </TrackerSection>
       <TrackerSection title="Aircraft">
         <div className="ba-radar-tracker-aircraft"><div><span>Registration</span><strong>{flight.registration ?? "Pending"}</strong></div><div><span>Aircraft type</span><strong>{flight.aircraft}</strong></div><div><span>Simulator</span><strong>{simulatorLabels[flight.simulator]}</strong></div></div>
       </TrackerSection>
@@ -293,7 +296,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
               {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}
             </div>
           </details>
-          <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
+          <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{selected?.plannedRoute ? <span><i className="planned-route" /> Planned route</span> : null}{selected?.trackSnapshots.length ? <span><i className="recorded-track" /> Recorded track</span> : null}{layers.vatsim ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
           {!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}
         </div>
         <footer className="ba-radar-map-footer"><span>{positioned.length} BAV positions live</span><span>{airborne} BAV airborne</span><span>{layers.vatsim ? "VATSIM Data" : "BAV telemetry"}{needsWeather ? " · Weather layers active" : ""}</span></footer>

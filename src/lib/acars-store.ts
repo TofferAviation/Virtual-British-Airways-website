@@ -7,6 +7,12 @@ import type { AcarsFlightSnapshot, SupportedSimulator } from "@/lib/acars-contra
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "acars-sessions.json");
 const MAX_RECENT_SNAPSHOTS = 60;
+// The tracker keeps its compact, high-frequency chart separately from the
+// longer line shown on BA-Radar.  The latter is read from the durable report
+// table and reduced before it ever reaches a browser.
+const MAX_PUBLIC_TRACK_REPORTS = 10_000;
+const MAX_PUBLIC_TRACK_POINTS = 640;
+const PUBLIC_TRACK_CACHE_MS = 45_000;
 
 export type AcarsSessionStatus = "active" | "completed" | "disconnected";
 export type AcarsSession = {
@@ -31,6 +37,13 @@ type AcarsPositionReportRow = {
   altitude_ft: number; ground_speed_kt: number; heading_deg: number; fuel_kg: number | null;
   engines_running: boolean; parking_brake_set: boolean; on_ground: boolean; vertical_speed_fpm: number | null;
 };
+
+type PublicTrackCacheEntry = {
+  expiresAt: number;
+  snapshots: AcarsFlightSnapshot[];
+};
+
+const publicTrackCache = new Map<string, PublicTrackCacheEntry>();
 
 function isSupportedSimulator(value: unknown): value is SupportedSimulator {
   return value === "xplane12" || value === "msfs2020" || value === "msfs2024";
@@ -72,6 +85,26 @@ function snapshotFromPositionRow(row: AcarsPositionReportRow, session: Pick<Acar
     verticalSpeedFpm: asNumber(row.vertical_speed_fpm), flightStarted: !row.on_ground, registration: null,
     detectedAirport: null, diversionAirport: null,
   };
+}
+
+function uniqueSnapshots(snapshots: AcarsFlightSnapshot[]) {
+  const byTimestamp = new Map<string, AcarsFlightSnapshot>();
+  for (const snapshot of snapshots) {
+    if (!Number.isFinite(snapshot.latitude) || !Number.isFinite(snapshot.longitude) || !snapshot.timestamp) continue;
+    byTimestamp.set(snapshot.timestamp, snapshot);
+  }
+  return [...byTimestamp.values()].sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+}
+
+function reduceTrackSnapshots(snapshots: AcarsFlightSnapshot[], limit = MAX_PUBLIC_TRACK_POINTS) {
+  const ordered = uniqueSnapshots(snapshots);
+  if (ordered.length <= limit) return ordered;
+  const reduced: AcarsFlightSnapshot[] = [];
+  const lastIndex = ordered.length - 1;
+  for (let index = 0; index < limit; index += 1) {
+    reduced.push(ordered[Math.round(index * lastIndex / (limit - 1))]);
+  }
+  return reduced;
 }
 
 function getSupabaseClient(): SupabaseClient | null {
@@ -148,6 +181,23 @@ async function listPersistentAcarsSessionSnapshots(client: SupabaseClient, id: s
   return (data as AcarsPositionReportRow[]).map((row) => snapshotFromPositionRow(row, session));
 }
 
+async function listPersistentPublicTrackSnapshots(client: SupabaseClient, session: AcarsSession) {
+  const cached = publicTrackCache.get(session.id);
+  const latest = session.recentSnapshots ?? [];
+  if (cached && cached.expiresAt > Date.now()) return reduceTrackSnapshots([...cached.snapshots, ...latest, ...(session.lastSnapshot ? [session.lastSnapshot] : [])]);
+
+  // Read newest first so an unusually long session always retains the live
+  // end of its route, then restore chronological order for Leaflet.
+  const { data, error } = await client.from("acars_position_reports")
+    .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
+    .eq("session_id", session.id).order("reported_at", { ascending: false }).limit(MAX_PUBLIC_TRACK_REPORTS);
+  if (error) throw error;
+  const durable = (data as AcarsPositionReportRow[]).reverse().map((row) => snapshotFromPositionRow(row, session));
+  const snapshots = reduceTrackSnapshots([...durable, ...latest, ...(session.lastSnapshot ? [session.lastSnapshot] : [])]);
+  publicTrackCache.set(session.id, { expiresAt: Date.now() + PUBLIC_TRACK_CACHE_MS, snapshots });
+  return snapshots;
+}
+
 export async function startAcarsSession(input: NewSessionInput) { const client = requirePersistentClient(); return client ? startPersistentAcarsSession(client, input) : startLocalAcarsSession(input); }
 export async function getAcarsSession(id: string) { const client = requirePersistentClient(); return client ? getPersistentAcarsSession(client, id) : getLocalAcarsSession(id); }
 export async function getActiveAcarsSessionForPilot(pilotId: string) { const client = requirePersistentClient(); return client ? getPersistentActiveAcarsSessionForPilot(client, pilotId) : getActiveLocalAcarsSessionForPilot(pilotId); }
@@ -159,6 +209,27 @@ export async function listAcarsSessionSnapshots(id: string, pilotId: string) {
   if (client) return listPersistentAcarsSessionSnapshots(client, id, pilotId);
   const session = await getLocalAcarsSession(id);
   return session?.pilotId === pilotId ? [...(session.recentSnapshots ?? [])].sort((left, right) => left.timestamp.localeCompare(right.timestamp)) : [];
+}
+
+/**
+ * Returns a light, chronological route trace for active public sessions.
+ * The raw reports remain private; BA-Radar receives only a reduced flight
+ * path, while the 60-sample recent list remains dedicated to the live charts.
+ */
+export async function listLiveAcarsSessionTrackSnapshots(sessions: AcarsSession[]) {
+  try {
+    const client = requirePersistentClient();
+    if (!client) return new Map(sessions.map((session) => [session.id, reduceTrackSnapshots([...(session.recentSnapshots ?? []), ...(session.lastSnapshot ? [session.lastSnapshot] : [])])]));
+
+    const activeIds = new Set(sessions.map((session) => session.id));
+    for (const sessionId of publicTrackCache.keys()) if (!activeIds.has(sessionId)) publicTrackCache.delete(sessionId);
+    const entries = await Promise.all(sessions.map(async (session) => [session.id, await listPersistentPublicTrackSnapshots(client, session)] as const));
+    return new Map(entries);
+  } catch (error) {
+    // A temporary history-query issue must not hide the live aircraft marker.
+    console.error("[acars] Could not load durable public tracker paths.", error);
+    return new Map<string, AcarsFlightSnapshot[]>();
+  }
 }
 export async function listLiveAcarsSessions() {
   // BA-Radar is a public, read-only surface. A missing or temporarily
