@@ -586,7 +586,102 @@ export async function approveTrainingApplication(applicationId: string, staffMem
   await audit({ pilotId: application.pilotId, trainingApplicationId: applicationId, qualificationId: null, action: "application_approved", oldValue: { status: application.status }, newValue: { status: "approved", instructor: instructor?.trim() || null }, reason: note?.trim() || null, staffMember });
 }
 
-async function postFinanceTransaction(input: { pilotId: string; idempotencyKey: string; category: FinanceTransactionCategory; amount: number; description: string; relatedPirepId?: string | null; relatedTrainingApplicationId?: string | null; relatedQualificationId?: string | null; reversedTransactionId?: string | null; createdAutomatically: boolean; staffMember?: string | null; }) {
+type FinanceTransactionInput = { pilotId: string; idempotencyKey: string; category: FinanceTransactionCategory; amount: number; description: string; relatedPirepId?: string | null; relatedTrainingApplicationId?: string | null; relatedQualificationId?: string | null; reversedTransactionId?: string | null; createdAutomatically: boolean; staffMember?: string | null; };
+
+/**
+ * Rebuild the account summary from the immutable ledger. This is used by the
+ * table-level posting fallback below, and also repairs a historical partial
+ * write where a transaction was created but its account summary was not.
+ */
+async function synchronisePilotFinanceAccount(client: SupabaseClient, pilotId: string) {
+  const { data, error } = await client.from("pilot_finance_transactions").select("amount,created_at").eq("pilot_id", pilotId).limit(10_000);
+  if (error) throw error;
+  const now = new Date();
+  const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).getTime();
+  const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).getTime();
+  let currentBalance = 0;
+  let lifetimeEarnings = 0;
+  let currentMonthEarnings = 0;
+  let previousMonthEarnings = 0;
+  for (const row of data ?? []) {
+    const entry = row as Record<string, unknown>;
+    const amount = finiteMoney(entry.amount);
+    currentBalance = roundMoney(currentBalance + amount);
+    if (amount <= 0) continue;
+    lifetimeEarnings = roundMoney(lifetimeEarnings + amount);
+    const createdAt = Date.parse(String(entry.created_at ?? ""));
+    if (createdAt >= currentMonthStart) currentMonthEarnings = roundMoney(currentMonthEarnings + amount);
+    else if (createdAt >= previousMonthStart) previousMonthEarnings = roundMoney(previousMonthEarnings + amount);
+  }
+  const { error: accountError } = await client.from("pilot_finance_accounts").upsert({
+    pilot_id: pilotId,
+    current_balance: currentBalance,
+    lifetime_earnings: lifetimeEarnings,
+    current_month_earnings: currentMonthEarnings,
+    previous_month_earnings: previousMonthEarnings,
+    updated_at: now.toISOString(),
+  }, { onConflict: "pilot_id" });
+  if (accountError) throw accountError;
+}
+
+/**
+ * The normal route is the atomic Postgres function. Some already-running
+ * Supabase projects can temporarily lack that function in the PostgREST
+ * schema cache even though the ledger tables are present. This fallback keeps
+ * posting durable and idempotent rather than leaving accepted PIREPs unpaid.
+ */
+async function postFinanceTransactionViaTables(client: SupabaseClient, input: FinanceTransactionInput, amount: number) {
+  const existingResult = await client.from("pilot_finance_transactions").select("*").eq("idempotency_key", input.idempotencyKey).maybeSingle();
+  if (existingResult.error) throw existingResult.error;
+  if (existingResult.data) {
+    await synchronisePilotFinanceAccount(client, input.pilotId);
+    return { transaction: transactionFromRow(existingResult.data as Record<string, unknown>), posted: false };
+  }
+
+  const { error: ensureAccountError } = await client.from("pilot_finance_accounts").upsert({ pilot_id: input.pilotId }, { onConflict: "pilot_id", ignoreDuplicates: true });
+  if (ensureAccountError) throw ensureAccountError;
+  const { data: accountRow, error: accountReadError } = await client.from("pilot_finance_accounts").select("current_balance").eq("pilot_id", input.pilotId).single();
+  if (accountReadError) throw accountReadError;
+  const balanceBefore = finiteMoney((accountRow as Record<string, unknown>).current_balance);
+  const balanceAfter = roundMoney(balanceBefore + amount);
+  if (balanceAfter < 0) throw new Error("Insufficient virtual account balance.");
+
+  const createdAt = new Date().toISOString();
+  const { data, error } = await client.from("pilot_finance_transactions").insert({
+    id: randomUUID(),
+    pilot_id: input.pilotId,
+    idempotency_key: input.idempotencyKey,
+    category: input.category,
+    amount,
+    balance_before: balanceBefore,
+    balance_after: balanceAfter,
+    related_pirep_id: input.relatedPirepId ?? null,
+    related_training_application_id: input.relatedTrainingApplicationId ?? null,
+    related_qualification_id: input.relatedQualificationId ?? null,
+    reversed_transaction_id: input.reversedTransactionId ?? null,
+    description: input.description.trim().slice(0, 500),
+    created_automatically: input.createdAutomatically,
+    staff_member: input.staffMember ?? null,
+    created_at: createdAt,
+  }).select("*").maybeSingle();
+
+  if (error) {
+    // A simultaneous retry may have inserted this idempotency key first. Read
+    // it back and treat it as a successful, already-settled ledger entry.
+    if (error.code === "23505") {
+      const retry = await client.from("pilot_finance_transactions").select("*").eq("idempotency_key", input.idempotencyKey).maybeSingle();
+      if (retry.error || !retry.data) throw retry.error ?? error;
+      await synchronisePilotFinanceAccount(client, input.pilotId);
+      return { transaction: transactionFromRow(retry.data as Record<string, unknown>), posted: false };
+    }
+    throw error;
+  }
+  if (!data) throw new Error("The virtual finance ledger did not return a transaction.");
+  await synchronisePilotFinanceAccount(client, input.pilotId);
+  return { transaction: transactionFromRow(data as Record<string, unknown>), posted: true };
+}
+
+async function postFinanceTransaction(input: FinanceTransactionInput) {
   const amount = roundMoney(input.amount);
   if (!amount) throw new Error("A non-zero virtual finance amount is required.");
   const client = clientOrThrow();
@@ -617,7 +712,10 @@ async function postFinanceTransaction(input: { pilotId: string; idempotencyKey: 
     p_related_qualification_id: input.relatedQualificationId ?? null, p_reversed_transaction_id: input.reversedTransactionId ?? null,
     p_created_automatically: input.createdAutomatically, p_staff_member: input.staffMember ?? null,
   });
-  if (error) throw error;
+  if (error) {
+    console.warn("[pilot-career] Finance RPC unavailable; using the idempotent ledger-table fallback.", { code: error.code, message: error.message });
+    return postFinanceTransactionViaTables(client, input, amount);
+  }
   const result = Array.isArray(data) ? data[0] : data;
   if (!result) throw new Error("The virtual finance ledger did not return a transaction.");
   const transaction: PilotFinanceTransaction = { id: String(result.transaction_id), pilotId: input.pilotId, idempotencyKey: input.idempotencyKey, category: input.category, amount, balanceBefore: finiteMoney(result.balance_before), balanceAfter: finiteMoney(result.balance_after), relatedPirepId: input.relatedPirepId ?? null, relatedTrainingApplicationId: input.relatedTrainingApplicationId ?? null, relatedQualificationId: input.relatedQualificationId ?? null, reversedTransactionId: input.reversedTransactionId ?? null, description: input.description.trim().slice(0, 500), createdAutomatically: input.createdAutomatically, staffMember: input.staffMember ?? null, createdAt: new Date().toISOString() };
