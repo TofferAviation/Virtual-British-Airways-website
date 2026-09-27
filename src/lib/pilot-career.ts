@@ -10,6 +10,17 @@ import type { PilotPirep } from "@/lib/pilot-operations-store";
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const LOCAL_FILE = path.join(DATA_DIR, "pilot-career.json");
 
+// Recognise the original launch prices so the revised BAV virtual market
+// baseline can be applied once without overwriting a staff-set rate.
+const LEGACY_DEFAULT_TRAINING_COSTS: Record<string, { training: number; recurrent: number }> = {
+  E190: { training: 8000, recurrent: 1800 },
+  A320_FAMILY: { training: 10000, recurrent: 2200 },
+  B787: { training: 18000, recurrent: 3800 },
+  B777: { training: 20000, recurrent: 4200 },
+  A350: { training: 22000, recurrent: 4600 },
+  A380: { training: 27500, recurrent: 5500 },
+};
+
 export type FinanceTransactionCategory = "flight_pay" | "bonus" | "allowance" | "training_payment" | "qualification_payment" | "recurrent_training" | "refund" | "manual_adjustment" | "reversal";
 export type TrainingApplicationStatus = "not_eligible" | "eligible" | "application_submitted" | "awaiting_approval" | "approved" | "payment_pending" | "training_assigned" | "training_in_progress" | "check_flight_required" | "check_flight_submitted" | "check_flight_review" | "passed" | "failed" | "type_rating_issued" | "expired" | "suspended";
 export type QualificationStatus = "valid" | "expiring_soon" | "recurrent_due" | "expired" | "suspended";
@@ -209,6 +220,15 @@ function copyDefinitions(definitions = DEFAULT_QUALIFICATION_DEFINITIONS) {
   return definitions.map((definition) => ({ ...definition, variants: [...definition.variants], requirements: { ...definition.requirements }, trainingModules: [...definition.trainingModules] }));
 }
 
+function applyScaledMarketTrainingBaseline(definitions: readonly CareerQualificationDefinition[]) {
+  return definitions.map((definition) => {
+    const legacy = LEGACY_DEFAULT_TRAINING_COSTS[definition.id];
+    const benchmark = DEFAULT_QUALIFICATION_DEFINITIONS.find((item) => item.id === definition.id);
+    if (!legacy || !benchmark || definition.virtualTrainingCost !== legacy.training || definition.recurrentTrainingCost !== legacy.recurrent) return definition;
+    return { ...definition, virtualTrainingCost: benchmark.virtualTrainingCost, recurrentTrainingCost: benchmark.recurrentTrainingCost };
+  });
+}
+
 function normaliseDefinition(value: unknown, fallback: CareerQualificationDefinition): CareerQualificationDefinition {
   const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const readString = (key: string, fallbackValue: string, max = 500) => typeof raw[key] === "string" && raw[key].trim() ? raw[key].trim().slice(0, max) : fallbackValue;
@@ -354,10 +374,33 @@ export async function updateCareerEconomySettings(settings: unknown, staffMember
 
 export async function listQualificationDefinitions(): Promise<CareerQualificationDefinition[]> {
   const client = clientOrThrow();
-  if (!client) return copyDefinitions((await readLocalState()).definitions);
+  if (!client) {
+    const state = await readLocalState();
+    const definitions = applyScaledMarketTrainingBaseline(state.definitions);
+    if (definitions.some((definition, index) => definition !== state.definitions[index])) {
+      state.definitions = definitions;
+      await writeLocalState(state);
+    }
+    return copyDefinitions(definitions);
+  }
   const { data, error } = await client.from("qualification_definitions").select("*").order("display_order");
   if (error) throw error;
-  return (data ?? []).map((row) => definitionFromRow(row as Record<string, unknown>));
+  let definitions = (data ?? []).map((row) => definitionFromRow(row as Record<string, unknown>));
+  const revised = applyScaledMarketTrainingBaseline(definitions);
+  const changed = revised.filter((definition, index) => definition !== definitions[index]);
+  if (changed.length) {
+    const updatedAt = new Date().toISOString();
+    for (const definition of changed) {
+      const { error: updateError } = await client.from("qualification_definitions").update({
+        virtual_training_cost: definition.virtualTrainingCost,
+        recurrent_training_cost: definition.recurrentTrainingCost,
+        updated_at: updatedAt,
+      }).eq("id", definition.id);
+      if (updateError) throw updateError;
+    }
+    definitions = revised;
+  }
+  return definitions;
 }
 
 async function auditConfiguration(input: Omit<ConfigurationAudit, "id" | "createdAt">) {
