@@ -30,6 +30,15 @@ const PREVIOUS_SCALED_TRAINING_COSTS: Record<string, { training: number; recurre
   A380: { training: 17500, recurrent: 2200 },
 };
 
+const PREVIOUS_MARKET_TRAINING_COSTS: Record<string, { training: number; recurrent: number }> = {
+  E190: { training: 7500, recurrent: 1000 },
+  A320_FAMILY: { training: 8000, recurrent: 1100 },
+  B787: { training: 15000, recurrent: 1800 },
+  B777: { training: 15500, recurrent: 1850 },
+  A350: { training: 16500, recurrent: 2000 },
+  A380: { training: 14000, recurrent: 1700 },
+};
+
 export type FinanceTransactionCategory = "flight_pay" | "bonus" | "allowance" | "training_payment" | "qualification_payment" | "recurrent_training" | "refund" | "manual_adjustment" | "reversal";
 export type TrainingApplicationStatus = "not_eligible" | "eligible" | "application_submitted" | "awaiting_approval" | "approved" | "payment_pending" | "training_assigned" | "training_in_progress" | "check_flight_required" | "check_flight_submitted" | "check_flight_review" | "passed" | "failed" | "type_rating_issued" | "expired" | "suspended";
 export type QualificationStatus = "valid" | "expiring_soon" | "recurrent_due" | "expired" | "suspended";
@@ -233,10 +242,12 @@ function applyScaledMarketTrainingBaseline(definitions: readonly CareerQualifica
   return definitions.map((definition) => {
     const legacy = LEGACY_DEFAULT_TRAINING_COSTS[definition.id];
     const previousScaled = PREVIOUS_SCALED_TRAINING_COSTS[definition.id];
+    const previousMarket = PREVIOUS_MARKET_TRAINING_COSTS[definition.id];
     const benchmark = DEFAULT_QUALIFICATION_DEFINITIONS.find((item) => item.id === definition.id);
     const isLegacyDefault = legacy && definition.virtualTrainingCost === legacy.training && definition.recurrentTrainingCost === legacy.recurrent;
     const isPreviousScaledDefault = previousScaled && definition.virtualTrainingCost === previousScaled.training && definition.recurrentTrainingCost === previousScaled.recurrent;
-    if (!benchmark || (!isLegacyDefault && !isPreviousScaledDefault)) return definition;
+    const isPreviousMarketDefault = previousMarket && definition.virtualTrainingCost === previousMarket.training && definition.recurrentTrainingCost === previousMarket.recurrent;
+    if (!benchmark || (!isLegacyDefault && !isPreviousScaledDefault && !isPreviousMarketDefault)) return definition;
     if (definition.virtualTrainingCost === benchmark.virtualTrainingCost && definition.recurrentTrainingCost === benchmark.recurrentTrainingCost) return definition;
     return { ...definition, virtualTrainingCost: benchmark.virtualTrainingCost, recurrentTrainingCost: benchmark.recurrentTrainingCost };
   });
