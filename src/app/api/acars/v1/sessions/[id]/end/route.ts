@@ -11,12 +11,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const existing = await getAcarsSession(id);
   if (!existing || existing.pilotId !== auth.account.id) return NextResponse.json({ error: "Session not found." }, { status: 404 });
-  const body = await request.json().catch(() => ({})) as { landingFpm?: number | null; pilotComments?: string };
+  const body = await request.json().catch(() => ({})) as { landingFpm?: number | null; pilotComments?: string; simulatorBlockMinutes?: number | null };
   const arrival = await resolveAcarsArrival(existing);
   const session = await completeAcarsSession(id, auth.account.id, typeof body.landingFpm === "number" ? body.landingFpm : null);
   if (!session?.completedAt) return NextResponse.json({ error: "Session is not active." }, { status: 409 });
 
-  const blockMinutes = Math.max(1, Math.round((new Date(session.completedAt).getTime() - new Date(session.startedAt).getTime()) / 60000));
+  const wallClockMinutes = Math.max(1, Math.round((new Date(session.completedAt).getTime() - new Date(session.startedAt).getTime()) / 60000));
+  // Modern Ember records elapsed *simulator* time locally. This follows MSFS
+  // time acceleration and pauses, unlike a server wall clock. Constrain the
+  // client-provided value to a sensible operational window; legacy clients
+  // continue to use the durable wall-clock fallback.
+  const requestedSimulatorBlockMinutes = typeof body.simulatorBlockMinutes === "number" && Number.isFinite(body.simulatorBlockMinutes)
+    ? Math.round(body.simulatorBlockMinutes)
+    : null;
+  const blockMinutes = requestedSimulatorBlockMinutes != null && requestedSimulatorBlockMinutes >= 1 && requestedSimulatorBlockMinutes <= 72 * 60
+    ? requestedSimulatorBlockMinutes
+    : wallClockMinutes;
   const fuelUsedKg = session.firstFuelKg != null && session.lastFuelKg != null ? Math.max(0, Math.round(session.firstFuelKg - session.lastFuelKg)) : null;
   const fleet = await reconcileFleetArrival(session, arrival);
   const pilotComments = (body.pilotComments ?? "").trim().slice(0, 2000);
