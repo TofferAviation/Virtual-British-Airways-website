@@ -549,23 +549,48 @@ async function notifyPilotOfPirepReview(pirep: PilotPirep, decision: "accepted" 
  * undo an Operations review of an otherwise valid PIREP.
  */
 async function processAcceptedPirepFinance(pirep: PilotPirep) {
-  try {
-    const pilot = await getPilotById(pirep.pilotId);
-    if (!pilot) return;
-    const result = await creditAcceptedPirepSalary(pilot, pirep);
-    if (result.posted) {
-      await createPilotNotification({
-        pilotId: pilot.id,
-        kind: "career_credit",
-        level: "success",
-        title: "Virtual flight pay credited",
-        body: `${pirep.flightNumber} ${pirep.from} → ${pirep.to}: £${result.transaction.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })} was posted to your virtual account.`,
-        href: "/account/finances",
-      });
-    }
-  } catch (error) {
-    console.error("[pilot-career] Could not post accepted-PIREP virtual flight pay", { pirepId: pirep.id, error });
+  const pilot = await getPilotById(pirep.pilotId);
+  if (!pilot) throw new Error("The PIREP pilot could not be found while posting virtual flight pay.");
+  const result = await creditAcceptedPirepSalary(pilot, pirep);
+  if (result.posted) {
+    // A notification problem must never turn a successfully posted ledger
+    // transaction into a failed finance reconciliation.
+    await createPilotNotification({
+      pilotId: pilot.id,
+      kind: "career_credit",
+      level: "success",
+      title: "Virtual flight pay credited",
+      body: `${pirep.flightNumber} ${pirep.from} → ${pirep.to}: £${result.transaction.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })} was posted to your virtual account.`,
+      href: "/account/finances",
+    }).catch((error) => console.error("[pilot-career] Could not send virtual flight-pay notification", { pirepId: pirep.id, error }));
   }
+  return result;
+}
+
+/**
+ * Repair any accepted report that reached Operations before a finance write
+ * completed. The ledger's accepted-PIREP idempotency key makes this safe to
+ * run on every finance-page visit: it can add a missing credit once, but can
+ * never pay the same PIREP twice.
+ */
+export async function reconcileAcceptedPirepFinance(pilotId: string) {
+  const acceptedPireps = (await listPilotPireps(pilotId)).filter((pirep) => pirep.status === "accepted");
+  let posted = 0;
+  let alreadyPosted = 0;
+  let failed = 0;
+
+  for (const pirep of acceptedPireps) {
+    try {
+      const result = await processAcceptedPirepFinance(pirep);
+      if (result.posted) posted += 1;
+      else alreadyPosted += 1;
+    } catch (error) {
+      failed += 1;
+      console.error("[pilot-career] Could not reconcile accepted-PIREP virtual flight pay", { pilotId, pirepId: pirep.id, error });
+    }
+  }
+
+  return { posted, alreadyPosted, failed };
 }
 
 export async function reviewPirep(input: { id: string; decision: "accepted" | "rejected" | "changes_requested"; staffName: string; comments: string }) {
@@ -602,7 +627,11 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
     if (error) throw error;
     const reviewed = pirepFromRow(data as PirepRow);
-    if (input.decision === "accepted") await processAcceptedPirepFinance(reviewed);
+    if (input.decision === "accepted") {
+      await processAcceptedPirepFinance(reviewed).catch((error) =>
+        console.error("[pilot-career] Accepted PIREP awaits finance reconciliation", { pirepId: reviewed.id, error }),
+      );
+    }
     await notifyPilotOfPirepReview(reviewed, input.decision, input.staffName, input.comments);
     return reviewed;
   }
@@ -641,7 +670,11 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
   }
 
   await writeState(state);
-  if (input.decision === "accepted") await processAcceptedPirepFinance(pirep);
+  if (input.decision === "accepted") {
+    await processAcceptedPirepFinance(pirep).catch((error) =>
+      console.error("[pilot-career] Accepted PIREP awaits finance reconciliation", { pirepId: pirep.id, error }),
+    );
+  }
   await notifyPilotOfPirepReview(pirep, input.decision, input.staffName, input.comments);
   return pirep;
 }
