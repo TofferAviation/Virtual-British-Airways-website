@@ -414,22 +414,38 @@ export async function getPilotFinanceAccount(pilotId: string): Promise<PilotFina
   const { data, error } = await client.from("pilot_finance_accounts").select("*").eq("pilot_id", pilotId).single();
   if (error) throw error;
   const account = accountFromRow(data as Record<string, unknown>, pilotId);
-  // Month figures are derived from the immutable ledger rather than relying
-  // on a rollover job. This keeps them correct even if the service was asleep
-  // at a month boundary.
+  // Account totals are derived from the immutable ledger rather than relying
+  // on a rollover job or a stale account summary. This also repairs any
+  // historical entry created while the finance RPC was unavailable.
   const now = new Date();
+  const { data: ledgerRows, error: ledgerError } = await client.from("pilot_finance_transactions").select("amount,created_at").eq("pilot_id", pilotId).limit(10_000);
+  if (ledgerError) throw ledgerError;
+  account.currentBalance = 0;
+  account.lifetimeEarnings = 0;
   account.currentMonthEarnings = 0;
   account.previousMonthEarnings = 0;
   const thisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const { data: earningsRows, error: earningsError } = await client.from("pilot_finance_transactions").select("amount,created_at").eq("pilot_id", pilotId).gte("created_at", previousMonth.toISOString());
-  if (earningsError) throw earningsError;
-  for (const row of earningsRows ?? []) {
+  for (const row of ledgerRows ?? []) {
     const amount = finiteMoney((row as Record<string, unknown>).amount);
+    account.currentBalance = roundMoney(account.currentBalance + amount);
+    if (amount > 0) account.lifetimeEarnings = roundMoney(account.lifetimeEarnings + amount);
     if (amount <= 0) continue;
     const createdAt = Date.parse(String((row as Record<string, unknown>).created_at ?? ""));
     if (createdAt >= thisMonth.getTime()) account.currentMonthEarnings = roundMoney(account.currentMonthEarnings + amount);
     else account.previousMonthEarnings = roundMoney(account.previousMonthEarnings + amount);
+  }
+  const stored = accountFromRow(data as Record<string, unknown>, pilotId);
+  if (stored.currentBalance !== account.currentBalance || stored.lifetimeEarnings !== account.lifetimeEarnings || stored.currentMonthEarnings !== account.currentMonthEarnings || stored.previousMonthEarnings !== account.previousMonthEarnings) {
+    account.updatedAt = now.toISOString();
+    const { error: syncError } = await client.from("pilot_finance_accounts").update({
+      current_balance: account.currentBalance,
+      lifetime_earnings: account.lifetimeEarnings,
+      current_month_earnings: account.currentMonthEarnings,
+      previous_month_earnings: account.previousMonthEarnings,
+      updated_at: account.updatedAt,
+    }).eq("pilot_id", pilotId);
+    if (syncError) throw syncError;
   }
   return account;
 }
