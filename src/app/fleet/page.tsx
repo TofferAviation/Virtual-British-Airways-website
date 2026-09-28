@@ -2,11 +2,34 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { fleet } from "@/lib/mockData";
+import { isCareerFeatureEnabled } from "@/lib/career-experience";
+import { getCareerDashboard } from "@/lib/pilot-career";
+import { getActiveFleetFlightAssignmentForPilot, listFleetAircraft } from "@/lib/fleet-service";
+import { getPilotSession } from "@/lib/pilot-auth";
+import { getPilotById } from "@/lib/pilot-store";
+import { listPilotPireps } from "@/lib/pilot-operations-store";
+import { CareerFleetPortfolio } from "@/app/account/career/CareerFleetPortfolio";
 
 export const metadata = { title: "Fleet" };
 
-export default function FleetPage() {
+export default async function FleetPage() {
   const total = fleet.reduce((sum, aircraft) => sum + aircraft.count, 0);
+  let pilotPortfolio = null;
+
+  if (isCareerFeatureEnabled("fleet")) {
+    const session = await getPilotSession();
+    const pilot = session ? await getPilotById(session.pilotId) : null;
+    if (pilot) {
+      const [career, pireps, fleetAircraft, assignment] = await Promise.all([
+        getCareerDashboard(pilot),
+        listPilotPireps(pilot.id),
+        listFleetAircraft().catch(() => []),
+        getActiveFleetFlightAssignmentForPilot({ subject: `bav:${pilot.id}`, displayName: pilot.name, fleetRole: "pilot" }).catch(() => null),
+      ]);
+      pilotPortfolio = <section className="fleet-pilot-portfolio" aria-label="Your Fleet Career portfolio"><CareerFleetPortfolio fleetAircraft={fleetAircraft} pireps={pireps} qualifications={career.qualifications} activeAssignment={assignment?.flightReference ?? null} /></section>;
+    }
+    if (!pilotPortfolio) pilotPortfolio = <section className="fleet-career-signin"><div><span>PILOT CAREER</span><h2>Your Fleet Career</h2><p>Sign in to see your accepted flights, block hours, aircraft experience and qualification context alongside the BAV Fleet.</p></div><Link href="/login">Sign in to view your portfolio →</Link></section>;
+  }
 
   return (
     <>
@@ -41,6 +64,8 @@ export default function FleetPage() {
               </Link>
             </div>
           </section>
+
+          {pilotPortfolio}
 
           <section className="fleet-showcase-grid" aria-label="British Airways Virtual fleet types">
             {fleet.map((aircraft) => (
