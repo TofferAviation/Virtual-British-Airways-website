@@ -27,6 +27,7 @@
 }
 .fleet-pilot-portfolio{margin:28px 0}
 .fleet-career-signin{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:28px 0;padding:26px 30px;background:linear-gradient(120deg,#08264d,#6d3f1f);border-bottom:4px solid #d20a3c;color:#fff}.fleet-career-signin span{display:block;color:#ffd6a5;font-size:10px;letter-spacing:.14em;font-weight:800}.fleet-career-signin h2{margin:7px 0;font:400 30px/1.1 Georgia,'Times New Roman',serif}.fleet-career-signin p{max-width:680px;margin:0;color:#f6e9df;line-height:1.55}.fleet-career-signin a{border:1px solid rgba(255,255,255,.55);padding:11px 14px;color:#fff;font-size:13px;font-weight:800;white-space:nowrap}@media(max-width:700px){.fleet-career-signin{display:grid;padding:24px}.fleet-career-signin a{justify-self:start}}
+.fleet-card-career{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:18px 0 0;padding:13px 0;border-top:1px solid rgba(104,162,216,.34)}.fleet-card-career>span{grid-column:1/-1;color:#ffd6a5;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.fleet-card-career div{min-width:0}.fleet-card-career b,.fleet-card-career small{display:block}.fleet-card-career b{font:600 16px/1.15 Georgia,'Times New Roman',serif;color:#fff;white-space:nowrap}.fleet-card-career small{margin-top:4px;color:#83bdf0;font-size:10px}@media(max-width:520px){.fleet-card-career{grid-template-columns:1fr 1fr}}
 
 .fleet-visually-hidden{
   position:absolute!important;

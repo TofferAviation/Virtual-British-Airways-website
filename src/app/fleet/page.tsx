@@ -12,9 +12,20 @@ import { CareerFleetPortfolio } from "@/app/account/career/CareerFleetPortfolio"
 
 export const metadata = { title: "Fleet" };
 
+type PilotFleetTypeStats = { flights: number; blockMinutes: number; distanceNm: number };
+
+function fleetTypeKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function blockTime(minutes: number) {
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
 export default async function FleetPage() {
   const total = fleet.reduce((sum, aircraft) => sum + aircraft.count, 0);
   let pilotPortfolio = null;
+  let pilotTypeStats: Map<string, PilotFleetTypeStats> | null = null;
 
   if (isCareerFeatureEnabled("fleet")) {
     const session = await getPilotSession();
@@ -26,6 +37,10 @@ export default async function FleetPage() {
         listFleetAircraft().catch(() => []),
         getActiveFleetFlightAssignmentForPilot({ subject: `bav:${pilot.id}`, displayName: pilot.name, fleetRole: "pilot" }).catch(() => null),
       ]);
+      pilotTypeStats = new Map(fleet.map((aircraft) => {
+        const flights = pireps.filter((pirep) => pirep.status === "accepted" && fleetTypeKey(pirep.aircraft) === fleetTypeKey(aircraft.type));
+        return [fleetTypeKey(aircraft.type), { flights: flights.length, blockMinutes: flights.reduce((total, flight) => total + Math.max(0, flight.blockMinutes), 0), distanceNm: flights.reduce((total, flight) => total + Math.max(0, flight.distanceNm), 0) }];
+      }));
       pilotPortfolio = <section className="fleet-pilot-portfolio" aria-label="Your Fleet Career portfolio"><CareerFleetPortfolio fleetAircraft={fleetAircraft} pireps={pireps} qualifications={career.qualifications} activeAssignment={assignment?.flightReference ?? null} /></section>;
     }
     if (!pilotPortfolio) pilotPortfolio = <section className="fleet-career-signin"><div><span>PILOT CAREER</span><h2>Your Fleet Career</h2><p>Sign in to see your accepted flights, block hours, aircraft experience and qualification context alongside the BAV Fleet.</p></div><Link href="/login">Sign in to view your portfolio →</Link></section>;
@@ -73,6 +88,7 @@ export default async function FleetPage() {
                 <div className="fleet-card-family">{aircraft.family}</div>
                 <h2>{aircraft.type}</h2>
                 <p>{aircraft.count} aircraft in the initial seed dataset.</p>
+                {pilotTypeStats ? <div className="fleet-card-career" aria-label={`Your ${aircraft.type} career record`}><span>Your Fleet Career</span><div><b>{blockTime(pilotTypeStats.get(fleetTypeKey(aircraft.type))?.blockMinutes ?? 0)}</b><small>Block time</small></div><div><b>{pilotTypeStats.get(fleetTypeKey(aircraft.type))?.flights ?? 0}</b><small>Sectors</small></div><div><b>{(pilotTypeStats.get(fleetTypeKey(aircraft.type))?.distanceNm ?? 0).toLocaleString("en-GB")} NM</b><small>Distance</small></div></div> : null}
                 <div className="fleet-card-image-space" aria-hidden="true" />
                 <Link className="fleet-card-link" href={`/book?aircraft=${encodeURIComponent(aircraft.type)}`}>
                   View available flights <span aria-hidden="true">→</span>
