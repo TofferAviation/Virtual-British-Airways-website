@@ -16,6 +16,7 @@ export type CareerExperiencePreferences = {
   mode: CareerExperienceMode;
   focus: CareerFocus;
   rosterDays: number[];
+  mentoringInterest: "none" | "learn" | "mentor";
   updatedAt: string;
 };
 
@@ -46,14 +47,17 @@ function validTimestamp(value: unknown, fallback: string) {
 }
 
 export function createCareerExperiencePreferences(now = new Date().toISOString()): CareerExperiencePreferences {
-  return { version: 1, mode: "fly", focus: "explore", rosterDays: [], updatedAt: now };
+  return { version: 1, mode: "fly", focus: "explore", rosterDays: [], mentoringInterest: "none", updatedAt: now };
 }
 
 export function normalizeCareerExperiencePreferences(value: unknown, fallbackTimestamp = new Date().toISOString()): CareerExperiencePreferences {
   const raw = value && typeof value === "object" ? value as Partial<CareerExperiencePreferences> : {};
   const rosterDays = Array.isArray(raw.rosterDays) ? Array.from(new Set(raw.rosterDays.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6))).sort() : [];
-  return { version: 1, mode: isMode(raw.mode) ? raw.mode : "fly", focus: isFocus(raw.focus) ? raw.focus : "explore", rosterDays, updatedAt: validTimestamp(raw.updatedAt, fallbackTimestamp) };
+  const mentoringInterest = raw.mentoringInterest === "learn" || raw.mentoringInterest === "mentor" ? raw.mentoringInterest : "none";
+  return { version: 1, mode: isMode(raw.mode) ? raw.mode : "fly", focus: isFocus(raw.focus) ? raw.focus : "explore", rosterDays, mentoringInterest, updatedAt: validTimestamp(raw.updatedAt, fallbackTimestamp) };
 }
+
+export function validateMentoringInterest(input: unknown) { const value = input && typeof input === "object" ? (input as { mentoringInterest?: unknown }).mentoringInterest : null; if (value !== "none" && value !== "learn" && value !== "mentor") throw new Error("Choose a mentoring preference."); return value; }
 
 export function validateCareerExperiencePreferences(input: unknown): Pick<CareerExperiencePreferences, "mode" | "focus"> {
   const raw = input && typeof input === "object" ? input as { mode?: unknown; focus?: unknown } : {};

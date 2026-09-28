@@ -12,6 +12,8 @@ import { CareerDispatcher } from "./CareerDispatcher";
 import { CareerModeGuide } from "./CareerModeGuide";
 import { CareerOperationsReadiness } from "./CareerOperationsReadiness";
 import { CareerRosterForm } from "./CareerRosterForm";
+import { CareerMentoringForm } from "./CareerMentoringForm";
+import { getActiveFleetFlightAssignmentForPilot, listFleetAircraft } from "@/lib/fleet-service";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { redirect } from "next/navigation";
 
@@ -31,12 +33,14 @@ export default async function CareerPage() {
   const guidedCareer = pilot.careerExperience.mode !== "fly";
   const operationalPreview = pilot.careerExperience.mode === "realistic_operations" && isCareerFeatureEnabled("debrief");
   const passportPreview = isCareerFeatureEnabled("passport");
+  const fleetPreview = isCareerFeatureEnabled("fleet");
   const [dispatchSuggestions, activeBooking, recentPireps] = await Promise.all([
     guidedCareer && isCareerFeatureEnabled("dispatcher") ? getCareerDispatchSuggestions(pilot) : Promise.resolve(null),
     operationalPreview ? getActivePilotBooking(pilot.id) : Promise.resolve(null),
     operationalPreview || passportPreview ? listPilotPireps(pilot.id) : Promise.resolve([]),
   ]);
   const activeFlightPlan = activeBooking && operationalPreview ? await getPilotFlightPlan(activeBooking.id, pilot.id) : null;
+  const [fleetAircraft, fleetAssignment] = fleetPreview ? await Promise.all([listFleetAircraft().catch(() => []), getActiveFleetFlightAssignmentForPilot({ subject: `bav:${pilot.id}`, displayName: pilot.name, fleetRole: "pilot" }).catch(() => null)]) : [[], null];
   return <><SiteHeader /><main className="career-page"><div className="career-shell">
     <nav className="career-breadcrumbs"><Link href="/account">Pilot account</Link><span>›</span><strong>Career & qualifications</strong></nav>
     <header className="career-hero"><div><span>PILOT CAREER</span><h1>Career & qualifications</h1><p>A professional virtual-airline progression record. All balances, earnings and training costs are fictional British Airways Virtual economy values.</p></div><Link href="/account/qualifications">Explore training →</Link></header>
@@ -51,6 +55,8 @@ export default async function CareerPage() {
       {operationalPreview ? <CareerOperationsReadiness booking={activeBooking} flightPlan={activeFlightPlan} latestPirep={recentPireps[0] ?? null} /> : null}
       {isCareerFeatureEnabled("rosters") ? <CareerRosterForm rosterDays={pilot.careerExperience.rosterDays} /> : null}
       {passportPreview ? <article className="career-card career-card-wide"><div className="career-card-head"><div><span>CAREER PASSPORT · PREVIEW</span><h2>Your BAV journey</h2></div><Link href="/account">View pilot dashboard →</Link></div><p>{pilot.flights} accepted flights · {pilot.hours.toFixed(1)} career hours · {pilot.distanceNm.toLocaleString()} nautical miles · {pilot.awards.length} career awards · {career.qualifications.length} qualification records.</p><p>{recentPireps.length ? `Latest recorded flight: ${recentPireps[0].flightNumber} · ${recentPireps[0].from} → ${recentPireps[0].to}.` : "Your first accepted BAV flight will begin your passport history."} This is a read-only view of the established BAV records; it cannot alter them.</p></article> : null}
+      {fleetPreview ? <article className="career-card career-card-wide"><div className="career-card-head"><div><span>FLEET CAREER · PREVIEW</span><h2>Fleet connection</h2></div><Link href="/fleet">View fleet →</Link></div><p>{fleetAssignment ? `${fleetAssignment.flightReference} is linked to an active fleet registration.` : `No active fleet registration is linked. ${fleetAircraft.length} aircraft are currently available in the Fleet system.`}</p><p>Fleet status remains authoritative in the existing Fleet service. This Career view is read-only and cannot reserve, dispatch or modify an aircraft.</p></article> : null}
+      {isCareerFeatureEnabled("mentoring") ? <CareerMentoringForm initialInterest={pilot.careerExperience.mentoringInterest} /> : null}
     </section>
   </div></main><SiteFooter /></>;
 }
