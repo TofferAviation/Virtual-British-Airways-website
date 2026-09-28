@@ -15,6 +15,7 @@ export type CareerExperiencePreferences = {
   version: 1;
   mode: CareerExperienceMode;
   focus: CareerFocus;
+  rosterDays: number[];
   updatedAt: string;
 };
 
@@ -45,12 +46,13 @@ function validTimestamp(value: unknown, fallback: string) {
 }
 
 export function createCareerExperiencePreferences(now = new Date().toISOString()): CareerExperiencePreferences {
-  return { version: 1, mode: "fly", focus: "explore", updatedAt: now };
+  return { version: 1, mode: "fly", focus: "explore", rosterDays: [], updatedAt: now };
 }
 
 export function normalizeCareerExperiencePreferences(value: unknown, fallbackTimestamp = new Date().toISOString()): CareerExperiencePreferences {
   const raw = value && typeof value === "object" ? value as Partial<CareerExperiencePreferences> : {};
-  return { version: 1, mode: isMode(raw.mode) ? raw.mode : "fly", focus: isFocus(raw.focus) ? raw.focus : "explore", updatedAt: validTimestamp(raw.updatedAt, fallbackTimestamp) };
+  const rosterDays = Array.isArray(raw.rosterDays) ? Array.from(new Set(raw.rosterDays.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6))).sort() : [];
+  return { version: 1, mode: isMode(raw.mode) ? raw.mode : "fly", focus: isFocus(raw.focus) ? raw.focus : "explore", rosterDays, updatedAt: validTimestamp(raw.updatedAt, fallbackTimestamp) };
 }
 
 export function validateCareerExperiencePreferences(input: unknown): Pick<CareerExperiencePreferences, "mode" | "focus"> {
@@ -58,6 +60,14 @@ export function validateCareerExperiencePreferences(input: unknown): Pick<Career
   if (!isMode(raw.mode)) throw new Error("Choose how you would like to fly.");
   if (!isFocus(raw.focus)) throw new Error("Choose a current career focus.");
   return { mode: raw.mode, focus: raw.focus };
+}
+
+export function validateCareerRosterDays(input: unknown) {
+  const raw = input && typeof input === "object" ? input as { rosterDays?: unknown } : {};
+  if (!Array.isArray(raw.rosterDays)) throw new Error("Choose one or more availability days, or clear the roster.");
+  const days = Array.from(new Set(raw.rosterDays.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6))).sort();
+  if (days.length !== raw.rosterDays.length) throw new Error("Roster availability contains an invalid day.");
+  return days;
 }
 
 /** Unset is intentionally safe: a new module is invisible until enabled. */

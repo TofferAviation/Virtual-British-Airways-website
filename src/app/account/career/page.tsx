@@ -11,6 +11,7 @@ import { CareerExperienceForm } from "./CareerExperienceForm";
 import { CareerDispatcher } from "./CareerDispatcher";
 import { CareerModeGuide } from "./CareerModeGuide";
 import { CareerOperationsReadiness } from "./CareerOperationsReadiness";
+import { CareerRosterForm } from "./CareerRosterForm";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { redirect } from "next/navigation";
 
@@ -47,6 +48,7 @@ export default async function CareerPage() {
       {isCareerFeatureEnabled("experience") ? <CareerModeGuide preferences={pilot.careerExperience} /> : null}
       {dispatchSuggestions ? <CareerDispatcher suggestions={dispatchSuggestions} hub={pilot.hub} /> : null}
       {operationalPreview ? <CareerOperationsReadiness booking={activeBooking} flightPlan={activeFlightPlan} latestPirep={recentPireps[0] ?? null} /> : null}
+      {isCareerFeatureEnabled("rosters") ? <CareerRosterForm rosterDays={pilot.careerExperience.rosterDays} /> : null}
     </section>
   </div></main><SiteFooter /></>;
 }
