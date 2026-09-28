@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { CareerExperienceMode, CareerExperiencePreferences, CareerFocus } from "@/lib/career-experience";
 import styles from "./CareerExperienceForm.module.css";
 
@@ -16,6 +17,7 @@ const FOCUS: Array<{ value: CareerFocus; label: string }> = [
 ];
 
 export function CareerExperienceForm({ initialPreferences }: { initialPreferences: CareerExperiencePreferences }) {
+  const router = useRouter();
   const [mode, setMode] = useState<CareerExperienceMode>(initialPreferences.mode);
   const [focus, setFocus] = useState<CareerFocus>(initialPreferences.focus);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -27,6 +29,7 @@ export function CareerExperienceForm({ initialPreferences }: { initialPreference
       const result = await response.json() as { ok?: boolean; message?: string; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error ?? "Unable to save career preferences.");
       setFeedback(result.message ?? "Career preferences saved.");
+      router.refresh();
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Unable to save career preferences."); } finally { setSaving(false); }
   }
   return <article className={`career-card career-card-wide ${styles.experience}`}>
