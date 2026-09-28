@@ -8,12 +8,13 @@ import { normalizeBavHub } from "@/lib/hubs";
 import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
 import { DEFAULT_REWARD_SETTINGS, normalizeRewardSettings, validateRewardSettings, type RewardSettings } from "@/lib/reward-settings";
 import { awardsForAcceptedPirep, isHeathrowStation, isPilotCareerAwardId, type PilotCareerAwardId } from "@/lib/pilot-awards";
+import { createCareerExperiencePreferences, normalizeCareerExperiencePreferences, validateCareerExperiencePreferences, type CareerExperiencePreferences } from "@/lib/career-experience";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 7;
+  version: 8;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
@@ -145,13 +146,15 @@ export type PilotAccount = {
   pilotRulesVersion: string | null;
   /** Permanent BAV career awards earned through accepted flight activity. */
   awards: PilotAward[];
+  /** Optional planning preferences. These never grant career privileges. */
+  careerExperience: CareerExperiencePreferences;
 };
 
 export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion" | "accountBackground">;
 
 function emptyState(): PilotState {
   return {
-    version: 7,
+    version: 8,
     nextPilotNumber: 1,
     pilots: [],
     passwordResetTokens: [],
@@ -225,6 +228,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     })).filter((award, index, items) => items.findIndex((item) => (
       item.id === award.id && (item.id !== "event-flyer" || item.eventId === award.eventId)
     )) === index) : [],
+    careerExperience: normalizeCareerExperiencePreferences(raw.careerExperience, raw.createdAt ?? new Date().toISOString()),
   };
 }
 
@@ -358,7 +362,7 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       .slice(0, 10_000)
     : [];
   return {
-    version: 7,
+    version: 8,
     nextPilotNumber,
     pilots,
     passwordResetTokens,
@@ -571,6 +575,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
     pilotRulesAcceptedAt: now,
     pilotRulesVersion: PILOT_RULES_VERSION,
     awards: [],
+    careerExperience: createCareerExperiencePreferences(now),
   };
   state.nextPilotNumber += 1;
   state.pilots.push(account);
@@ -902,6 +907,16 @@ export async function updatePilotSimbriefId(id: string, simbriefPilotId: string)
   account.simbriefPilotId = normalized;
   await writeState(state);
   return toPublicPilot(account);
+}
+
+export async function updatePilotCareerExperiencePreferences(id: string, input: unknown) {
+  const values = validateCareerExperiencePreferences(input);
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  account.careerExperience = { version: 1, ...values, updatedAt: new Date().toISOString() };
+  await writeState(state);
+  return account.careerExperience;
 }
 
 export async function changePilotPassword(id: string, currentPassword: string, newPassword: string) {

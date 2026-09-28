@@ -2,9 +2,11 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getCareerDashboard } from "@/lib/pilot-career";
+import { isCareerFeatureEnabled } from "@/lib/career-experience";
 import { nextPilotRank } from "@/lib/pilot-ranks";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
+import { CareerExperienceForm } from "./CareerExperienceForm";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +30,7 @@ export default async function CareerPage() {
       <article className="career-card"><div className="career-card-head"><div><span>VIRTUAL FINANCES</span><h2>{money(career.finance.currentBalance)}</h2></div></div><p>This month: <strong>{money(career.finance.currentMonthEarnings)}</strong><br />Training expenditure and flight earnings are recorded permanently in the ledger.</p><Link href="/account/finances">View transactions →</Link></article>
       <article className="career-card"><div className="career-card-head"><div><span>ACTIVE TRAINING</span><h2>{activeTraining.length}</h2></div></div>{activeTraining.length ? <ul className="career-compact-list">{activeTraining.map((application) => <li key={application.id}><strong>{career.definitions.find((definition) => definition.id === application.qualificationDefinitionId)?.name ?? application.qualificationDefinitionId}</strong><span>{application.status.replaceAll("_", " ")}</span></li>)}</ul> : <p>No training programme is currently in progress.</p>}<Link href="/account/qualifications">Manage training →</Link></article>
       <article className="career-card career-card-wide"><div className="career-card-head"><div><span>QUALIFICATION RECORD</span><h2>Professional standing</h2></div><Link href="/account/qualifications">All qualifications →</Link></div>{career.qualifications.length ? <div className="career-record-grid">{career.qualifications.map((qualification) => { const definition = career.definitions.find((item) => item.id === qualification.qualificationDefinitionId); return <div key={qualification.id}><strong>{definition?.name ?? qualification.qualificationDefinitionId}</strong><span className={`career-status ${qualification.status}`}>{qualification.status.replaceAll("_", " ")}</span><small>{qualification.source === "grandfathered" ? "Grandfathered during career migration" : `Issued ${new Date(qualification.issuedAt).toLocaleDateString("en-GB")}`}</small></div>; })}</div> : <p>Begin with an eligible type-rating programme. Payment alone never issues a qualification.</p>}</article>
+      {isCareerFeatureEnabled("experience") ? <CareerExperienceForm initialPreferences={pilot.careerExperience} /> : null}
     </section>
   </div></main><SiteFooter /></>;
 }
