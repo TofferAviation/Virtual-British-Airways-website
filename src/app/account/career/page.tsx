@@ -3,10 +3,12 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getCareerDashboard } from "@/lib/pilot-career";
 import { isCareerFeatureEnabled } from "@/lib/career-experience";
+import { getCareerDispatchSuggestions } from "@/lib/career-dispatcher";
 import { nextPilotRank } from "@/lib/pilot-ranks";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { CareerExperienceForm } from "./CareerExperienceForm";
+import { CareerDispatcher } from "./CareerDispatcher";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,7 @@ export default async function CareerPage() {
   const next = nextPilotRank(pilot.hours);
   const issued = new Set(career.qualifications.filter((qualification) => qualification.status === "valid" || qualification.status === "expiring_soon").map((qualification) => qualification.qualificationDefinitionId));
   const activeTraining = career.applications.filter((application) => !["failed", "type_rating_issued", "expired", "suspended"].includes(application.status));
+  const dispatchSuggestions = isCareerFeatureEnabled("dispatcher") ? await getCareerDispatchSuggestions(pilot) : null;
   return <><SiteHeader /><main className="career-page"><div className="career-shell">
     <nav className="career-breadcrumbs"><Link href="/account">Pilot account</Link><span>›</span><strong>Career & qualifications</strong></nav>
     <header className="career-hero"><div><span>PILOT CAREER</span><h1>Career & qualifications</h1><p>A professional virtual-airline progression record. All balances, earnings and training costs are fictional British Airways Virtual economy values.</p></div><Link href="/account/qualifications">Explore training →</Link></header>
@@ -31,6 +34,7 @@ export default async function CareerPage() {
       <article className="career-card"><div className="career-card-head"><div><span>ACTIVE TRAINING</span><h2>{activeTraining.length}</h2></div></div>{activeTraining.length ? <ul className="career-compact-list">{activeTraining.map((application) => <li key={application.id}><strong>{career.definitions.find((definition) => definition.id === application.qualificationDefinitionId)?.name ?? application.qualificationDefinitionId}</strong><span>{application.status.replaceAll("_", " ")}</span></li>)}</ul> : <p>No training programme is currently in progress.</p>}<Link href="/account/qualifications">Manage training →</Link></article>
       <article className="career-card career-card-wide"><div className="career-card-head"><div><span>QUALIFICATION RECORD</span><h2>Professional standing</h2></div><Link href="/account/qualifications">All qualifications →</Link></div>{career.qualifications.length ? <div className="career-record-grid">{career.qualifications.map((qualification) => { const definition = career.definitions.find((item) => item.id === qualification.qualificationDefinitionId); return <div key={qualification.id}><strong>{definition?.name ?? qualification.qualificationDefinitionId}</strong><span className={`career-status ${qualification.status}`}>{qualification.status.replaceAll("_", " ")}</span><small>{qualification.source === "grandfathered" ? "Grandfathered during career migration" : `Issued ${new Date(qualification.issuedAt).toLocaleDateString("en-GB")}`}</small></div>; })}</div> : <p>Begin with an eligible type-rating programme. Payment alone never issues a qualification.</p>}</article>
       {isCareerFeatureEnabled("experience") ? <CareerExperienceForm initialPreferences={pilot.careerExperience} /> : null}
+      {dispatchSuggestions ? <CareerDispatcher suggestions={dispatchSuggestions} hub={pilot.hub} /> : null}
     </section>
   </div></main><SiteFooter /></>;
 }
