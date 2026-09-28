@@ -9,7 +9,7 @@ function hrefFor(flight: CareerDispatchSuggestion) {
 }
 
 export function CareerDispatcher({ suggestions, hub }: { suggestions: CareerDispatchSuggestion[]; hub: string }) {
-  return <article className="career-card career-card-wide">
+  return <article className="career-card career-card-wide career-module career-module-dispatcher">
     <div className="career-card-head"><div><span>CAREER DISPATCHER · PREVIEW</span><h2>Where could you fly next?</h2></div><Link href={`/book?hub=${encodeURIComponent(hub)}`}>Browse the schedule →</Link></div>
     <p>Suggestions use the current BAV booking network, your home hub and existing aircraft eligibility. They are suggestions only: choosing one never books a flight or changes your operational record.</p>
     {suggestions.length ? <div className={styles.list}>{suggestions.map((flight) => <div className={styles.flight} key={flight.routeId}><div><strong>{flight.number} · {flight.from} → {flight.to}</strong><span>{flight.departure}–{flight.arrival} UTC · {flight.aircraft} · {flight.duration}</span><small>{flight.reason}{flight.isVirtualService ? " BAV virtual service." : ""}</small></div><Link href={hrefFor(flight)}>Review flight →</Link></div>)}</div> : <p className={styles.empty}>There are no eligible bookable suggestions from your current hub for the selected planning day. The live schedule remains available to browse.</p>}

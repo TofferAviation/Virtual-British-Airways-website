@@ -9,5 +9,5 @@ const COPY = {
 
 export function CareerModeGuide({ preferences }: { preferences: CareerExperiencePreferences }) {
   const detail = COPY[preferences.mode];
-  return <article className="career-card career-card-wide"><div className="career-card-head"><div><span>ACTIVE CAREER EXPERIENCE</span><h2>{detail.title}</h2></div><Link href={detail.href}>{detail.action}</Link></div><p>{detail.text}</p></article>;
+  return <article className="career-card career-card-wide career-module career-module-guide"><div className="career-card-head"><div><span>ACTIVE CAREER EXPERIENCE</span><h2>{detail.title}</h2></div><Link href={detail.href}>{detail.action}</Link></div><p>{detail.text}</p></article>;
 }
