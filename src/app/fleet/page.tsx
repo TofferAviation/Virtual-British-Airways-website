@@ -15,9 +15,10 @@ export default function FleetPage() {
       <main className="fleet-showcase-page">
         <section
           className="fleet-showcase-hero"
-          aria-label="British Airways Virtual fleet — Same spirit, a higher horizon"
+          aria-labelledby="fleet-hero-title"
         >
-          <h1 className="fleet-visually-hidden">Fleet</h1>
+          <div className="fleet-hero-copy"><span>VIRTUAL OPERATIONS</span><h1 id="fleet-hero-title">Fleet</h1><p>Explore the aircraft that support British Airways Virtual operations, from regional flying to long-haul services.</p></div>
+          <div className="fleet-hero-mark" aria-hidden="true"><i /><span>BRITISH AIRWAYS VIRTUAL</span><strong>OPERATIONS</strong></div>
         </section>
 
         <div className="fleet-showcase-shell">
