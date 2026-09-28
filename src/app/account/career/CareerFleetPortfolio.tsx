@@ -33,22 +33,27 @@ export function CareerFleetPortfolio({ fleetAircraft, pireps, qualifications, ac
   const entries = [...byAircraft.entries()].map(([aircraft, flights]) => {
     const family = ratingForAircraft(aircraft);
     const qualification = qualifications.find((item) => item.qualificationDefinitionId === family);
+    const matchingFleetAircraft = fleetAircraft.filter((item) => fleetAircraftMatchesVirtualType(item, aircraft));
     return {
       aircraft,
       family: FAMILY_LABELS[family] ?? family,
       flights: flights.length,
       blockMinutes: flights.reduce((total, flight) => total + Math.max(0, flight.blockMinutes), 0),
-      fleetMatches: fleetAircraft.filter((item) => fleetAircraftMatchesVirtualType(item, aircraft)).length,
+      distanceNm: flights.reduce((total, flight) => total + Math.max(0, flight.distanceNm), 0),
+      fleetMatches: matchingFleetAircraft.length,
+      fleetHoursMinutes: matchingFleetAircraft.reduce((total, item) => total + Math.max(0, item.airframeHoursMinutes), 0),
+      fleetCycles: matchingFleetAircraft.reduce((total, item) => total + Math.max(0, item.airframeCycles), 0),
       qualification: qualification?.status ?? null,
     };
   }).sort((left, right) => right.blockMinutes - left.blockMinutes || left.aircraft.localeCompare(right.aircraft));
   const totalMinutes = entries.reduce((total, entry) => total + entry.blockMinutes, 0);
+  const totalDistanceNm = entries.reduce((total, entry) => total + entry.distanceNm, 0);
 
   return <article className="career-card career-card-wide career-module career-module-fleet">
     <div className="career-card-head"><div><span>FLEET CAREER · PILOT PORTFOLIO</span><h2>Your virtual fleet story</h2></div><Link href="/fleet">View Fleet →</Link></div>
     <p>Accepted BAV PIREPs build this personal aircraft portfolio. It is a record of your flying, not a registration assignment, operational restriction or real-world logbook.</p>
-    <div className={styles.summary} aria-label="Fleet career summary"><div><span>Types operated</span><strong>{entries.length}</strong><small>Across accepted BAV PIREPs</small></div><div><span>Accepted flights</span><strong>{accepted.length}</strong><small>Matched to your portfolio</small></div><div><span>Fleet block time</span><strong>{blockTime(totalMinutes)}</strong><small>Accepted BAV PIREPs only</small></div></div>
-    {entries.length ? <div className={styles.entries}>{entries.map((entry) => <section key={entry.aircraft}><div><span>{entry.family}</span><strong>{entry.aircraft}</strong></div><dl><div><dt>Accepted flights</dt><dd>{entry.flights}</dd></div><div><dt>Block time</dt><dd>{blockTime(entry.blockMinutes)}</dd></div><div><dt>Fleet records</dt><dd>{entry.fleetMatches || "No matching record"}</dd></div><div><dt>Qualification</dt><dd>{entry.qualification?.replaceAll("_", " ") ?? "Not yet held"}</dd></div></dl><Link href={`/book?aircraft=${encodeURIComponent(entry.aircraft)}`}>View scheduled flights →</Link></section>)}</div> : <p className={styles.empty}>Your first accepted BAV PIREP will create an aircraft entry here.</p>}
+    <div className={styles.summary} aria-label="Fleet career summary"><div><span>Types operated</span><strong>{entries.length}</strong><small>Across accepted BAV PIREPs</small></div><div><span>Accepted sectors</span><strong>{accepted.length}</strong><small>Your completed pilot cycles</small></div><div><span>Fleet block time</span><strong>{blockTime(totalMinutes)}</strong><small>Accepted BAV PIREPs only</small></div><div><span>Nautical miles</span><strong>{totalDistanceNm.toLocaleString("en-GB")}</strong><small>Accepted BAV PIREPs only</small></div></div>
+    {entries.length ? <div className={styles.entries}>{entries.map((entry) => <section key={entry.aircraft}><div><span>{entry.family}</span><strong>{entry.aircraft}</strong></div><dl><div><dt>Your sectors / cycles</dt><dd>{entry.flights}</dd></div><div><dt>Your block time</dt><dd>{blockTime(entry.blockMinutes)}</dd></div><div><dt>Your nautical miles</dt><dd>{entry.distanceNm.toLocaleString("en-GB")} NM</dd></div><div><dt>Fleet registrations</dt><dd>{entry.fleetMatches || "No matching record"}</dd></div>{entry.fleetMatches ? <><div><dt>Fleet airframe time</dt><dd>{blockTime(entry.fleetHoursMinutes)}</dd></div><div><dt>Fleet cycles</dt><dd>{entry.fleetCycles.toLocaleString("en-GB")}</dd></div></> : null}<div><dt>Qualification</dt><dd>{entry.qualification?.replaceAll("_", " ") ?? "Not yet held"}</dd></div></dl><Link href={`/book?aircraft=${encodeURIComponent(entry.aircraft)}`}>View scheduled flights →</Link></section>)}</div> : <p className={styles.empty}>Your first accepted BAV PIREP will create an aircraft entry here.</p>}
     <p className={styles.note}>{activeAssignment ? `${activeAssignment} is currently linked to a Fleet registration. ` : "No active Fleet registration is currently linked to your account. "}Fleet status remains authoritative in the existing Fleet service; this portfolio is read-only.</p>
   </article>;
 }
