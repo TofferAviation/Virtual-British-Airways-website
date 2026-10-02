@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { closedBetaEnabled } from "@/lib/closed-beta";
 import { PilotLoginForm } from "@/app/login/PilotLoginForm";
@@ -29,6 +30,7 @@ export default async function ClosedBetaPage({ searchParams }: { searchParams: P
         <h1 id="closed-beta-title">Welcome back</h1>
         <p className={styles.intro}>Sign in to access the closed beta. Together, we&apos;re building something extraordinary.</p>
         <PilotLoginForm returnTo={nextPath} closedBeta />
+        <p className="pilot-auth-switch">Staff member? <Link href="/staff-login?returnTo=/">Sign in to Staff Centre</Link></p>
         <div className={styles.invited}><span>Invited users only</span><p>Don&apos;t have access yet? Stay tuned.</p></div>
       </section>
       <footer className={styles.footer}><span>Built for the aviation community</span><span>Private preview · invitation only</span></footer>
