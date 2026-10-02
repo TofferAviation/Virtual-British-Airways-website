@@ -1,14 +1,14 @@
 import Link from "next/link";
+import { getCareerOperationsPreview } from "@/lib/career-operations";
 import type { PilotBooking, PilotFlightPlan, PilotPirep } from "@/lib/pilot-operations-store";
 import styles from "./CareerOperationsReadiness.module.css";
 
-export function CareerOperationsReadiness({ booking, flightPlan, latestPirep }: { booking: PilotBooking | null; flightPlan: PilotFlightPlan | null; latestPirep: PilotPirep | null }) {
-  const assignment = booking ? `${booking.flightNumber} · ${booking.from} → ${booking.to}` : "No active assignment";
-  const briefing = !booking ? "Choose a flight first" : flightPlan?.status === "synced" ? "Briefing synced" : "Briefing pending";
-  const report = latestPirep ? `${latestPirep.flightNumber} · ${latestPirep.status.replaceAll("_", " ")}` : "No flight reports yet";
-  return <article className="career-card career-card-wide career-module career-module-operations"><div className="career-card-head"><div><span>REALISTIC OPERATIONS · PREVIEW</span><h2>Operational readiness</h2></div><Link href={booking ? "/manage-assignment" : "/book"}>{booking ? "Open flight desk →" : "Find a flight →"}</Link></div>
-    <p>These checks reflect the existing BAV workflow. They are a planning aid only and never create, change or approve an operational record.</p>
-    <div className={styles.grid}><div><span>ASSIGNMENT</span><strong>{assignment}</strong><small>{booking ? `${booking.date} · ${booking.aircraft}` : "Select from the current BAV schedule."}</small></div><div><span>SIMBRIEF</span><strong>{briefing}</strong><small>{booking ? "Use the current flight desk to prepare the OFP." : "A flight plan follows an active assignment."}</small></div><div><span>LATEST PIREP</span><strong>{report}</strong><small>{latestPirep?.landingFpm == null ? "Landing data appears after a completed report." : `${latestPirep.landingFpm} fpm landing recorded.`}</small></div></div>
-    <p className={styles.notice}>Ember, BA-Radar, PIREP review and any operational restrictions remain governed by their existing BAV systems.</p>
+export function CareerOperationsReadiness({ booking, flightPlan, pireps }: { booking: PilotBooking | null; flightPlan: PilotFlightPlan | null; pireps: PilotPirep[] }) {
+  const operations = getCareerOperationsPreview({ booking, flightPlan, pireps });
+  return <article className="career-card career-card-wide career-module career-module-operations"><div className="career-card-head"><div><span>ADVANCED OPERATIONS · OPTIONAL</span><h2>Duty &amp; rest planner</h2></div><Link href={booking ? "/manage-assignment" : "/book"}>{booking ? "Open flight desk →" : "Find a flight →"}</Link></div>
+    <p>This private planning view adds virtual duty, rest and turnaround context around your established BAV records. It is a simulation aid only: it never blocks, creates, changes or approves a flight.</p>
+    <section className={styles.timeline} aria-label="Optional virtual duty timeline"><div><span>01 · PLAN</span><strong>{operations.assignment.title}</strong><small>{operations.assignment.detail}</small></div><div><span>02 · PREPARE</span><strong>{operations.briefing.title}</strong><small>{operations.briefing.detail}</small></div><div><span>03 · OPERATE</span><strong>{operations.aircraft.title}</strong><small>{operations.aircraft.detail}</small></div></section>
+    <section className={`${styles.rest} ${operations.rest.active ? styles.active : ""}`} aria-label="Optional virtual rest guidance"><div><span>VIRTUAL REST GUIDANCE</span><strong>{operations.rest.title}</strong><small>{operations.rest.detail}</small></div><p>Suggested duty check-in: allow around 90 minutes before a published reference departure. Published times remain virtual planning references, not departure gates.</p></section>
+    <p className={styles.notice}>No external disruption feed or real-world duty rule is used here. Ember, BA-Radar, PIREP review and existing BAV operational controls remain the authoritative systems.</p>
   </article>;
 }

@@ -46,5 +46,9 @@ services:
         generateValue: true
       - key: BAV_CLOSED_BETA_ENABLED
         value: "enabled"
+      # Optional, read-only duty/rest guidance. It is only shown when a pilot
+      # chooses the Realistic Operations Career experience.
+      - key: BAV_FEATURE_CAREER_ADVANCED_OPERATIONS
+        value: "enabled"
       - key: SIMBRIEF_API_KEY
         sync: false
