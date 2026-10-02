@@ -6,7 +6,7 @@ import { isCareerFeatureEnabled } from "@/lib/career-experience";
 import { getCareerDispatchSuggestions } from "@/lib/career-dispatcher";
 import { nextPilotRank } from "@/lib/pilot-ranks";
 import { requirePilotSession } from "@/lib/pilot-auth";
-import { getPilotById, getPilotMentoringExperience, getPilotMentoringStatus } from "@/lib/pilot-store";
+import { getPilotById, getPilotMentoringExperience, getPilotMentoringStatus, listMentoringFlightReviews } from "@/lib/pilot-store";
 import { CareerExperienceForm } from "./CareerExperienceForm";
 import { CareerDispatcher } from "./CareerDispatcher";
 import { CareerModeGuide } from "./CareerModeGuide";
@@ -16,8 +16,9 @@ import { CareerMentoringForm } from "./CareerMentoringForm";
 import { CareerPerformance } from "./CareerPerformance";
 import { CareerFleetPortfolio } from "./CareerFleetPortfolio";
 import { getActiveFleetFlightAssignmentForPilot, listFleetAircraft } from "@/lib/fleet-service";
-import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
+import { getActivePilotBooking, getPirep, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { redirect } from "next/navigation";
+import { MentoringPortfolio } from "./MentoringPortfolio";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Career & Qualifications" };
@@ -37,13 +38,19 @@ export default async function CareerPage() {
   const passportPreview = isCareerFeatureEnabled("passport");
   const fleetPreview = isCareerFeatureEnabled("fleet");
   const mentoringPreview = isCareerFeatureEnabled("mentoring");
-  const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience] = await Promise.all([
+  const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience, mentoringReviews] = await Promise.all([
     guidedCareer && isCareerFeatureEnabled("dispatcher") ? getCareerDispatchSuggestions(pilot) : Promise.resolve(null),
     advancedOperations ? getActivePilotBooking(pilot.id) : Promise.resolve(null),
     advancedOperations || passportPreview || fleetPreview || (guidedCareer && isCareerFeatureEnabled("debrief")) ? listPilotPireps(pilot.id) : Promise.resolve([]),
     mentoringPreview ? getPilotMentoringStatus(pilot.id) : Promise.resolve(null),
     mentoringPreview ? getPilotMentoringExperience(pilot.id) : Promise.resolve(null),
+    mentoringPreview ? listMentoringFlightReviews({ mentorPilotId: pilot.id }) : Promise.resolve([]),
   ]);
+  const mentoringPortfolio = await Promise.all(mentoringReviews.map(async (review) => {
+    const flight = await getPirep(review.pirepId);
+    const learner = await getPilotById(review.learnerPilotId);
+    return flight && learner ? { id: review.id, learnerName: learner.name, flightNumber: flight.flightNumber, from: flight.from, to: flight.to, aircraft: flight.aircraft, completedAt: flight.completedAt, blockMinutes: flight.blockMinutes, distanceNm: flight.distanceNm, fuelUsedKg: flight.fuelUsedKg, staffReviewedAt: review.staffReviewedAt } : null;
+  }));
   const activeFlightPlan = activeBooking && advancedOperations ? await getPilotFlightPlan(activeBooking.id, pilot.id) : null;
   const [fleetAircraft, fleetAssignment] = fleetPreview ? await Promise.all([listFleetAircraft().catch(() => []), getActiveFleetFlightAssignmentForPilot({ subject: `bav:${pilot.id}`, displayName: pilot.name, fleetRole: "pilot" }).catch(() => null)]) : [[], null];
   return <><SiteHeader /><main className="career-page"><div className="career-shell">
@@ -63,6 +70,7 @@ export default async function CareerPage() {
       {passportPreview ? <article className="career-card career-card-wide career-module career-module-passport"><div className="career-card-head"><div><span>CAREER PASSPORT · PREVIEW</span><h2>Your BAV journey</h2></div><Link href="/account/career/passport">Open Passport →</Link></div><p>{pilot.flights} accepted flights · {pilot.hours.toFixed(1)} career hours · {pilot.distanceNm.toLocaleString()} nautical miles · {pilot.awards.length} career awards · {career.qualifications.length} qualification records.</p><p>{recentPireps.length ? `Latest recorded flight: ${recentPireps[0].flightNumber} · ${recentPireps[0].from} → ${recentPireps[0].to}.` : "Your first accepted BAV flight will begin your passport history."} This is a read-only view of the established BAV records; it cannot alter them.</p></article> : null}
       {fleetPreview ? <CareerFleetPortfolio fleetAircraft={fleetAircraft} pireps={recentPireps} qualifications={career.qualifications} activeAssignment={fleetAssignment?.flightReference ?? null} /> : null}
       {mentoringPreview ? <CareerMentoringForm initialInterest={pilot.careerExperience.mentoringInterest} status={mentoringStatus ?? { application: null, match: null }} /> : null}
+      {mentoringPreview ? <MentoringPortfolio records={mentoringPortfolio.filter((record): record is NonNullable<typeof record> => record !== null)} /> : null}
       {mentoringPreview && mentoringExperience ? <article className="career-card career-card-wide career-module career-module-mentoring"><div className="career-card-head"><div><span>MENTORING PROGRESS · STAFF REVIEWED</span><h2>{mentoringExperience.level === "rookie" ? "Rookie pilot" : mentoringExperience.level === "developing" ? "Developing pilot" : "Experienced pilot"}</h2></div></div><p>Your current mentoring experience level is based on staff-reviewed coaching records. It is used for positive progression recognition only: coaching notes and staff assessments never remove flight credit, VA Points, or Tier Points.</p></article> : null}
     </section>
   </div></main><SiteFooter /></>;
