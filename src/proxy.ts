@@ -28,7 +28,11 @@ function isPublicClosedBetaPath(pathname: string) {
 }
 
 export async function proxy(request: NextRequest) {
-  if (closedBetaEnabled() && !isDirectLocalRequest(request)) {
+  // Closed beta must never rely on a forwarded host to decide access. Hosting
+  // proxies and local relays can legitimately rewrite that header; the feature
+  // flag itself is the explicit control. Local development remains open unless
+  // a developer deliberately enables the flag.
+  if (closedBetaEnabled()) {
     const { pathname } = request.nextUrl;
     if (!isPublicClosedBetaPath(pathname) && !await hasClosedBetaAccess(request.cookies.get(CLOSED_BETA_COOKIE_NAME)?.value)) {
       const params = new URLSearchParams({ next: `${request.nextUrl.pathname}${request.nextUrl.search}` });
