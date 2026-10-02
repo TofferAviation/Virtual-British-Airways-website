@@ -112,6 +112,9 @@ export type PilotMentoringStatus = {
 
 export const MENTOR_REWARD_MONTHLY_FLIGHT_CAP = 4;
 const MENTOR_MINIMUM_BLOCK_MINUTES = 30;
+export const MENTOR_MINIMUM_CAREER_HOURS = 140;
+const MENTOR_REVIEW_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const MENTOR_LEARNER_REVIEW_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 const MENTOR_MATCH_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PilotPasswordResetToken = {
@@ -1145,6 +1148,7 @@ export async function updatePilotMentoringInterest(id: string, input: unknown) {
   const state = await readState();
   const account = state.pilots.find((pilot) => pilot.id === id);
   if (!account) throw new Error("Pilot account not found.");
+  if (mentoringInterest === "mentor" && account.hours < MENTOR_MINIMUM_CAREER_HOURS) throw new Error(`Mentor applications open after ${MENTOR_MINIMUM_CAREER_HOURS} accepted career hours. You currently have ${account.hours.toFixed(1)}.`);
   const latestApplication = [...state.mentorApplications].reverse().find((application) => application.pilotId === id) ?? null;
   const now = new Date().toISOString();
   if (mentoringInterest === "mentor" && !latestApplication?.status.includes("approved") && latestApplication?.status !== "pending") {
@@ -1207,12 +1211,13 @@ export async function reviewMentorApplication(input: { applicationId: string; st
   const state = await readState();
   const application = state.mentorApplications.find((item) => item.id === input.applicationId && item.status === "pending");
   if (!application) throw new Error("That mentor application is no longer awaiting review.");
+  const account = state.pilots.find((pilot) => pilot.id === application.pilotId);
   if (input.status === "approved" && !input.mentorRank) throw new Error("Choose a mentoring level before approving this application.");
+  if (input.status === "approved" && (!account || account.hours < MENTOR_MINIMUM_CAREER_HOURS)) throw new Error(`Mentors need at least ${MENTOR_MINIMUM_CAREER_HOURS} accepted career hours before staff approval.`);
   application.status = input.status;
   application.mentorRank = input.status === "approved" ? input.mentorRank ?? null : null;
   application.reviewedAt = new Date().toISOString();
   application.reviewedBy = input.staffName.trim().slice(0, 100);
-  const account = state.pilots.find((pilot) => pilot.id === application.pilotId);
   if (account) {
     const level = application.mentorRank ? MENTOR_RANKS[application.mentorRank] : null;
     appendPilotNotification(state, { pilotId: account.id, kind: "operations", level: input.status === "approved" ? "success" : "attention", title: input.status === "approved" ? "Mentor application approved" : "Mentor application not approved", body: input.status === "approved" && level ? `You are approved as a ${level.label} and can now be matched with new pilots. Your staff-controlled reward is ${level.multiplier}× on eligible accepted Ember flights.` : "Staff have reviewed your mentoring application. You may update your request in Career when you are ready.", href: "/account/career" });
@@ -1225,6 +1230,8 @@ export async function updateMentorRank(input: { pilotId: string; mentorRank: Men
   const state = await readState();
   const application = approvedMentorApplication(state, input.pilotId);
   if (!application) throw new Error("This pilot does not have an approved mentor application.");
+  const account = state.pilots.find((pilot) => pilot.id === input.pilotId);
+  if (!account || account.hours < MENTOR_MINIMUM_CAREER_HOURS) throw new Error(`Mentors need at least ${MENTOR_MINIMUM_CAREER_HOURS} accepted career hours before staff can set a mentoring level.`);
   application.mentorRank = input.mentorRank;
   application.reviewedAt = new Date().toISOString();
   application.reviewedBy = input.staffName.trim().slice(0, 100);
@@ -1271,6 +1278,7 @@ export async function createMentoringMatch(input: { mentorPilotId: string; learn
   const mentor = state.pilots.find((pilot) => pilot.id === mentorPilotId);
   const learner = state.pilots.find((pilot) => pilot.id === learnerPilotId);
   if (!mentor || !learner || mentor.status !== "active" || learner.status !== "active") throw new Error("Both pilots must have active BAV accounts.");
+  if (mentor.hours < MENTOR_MINIMUM_CAREER_HOURS) throw new Error(`Mentors need at least ${MENTOR_MINIMUM_CAREER_HOURS} accepted career hours before they can be matched.`);
   if (mentor.careerExperience.mentoringInterest !== "mentor" || !approvedMentorApplication(state, mentorPilotId)) throw new Error("That mentor application must be approved and still opted in before creating a match.");
   if (learner.careerExperience.mentoringInterest !== "learn") throw new Error("That pilot has not requested mentoring.");
   if (state.mentoringMatches.some((match) => mentoringIsActive(match) && match.learnerPilotId === learnerPilotId)) throw new Error("This pilot already has an active mentoring match.");
@@ -1334,10 +1342,17 @@ export async function createMentoringFlightReview(input: {
   if (mentorNote.length < 12) throw new Error("Add a constructive mentoring note before submitting a review.");
   if (!["within_parameters", "too_high", "too_low", "unstable", "not_observed"].includes(input.approach) || !["within_parameters", "high", "low", "not_observed"].includes(input.descentRate) || !["progressing", "needs_coaching", "ready_for_next_step"].includes(input.overall)) throw new Error("Choose a valid coaching assessment.");
   const state = await readState();
+  const mentor = state.pilots.find((pilot) => pilot.id === input.mentorPilotId);
+  if (!mentor || mentor.hours < MENTOR_MINIMUM_CAREER_HOURS) throw new Error(`Mentors need at least ${MENTOR_MINIMUM_CAREER_HOURS} accepted career hours before submitting coaching reviews.`);
   const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && item.id && item.mentorPilotId === input.mentorPilotId && item.learnerPilotId === input.learnerPilotId);
   if (!match) throw new Error("You can only review flights for a pilot in your active mentoring match.");
   if (state.mentoringFlightReviews.some((review) => review.pirepId === input.pirepId)) throw new Error("A mentoring review has already been submitted for this flight.");
-  const review: MentoringFlightReview = { id: randomUUID(), matchId: match.id, mentorPilotId: input.mentorPilotId, learnerPilotId: input.learnerPilotId, pirepId: input.pirepId, approach: input.approach, descentRate: input.descentRate, overall: input.overall, mentorNote, createdAt: new Date().toISOString(), staffReviewedAt: null, staffReviewedBy: null, experienceLevel: null, bonusPercent: null, bonusVaPoints: null, bonusTierPoints: null };
+  const now = Date.now();
+  const mentorCooldown = state.mentoringFlightReviews.find((review) => review.mentorPilotId === input.mentorPilotId && now - Date.parse(review.createdAt) < MENTOR_REVIEW_COOLDOWN_MS);
+  if (mentorCooldown) throw new Error("Mentoring reviews have a 24-hour cooldown for each mentor. Please return after the cooldown ends.");
+  const learnerCooldown = state.mentoringFlightReviews.find((review) => review.mentorPilotId === input.mentorPilotId && review.learnerPilotId === input.learnerPilotId && now - Date.parse(review.createdAt) < MENTOR_LEARNER_REVIEW_COOLDOWN_MS);
+  if (learnerCooldown) throw new Error("This mentor–learner pairing has a 12-hour review cooldown. Please return after the cooldown ends.");
+  const review: MentoringFlightReview = { id: randomUUID(), matchId: match.id, mentorPilotId: input.mentorPilotId, learnerPilotId: input.learnerPilotId, pirepId: input.pirepId, approach: input.approach, descentRate: input.descentRate, overall: input.overall, mentorNote, createdAt: new Date(now).toISOString(), staffReviewedAt: null, staffReviewedBy: null, experienceLevel: null, bonusPercent: null, bonusVaPoints: null, bonusTierPoints: null };
   state.mentoringFlightReviews.push(review);
   appendPilotNotification(state, { pilotId: input.learnerPilotId, kind: "operations", level: "info", title: "Mentor flight review added", body: "Your mentor has added constructive feedback to a completed Ember flight. This never reduces your points or flight credit.", href: "/account/career" });
   await writeState(state);
