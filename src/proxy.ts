@@ -5,7 +5,7 @@ import {
   previewProtectionEnabled,
 } from "./lib/preview-access";
 import { CLOSED_BETA_COOKIE_NAME, closedBetaEnabled, hasClosedBetaAccess } from "./lib/closed-beta";
-import { isDirectLocalRequest, relativeRedirect } from "./lib/request-context";
+import { isDirectLocalRequest } from "./lib/request-context";
 
 const ACCESS_PAGE = "/preview-access";
 const ACCESS_API = "/api/preview-access";
@@ -36,7 +36,7 @@ export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
     if (!isPublicClosedBetaPath(pathname) && !await hasClosedBetaAccess(request.cookies.get(CLOSED_BETA_COOKIE_NAME)?.value)) {
       const params = new URLSearchParams({ next: `${request.nextUrl.pathname}${request.nextUrl.search}` });
-      return relativeRedirect(`${CLOSED_BETA_PAGE}?${params.toString()}`, 307);
+      return NextResponse.redirect(new URL(`${CLOSED_BETA_PAGE}?${params.toString()}`, request.url), 307);
     }
   }
 
@@ -59,9 +59,10 @@ export async function proxy(request: NextRequest) {
     next: `${request.nextUrl.pathname}${request.nextUrl.search}`,
   });
 
-  // Keep redirects origin-relative so internal development addresses are never
-  // exposed to the browser.
-  return relativeRedirect(`${ACCESS_PAGE}?${params.toString()}`, 307);
+  // Build an absolute redirect from the request origin. Some production
+  // adapters reject an origin-relative Location value before the response can
+  // reach the browser.
+  return NextResponse.redirect(new URL(`${ACCESS_PAGE}?${params.toString()}`, request.url), 307);
 }
 
 export const config = {
