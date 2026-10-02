@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 
 const storageKey = "bav-first-visit-welcome-dismissed";
 
@@ -22,6 +23,7 @@ function getServerWelcomePreferenceSnapshot() {
 }
 
 export function FirstVisitWelcome() {
+  const pathname = usePathname();
   const welcomePreference = useSyncExternalStore(subscribeToWelcomePreference, getWelcomePreferenceSnapshot, getServerWelcomePreferenceSnapshot);
   const [dismissedForVisit, setDismissedForVisit] = useState(false);
   const [rememberDismissal, setRememberDismissal] = useState(false);
@@ -58,7 +60,9 @@ export function FirstVisitWelcome() {
     };
   }, [dismiss, isOpen]);
 
-  if (!isOpen) return null;
+  // The invite-only screen intentionally does not reveal the public project
+  // name before a beta user has authenticated.
+  if (!isOpen || pathname === "/closed-beta") return null;
 
   return (
     <div className="welcome-notice-backdrop" role="presentation">
