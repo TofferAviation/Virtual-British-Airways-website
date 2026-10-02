@@ -2,7 +2,10 @@ services:
   - type: web
     name: british-airways-virtual
     runtime: node
-    buildCommand: npm ci && npm run build
+    # Render's persisted build cache can otherwise retain an outdated Next.js
+    # server bundle after a deployment. Rebuild the generated output cleanly
+    # so page code and newly added public assets always ship together.
+    buildCommand: npm ci && rm -rf .next && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
