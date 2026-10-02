@@ -50,5 +50,7 @@ services:
       # chooses the Realistic Operations Career experience.
       - key: BAV_FEATURE_CAREER_ADVANCED_OPERATIONS
         value: "enabled"
+      - key: BAV_FEATURE_CAREER_MENTORING
+        value: "enabled"
       - key: SIMBRIEF_API_KEY
         sync: false

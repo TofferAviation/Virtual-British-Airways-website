@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
 import { getEvents } from "@/lib/event-store";
 import { getMatchingBavEvent } from "@/lib/pilot-awards";
-import { applyApprovedPirepStats, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible, readPilotOperationsState, writePilotOperationsState } from "@/lib/pilot-store";
+import { applyApprovedPirepStats, claimMentorPirepReward, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible, readPilotOperationsState, writePilotOperationsState } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 import { creditAcceptedPirepSalary } from "@/lib/pilot-career";
@@ -567,6 +567,19 @@ async function processAcceptedPirepFinance(pirep: PilotPirep) {
   return result;
 }
 
+async function acceptedPirepCredit(pirep: PilotPirep) {
+  const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(pirep.pilotId));
+  const event = getMatchingBavEvent(pirep, await getEvents());
+  const baseReward = calculatePirepReward(pirep, await getRewardSettings(), firstFlightAward);
+  const booking = pirep.bookingId ? await getPilotBooking(pirep.bookingId, pirep.pilotId) : null;
+  const lateStart = persistentScheduleFlexibilityEnabled() && booking?.scheduleScoringEnabled === true && pirep.source === "acars" ? calculateLateStartAdjustment(booking, pirep.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
+  const mentorReward = await claimMentorPirepReward({ pilotId: pirep.pilotId, pirepId: pirep.id, source: pirep.source, blockMinutes: pirep.blockMinutes });
+  const multiplier = mentorReward?.multiplier ?? 1;
+  const points = Math.max(0, Math.round((baseReward.points * multiplier + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
+  const tierPoints = Math.max(0, Math.round(baseReward.tierPoints * multiplier) + (event?.rewards.tierPoints ?? 0));
+  return { event, lateStart, mentorReward, points, tierPoints };
+}
+
 /**
  * Repair any accepted report that reached Operations before a finance write
  * completed. The ledger's accepted-PIREP idempotency key makes this safe to
@@ -602,26 +615,20 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
     const reviewedAt = new Date().toISOString();
     const update: Record<string, unknown> = { status: input.decision, staff_comments: input.comments.trim().slice(0, 2000), reviewed_at: reviewedAt, reviewed_by: input.staffName };
     if (input.decision === "accepted") {
-      const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(current.pilotId));
-      const event = getMatchingBavEvent(current, await getEvents());
-      const baseReward = calculatePirepReward(current, await getRewardSettings(), firstFlightAward);
-      const booking = current.bookingId ? await getPilotBooking(current.bookingId, current.pilotId) : null;
-      const lateStart = persistentScheduleFlexibilityEnabled() && booking?.scheduleScoringEnabled === true && current.source === "acars" ? calculateLateStartAdjustment(booking, current.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
-      const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
-      const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
-      update.points_awarded = points;
-      if (persistentScheduleFlexibilityEnabled()) update.late_start_penalty_points = lateStart.vaPointsDeducted;
-      update.tier_points_awarded = tierPoints;
+      const credit = await acceptedPirepCredit(current);
+      update.points_awarded = credit.points;
+      if (persistentScheduleFlexibilityEnabled()) update.late_start_penalty_points = credit.lateStart.vaPointsDeducted;
+      update.tier_points_awarded = credit.tierPoints;
       await applyApprovedPirepStats(current.pilotId, {
         blockMinutes: current.blockMinutes,
         distanceNm: current.distanceNm,
         landingFpm: current.landingFpm,
-        points,
-        tierPoints,
+        points: credit.points,
+        tierPoints: credit.tierPoints,
         sourcePirepId: current.id,
         from: current.from,
         aircraft: current.aircraft,
-        eventAward: event ? { eventId: event.id, eventTitle: event.rewards.badge ?? event.title } : undefined,
+        eventAward: credit.event ? { eventId: credit.event.id, eventTitle: credit.event.rewards.badge ?? credit.event.title } : undefined,
       });
     }
     const { data, error } = await client.from("pilot_pireps").update(update).eq("id", input.id).select("*").single();
@@ -646,26 +653,20 @@ export async function reviewPirep(input: { id: string; decision: "accepted" | "r
   pirep.reviewedBy = input.staffName;
 
   if (input.decision === "accepted") {
-    const firstFlightAward = isFirstFlightAwardEligible(await getPilotById(pirep.pilotId));
-    const event = getMatchingBavEvent(pirep, await getEvents());
-    const baseReward = calculatePirepReward(pirep, await getRewardSettings(), firstFlightAward);
-    const booking = pirep.bookingId ? await getPilotBooking(pirep.bookingId, pirep.pilotId) : null;
-    const lateStart = persistentScheduleFlexibilityEnabled() && booking?.scheduleScoringEnabled === true && pirep.source === "acars" ? calculateLateStartAdjustment(booking, pirep.startedAt) : { wholeHoursLate: 0, vaPointsDeducted: 0 };
-    const points = Math.max(0, Math.round((baseReward.points + (event?.rewards.vaPoints ?? 0) - lateStart.vaPointsDeducted) * 10) / 10);
-    const tierPoints = baseReward.tierPoints + (event?.rewards.tierPoints ?? 0);
-    pirep.pointsAwarded = points;
-    pirep.lateStartPenaltyPoints = lateStart.vaPointsDeducted;
-    pirep.tierPointsAwarded = tierPoints;
+    const credit = await acceptedPirepCredit(pirep);
+    pirep.pointsAwarded = credit.points;
+    pirep.lateStartPenaltyPoints = credit.lateStart.vaPointsDeducted;
+    pirep.tierPointsAwarded = credit.tierPoints;
     await applyApprovedPirepStats(pirep.pilotId, {
       blockMinutes: pirep.blockMinutes,
       distanceNm: pirep.distanceNm,
       landingFpm: pirep.landingFpm,
-      points,
-      tierPoints,
+      points: credit.points,
+      tierPoints: credit.tierPoints,
       sourcePirepId: pirep.id,
       from: pirep.from,
       aircraft: pirep.aircraft,
-      eventAward: event ? { eventId: event.id, eventTitle: event.rewards.badge ?? event.title } : undefined,
+      eventAward: credit.event ? { eventId: credit.event.id, eventTitle: credit.event.rewards.badge ?? credit.event.title } : undefined,
     });
   }
 

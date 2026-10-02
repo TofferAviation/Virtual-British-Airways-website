@@ -14,7 +14,7 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 8;
+  version: 9;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
@@ -23,12 +23,46 @@ type PilotState = {
   hourTransferRequests: PilotHourTransferRequest[];
   hourAdjustments: PilotHourAdjustment[];
   notifications: PilotNotification[];
+  mentoringMatches: MentoringMatch[];
   /**
    * Flight bookings and SimBrief links share the same durable record as the
    * pilot identity. Kept opaque here so the operations module owns its shape.
    */
   operationsState: unknown | null;
 };
+
+export type MentoringProgressNote = { id: string; authorName: string; note: string; createdAt: string };
+export type MentoringBonusAward = { pirepId: string; awardedAt: string };
+export type MentoringMatch = {
+  id: string;
+  mentorPilotId: string;
+  learnerPilotId: string;
+  status: "active" | "completed" | "cancelled";
+  goal: string;
+  createdAt: string;
+  createdBy: string;
+  expiresAt: string;
+  endedAt: string | null;
+  endedBy: string | null;
+  progressNotes: MentoringProgressNote[];
+  bonusAwards: MentoringBonusAward[];
+};
+
+export type PilotMentoringStatus = {
+  role: "mentor" | "learner";
+  matchId: string;
+  counterpartName: string;
+  counterpartPilotNumber: string;
+  goal: string;
+  expiresAt: string;
+  progressNotes: MentoringProgressNote[];
+  bonusFlightsThisMonth: number;
+} | null;
+
+export const MENTOR_REWARD_MULTIPLIER = 1.25;
+export const MENTOR_REWARD_MONTHLY_FLIGHT_CAP = 4;
+const MENTOR_MINIMUM_BLOCK_MINUTES = 30;
+const MENTOR_MATCH_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PilotPasswordResetToken = {
   pilotId: string;
@@ -158,7 +192,7 @@ export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersio
 
 function emptyState(): PilotState {
   return {
-    version: 8,
+    version: 9,
     nextPilotNumber: 1,
     pilots: [],
     passwordResetTokens: [],
@@ -167,6 +201,7 @@ function emptyState(): PilotState {
     hourTransferRequests: [],
     hourAdjustments: [],
     notifications: [],
+    mentoringMatches: [],
     operationsState: null,
   };
 }
@@ -367,8 +402,23 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
       .slice(0, 10_000)
     : [];
+  const mentoringMatches = Array.isArray(raw?.mentoringMatches)
+    ? raw.mentoringMatches.filter((item): item is MentoringMatch => Boolean(
+      item && typeof item.id === "string" && typeof item.mentorPilotId === "string" && typeof item.learnerPilotId === "string" &&
+      ["active", "completed", "cancelled"].includes(item.status) && typeof item.goal === "string" &&
+      typeof item.createdAt === "string" && typeof item.createdBy === "string" && typeof item.expiresAt === "string",
+    )).map((item) => ({
+      ...item,
+      goal: item.goal.trim().slice(0, 500),
+      createdBy: item.createdBy.trim().slice(0, 100),
+      endedAt: typeof item.endedAt === "string" ? item.endedAt : null,
+      endedBy: typeof item.endedBy === "string" ? item.endedBy.trim().slice(0, 100) || null : null,
+      progressNotes: Array.isArray(item.progressNotes) ? item.progressNotes.filter((note): note is MentoringProgressNote => Boolean(note && typeof note.id === "string" && typeof note.authorName === "string" && typeof note.note === "string" && typeof note.createdAt === "string")).map((note) => ({ id: note.id, authorName: note.authorName.trim().slice(0, 100), note: note.note.trim().slice(0, 1000), createdAt: note.createdAt })).slice(-50) : [],
+      bonusAwards: Array.isArray(item.bonusAwards) ? item.bonusAwards.filter((award): award is MentoringBonusAward => Boolean(award && typeof award.pirepId === "string" && typeof award.awardedAt === "string")).slice(-100) : [],
+    })).filter((item) => item.mentorPilotId !== item.learnerPilotId && pilots.some((pilot) => pilot.id === item.mentorPilotId) && pilots.some((pilot) => pilot.id === item.learnerPilotId)).slice(-2_000)
+    : [];
   return {
-    version: 8,
+    version: 9,
     nextPilotNumber,
     pilots,
     passwordResetTokens,
@@ -377,6 +427,7 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     hourTransferRequests,
     hourAdjustments,
     notifications,
+    mentoringMatches,
     operationsState: raw?.operationsState && typeof raw.operationsState === "object"
       ? structuredClone(raw.operationsState)
       : null,
@@ -995,6 +1046,107 @@ export async function updatePilotCareerRoster(id: string, input: unknown) {
 }
 
 export async function updatePilotMentoringInterest(id: string, input: unknown) { const mentoringInterest = validateMentoringInterest(input); const state = await readState(); const account = state.pilots.find((pilot) => pilot.id === id); if (!account) throw new Error("Pilot account not found."); account.careerExperience = { ...account.careerExperience, mentoringInterest, updatedAt: new Date().toISOString() }; await writeState(state); return account.careerExperience; }
+
+function mentoringIsActive(match: MentoringMatch, now = Date.now()) {
+  return match.status === "active" && Date.parse(match.expiresAt) > now;
+}
+
+function calendarMonth(timestamp: string) {
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) ? "" : `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function mentorAwardsThisMonth(state: PilotState, mentorPilotId: string, now = new Date().toISOString()) {
+  const month = calendarMonth(now);
+  return state.mentoringMatches.filter((match) => match.mentorPilotId === mentorPilotId).flatMap((match) => match.bonusAwards).filter((award) => calendarMonth(award.awardedAt) === month).length;
+}
+
+export async function listMentoringMatches() {
+  const state = await readState();
+  return [...state.mentoringMatches].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+export async function getPilotMentoringStatus(pilotId: string): Promise<PilotMentoringStatus> {
+  const state = await readState();
+  const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && (item.mentorPilotId === pilotId || item.learnerPilotId === pilotId));
+  if (!match) return null;
+  const role = match.mentorPilotId === pilotId ? "mentor" : "learner";
+  const counterpart = state.pilots.find((pilot) => pilot.id === (role === "mentor" ? match.learnerPilotId : match.mentorPilotId));
+  if (!counterpart) return null;
+  return {
+    role,
+    matchId: match.id,
+    counterpartName: counterpart.name,
+    counterpartPilotNumber: counterpart.pilotNumber,
+    goal: match.goal,
+    expiresAt: match.expiresAt,
+    progressNotes: match.progressNotes,
+    bonusFlightsThisMonth: role === "mentor" ? mentorAwardsThisMonth(state, pilotId) : 0,
+  };
+}
+
+export async function createMentoringMatch(input: { mentorPilotId: string; learnerPilotId: string; goal: string; staffName: string }) {
+  const mentorPilotId = input.mentorPilotId.trim();
+  const learnerPilotId = input.learnerPilotId.trim();
+  const goal = input.goal.trim().replace(/\s+/g, " ").slice(0, 500);
+  if (!mentorPilotId || !learnerPilotId || mentorPilotId === learnerPilotId) throw new Error("Choose two different pilot accounts.");
+  if (goal.length < 8) throw new Error("Add a clear mentoring goal before creating the match.");
+  const state = await readState();
+  const mentor = state.pilots.find((pilot) => pilot.id === mentorPilotId);
+  const learner = state.pilots.find((pilot) => pilot.id === learnerPilotId);
+  if (!mentor || !learner || mentor.status !== "active" || learner.status !== "active") throw new Error("Both pilots must have active BAV accounts.");
+  if (mentor.careerExperience.mentoringInterest !== "mentor") throw new Error("That pilot has not volunteered to mentor.");
+  if (learner.careerExperience.mentoringInterest !== "learn") throw new Error("That pilot has not requested mentoring.");
+  if (state.mentoringMatches.some((match) => mentoringIsActive(match) && match.learnerPilotId === learnerPilotId)) throw new Error("This pilot already has an active mentoring match.");
+  if (state.mentoringMatches.filter((match) => mentoringIsActive(match) && match.mentorPilotId === mentorPilotId).length >= 3) throw new Error("A mentor can support up to three active pilots at once.");
+  const now = new Date();
+  const match: MentoringMatch = { id: randomUUID(), mentorPilotId, learnerPilotId, status: "active", goal, createdAt: now.toISOString(), createdBy: input.staffName.trim().slice(0, 100), expiresAt: new Date(now.getTime() + MENTOR_MATCH_DURATION_MS).toISOString(), endedAt: null, endedBy: null, progressNotes: [], bonusAwards: [] };
+  state.mentoringMatches.push(match);
+  appendPilotNotification(state, { pilotId: mentorPilotId, kind: "operations", level: "success", title: "Mentoring match confirmed", body: `You are now supporting ${learner.name}. Eligible accepted Ember flights can receive the mentor reward while this match is active.`, href: "/account/career" });
+  appendPilotNotification(state, { pilotId: learnerPilotId, kind: "operations", level: "success", title: "Mentoring match confirmed", body: `${mentor.name} is now listed as your BAV mentor. Your shared goal is available in Career.`, href: "/account/career" });
+  await writeState(state);
+  return match;
+}
+
+export async function addMentoringProgressNote(input: { matchId: string; note: string; staffName: string }) {
+  const note = input.note.trim().replace(/\s+/g, " ").slice(0, 1000);
+  if (note.length < 3) throw new Error("Add a short progress note.");
+  const state = await readState();
+  const match = state.mentoringMatches.find((item) => item.id === input.matchId && mentoringIsActive(item));
+  if (!match) throw new Error("That mentoring match is no longer active.");
+  const progress: MentoringProgressNote = { id: randomUUID(), authorName: input.staffName.trim().slice(0, 100), note, createdAt: new Date().toISOString() };
+  match.progressNotes.push(progress);
+  const mentor = state.pilots.find((pilot) => pilot.id === match.mentorPilotId);
+  const learner = state.pilots.find((pilot) => pilot.id === match.learnerPilotId);
+  for (const pilotId of [match.mentorPilotId, match.learnerPilotId]) appendPilotNotification(state, { pilotId, kind: "operations", level: "info", title: "Mentoring progress updated", body: note, href: "/account/career" });
+  void mentor; void learner;
+  await writeState(state);
+  return progress;
+}
+
+export async function endMentoringMatch(input: { matchId: string; status: "completed" | "cancelled"; staffName: string }) {
+  const state = await readState();
+  const match = state.mentoringMatches.find((item) => item.id === input.matchId && mentoringIsActive(item));
+  if (!match) throw new Error("That mentoring match is no longer active.");
+  match.status = input.status;
+  match.endedAt = new Date().toISOString();
+  match.endedBy = input.staffName.trim().slice(0, 100);
+  await writeState(state);
+  return match;
+}
+
+/** Claims a capped mentor reward before an accepted PIREP is credited. The pilot cannot call this path. */
+export async function claimMentorPirepReward(input: { pilotId: string; pirepId: string; source: "manual" | "acars"; blockMinutes: number }) {
+  if (input.source !== "acars" || input.blockMinutes < MENTOR_MINIMUM_BLOCK_MINUTES) return null;
+  const state = await readState();
+  const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && item.mentorPilotId === input.pilotId);
+  if (!match || state.pilots.find((pilot) => pilot.id === input.pilotId)?.careerExperience.mentoringInterest !== "mentor") return null;
+  if (mentorAwardsThisMonth(state, input.pilotId) >= MENTOR_REWARD_MONTHLY_FLIGHT_CAP) return null;
+  if (state.mentoringMatches.some((item) => item.bonusAwards.some((award) => award.pirepId === input.pirepId))) return null;
+  match.bonusAwards.push({ pirepId: input.pirepId, awardedAt: new Date().toISOString() });
+  await writeState(state);
+  return { multiplier: MENTOR_REWARD_MULTIPLIER, matchId: match.id };
+}
 
 export async function changePilotPassword(id: string, currentPassword: string, newPassword: string) {
   if (newPassword.length < 8) throw new Error("New password must contain at least 8 characters.");
