@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getPilotSession } from "@/lib/pilot-auth";
+import { closedBetaEnabled } from "@/lib/closed-beta";
 import { PilotLoginForm } from "./PilotLoginForm";
 
 export const metadata = { title: "Pilot login" };
@@ -19,6 +20,7 @@ function safeReturnTo(value?: string) {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const returnTo = safeReturnTo((await searchParams).returnTo);
   if (await getPilotSession()) redirect(returnTo);
+  if (closedBetaEnabled()) redirect(returnTo === "/account" ? "/closed-beta" : `/closed-beta?next=${encodeURIComponent(returnTo)}`);
 
   return (
     <main className="login-page">

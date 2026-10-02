@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 
-export function PasswordResetRequestForm() {
+type PasswordResetRequestFormProps = {
+  backHref?: string;
+  privatePreview?: boolean;
+};
+
+export function PasswordResetRequestForm({ backHref = "/login", privatePreview = false }: PasswordResetRequestFormProps) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -21,10 +26,12 @@ export function PasswordResetRequestForm() {
         body: JSON.stringify({ email }),
       });
       const body = (await response.json().catch(() => ({}))) as { message?: string };
-      setMessage(body.message || "If an active BAV account uses that email address, a reset link has been sent.");
+      setMessage(body.message || (privatePreview
+        ? "If an active invited account uses that email address, a reset link has been sent."
+        : "If an active BAV account uses that email address, a reset link has been sent."));
       if (!response.ok) setError("Could not request a password reset. Please try again.");
     } catch {
-      setError("Could not reach the BAV password-reset service.");
+      setError(privatePreview ? "Could not reach the password-reset service." : "Could not reach the BAV password-reset service.");
     } finally {
       setBusy(false);
     }
@@ -36,7 +43,7 @@ export function PasswordResetRequestForm() {
       {error ? <p className="pilot-auth-error" role="alert">{error}</p> : null}
       {message ? <p className="pilot-auth-success" role="status">{message}</p> : null}
       <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
-      <p className="pilot-auth-switch">Remembered it? <Link href="/login">Back to sign in</Link></p>
+      <p className="pilot-auth-switch">Remembered it? <Link href={backHref}>Back to sign in</Link></p>
     </form>
   );
 }

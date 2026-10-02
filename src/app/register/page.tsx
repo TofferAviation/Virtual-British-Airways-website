@@ -2,12 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getPilotSession } from "@/lib/pilot-auth";
+import { closedBetaEnabled } from "@/lib/closed-beta";
 import { PilotRegisterForm } from "./PilotRegisterForm";
 
 export const metadata = { title: "Create pilot account" };
 
 export default async function RegisterPage() {
   if (await getPilotSession()) redirect("/account");
+  if (closedBetaEnabled()) redirect("/closed-beta");
 
   return (
     <main className="login-page">

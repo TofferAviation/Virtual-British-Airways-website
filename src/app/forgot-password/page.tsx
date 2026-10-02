@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { redirect } from "next/navigation";
+import { closedBetaEnabled } from "@/lib/closed-beta";
 import { PasswordResetRequestForm } from "./PasswordResetRequestForm";
 
 export const metadata = { title: "Reset pilot password" };
+export const dynamic = "force-dynamic";
 
 export default function ForgotPasswordPage() {
+  if (closedBetaEnabled()) redirect("/closed-beta/forgot-password");
+
   return (
     <main className="login-page">
       <header className="login-header">

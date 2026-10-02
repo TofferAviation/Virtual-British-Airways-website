@@ -60,9 +60,10 @@ export function FirstVisitWelcome() {
     };
   }, [dismiss, isOpen]);
 
-  // The invite-only screen intentionally does not reveal the public project
-  // name before a beta user has authenticated.
-  if (!isOpen || pathname === "/closed-beta") return null;
+  // Private-entry screens intentionally do not reveal the public project
+  // name before a beta user or invited staff member has authenticated.
+  const privateEntryPath = pathname.startsWith("/closed-beta") || pathname === "/staff-login" || pathname.startsWith("/staff-invite/");
+  if (!isOpen || privateEntryPath) return null;
 
   return (
     <div className="welcome-notice-backdrop" role="presentation">

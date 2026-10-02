@@ -1,0 +1,186 @@
+.page {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  color: #edf3ff;
+  background: #071126 url("/branding/closed-beta-airport-dusk.png") center / cover no-repeat;
+}
+
+.page::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background: linear-gradient(120deg, rgba(3, 11, 29, 0.9), rgba(10, 17, 43, 0.72) 52%, rgba(29, 12, 40, 0.62));
+}
+
+.atmosphere,
+.header,
+.card,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
+.atmosphere {
+  position: absolute;
+  inset: auto -15% -35% 20%;
+  height: 65%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(63, 122, 213, 0.24), transparent 66%);
+  filter: blur(20px);
+}
+
+.header,
+.footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 28px clamp(22px, 5vw, 72px);
+  color: #d9e2f1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.card {
+  width: min(100% - 36px, 570px);
+  align-self: center;
+  justify-self: center;
+  margin: 44px 0;
+  padding: clamp(34px, 6vw, 58px);
+  border: 1px solid rgba(164, 188, 225, 0.52);
+  border-radius: 28px;
+  background: rgba(7, 18, 42, 0.9);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 24px;
+  place-items: center;
+  border: 1px solid rgba(199, 217, 248, 0.62);
+  border-radius: 50%;
+  color: #fff2e8;
+  font-size: 24px;
+}
+
+.eyebrow {
+  display: block;
+  color: #e1d4e8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.card h1 {
+  margin: 19px 0 12px;
+  color: #fff;
+  font-family: Georgia, serif;
+  font-size: clamp(38px, 7vw, 54px);
+  font-weight: 400;
+  line-height: 0.98;
+  text-align: center;
+}
+
+.intro,
+.security {
+  margin: 0 auto;
+  color: #c0cee3;
+  font-size: 16px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.security {
+  margin-top: 20px;
+  font-size: 13px;
+}
+
+.card :global(.pilot-auth-form) {
+  display: grid;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.card :global(.pilot-auth-form label) {
+  display: grid;
+  gap: 8px;
+  color: #e7edf8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.card :global(.pilot-auth-form input) {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 14px;
+  border: 1px solid #526888;
+  border-radius: 10px;
+  color: #fff;
+  background: #192845;
+}
+
+.card :global(.pilot-auth-form .button) {
+  width: 100%;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(105deg, #4276bc, #745490);
+}
+
+.card :global(.pilot-auth-switch),
+.card :global(.pilot-auth-success),
+.card :global(.pilot-auth-error) {
+  margin: 0;
+  color: #c8d5eb;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.card :global(.pilot-auth-switch a),
+.card :global(.pilot-auth-success a) {
+  color: #8ec6ff;
+}
+
+.card :global(.pilot-auth-error) {
+  padding: 12px;
+  border-left: 3px solid #ff4076;
+  color: #ffe4ec;
+  background: rgba(101, 17, 48, 0.58);
+  text-align: left;
+}
+
+.card :global(.pilot-auth-success) {
+  padding: 12px;
+  border-left: 3px solid #69c9a8;
+  color: #dbfff1;
+  background: rgba(13, 78, 66, 0.54);
+  text-align: left;
+}
+
+@media (max-width: 620px) {
+  .header,
+  .footer {
+    padding: 20px 22px;
+    font-size: 8px;
+    letter-spacing: 0.2em;
+  }
+
+  .footer span:first-child {
+    display: none;
+  }
+
+  .card {
+    margin: 26px 0;
+    padding: 34px 24px;
+  }
+}

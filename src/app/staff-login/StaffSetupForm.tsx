@@ -44,7 +44,7 @@ export function StaffSetupForm() {
   }
 
   return <form className="staff-login-form" onSubmit={submit}>
-    <p className="staff-login-config-note">This sets a new separate Staff Centre password. It does not change your BAV pilot password.</p>
+    <p className="staff-login-config-note">This sets a new separate Staff Centre password. It does not change your pilot password.</p>
     <label><span>New Staff Centre password</span><input name="password" type="password" autoComplete="new-password" minLength={10} disabled={busy} required /></label>
     <label><span>Confirm Staff Centre password</span><input name="confirmation" type="password" autoComplete="new-password" minLength={10} disabled={busy} required /></label>
     {error ? <p className="staff-login-error" role="alert">{error}</p> : null}

@@ -4,6 +4,8 @@ import type { PublicPilotAccount } from "@/lib/pilot-store";
 const DEFAULT_SITE_URL = "https://virtualairline.co.uk";
 const DEFAULT_FROM = "British Airways Virtual <support@britishairwaysva.co.uk>";
 const DEFAULT_REPLY_TO = "support@britishairwaysva.co.uk";
+const DEFAULT_PRIVATE_PREVIEW_FROM = "Private Aviation Preview <no-reply@britishairwaysva.co.uk>";
+const DEFAULT_PRIVATE_PREVIEW_REPLY_TO = "no-reply@britishairwaysva.co.uk";
 
 type EmailDelivery = "sent" | "not-configured" | "failed";
 
@@ -61,6 +63,13 @@ function emailConfig() {
   };
 }
 
+function privatePreviewEmailConfig() {
+  return {
+    from: envValue("BAV_CLOSED_BETA_EMAIL_FROM", "BAV_PASSWORD_RESET_FROM") || DEFAULT_PRIVATE_PREVIEW_FROM,
+    replyTo: envValue("BAV_CLOSED_BETA_EMAIL_REPLY_TO", "BAV_PASSWORD_RESET_REPLY_TO") || DEFAULT_PRIVATE_PREVIEW_REPLY_TO,
+  };
+}
+
 /** Safe for the public health endpoint: exposes no passwords or addresses. */
 export function emailDeliveryHealth() {
   const config = emailConfig();
@@ -82,7 +91,7 @@ function escapeHtml(value: string) {
   })[character] ?? character);
 }
 
-async function sendEmail(input: { to: string; subject: string; text: string; html: string }): Promise<EmailDelivery> {
+async function sendEmail(input: { to: string; subject: string; text: string; html: string; from?: string; replyTo?: string | null }): Promise<EmailDelivery> {
   const config = emailConfig();
   if (!config) return "not-configured";
 
@@ -94,9 +103,9 @@ async function sendEmail(input: { to: string; subject: string; text: string; htm
       auth: config.auth,
     });
     await transporter.sendMail({
-      from: config.from,
+      from: input.from ?? config.from,
       to: input.to,
-      replyTo: config.replyTo,
+      replyTo: input.replyTo === undefined ? config.replyTo : input.replyTo ?? undefined,
       subject: input.subject,
       text: input.text,
       html: input.html,
@@ -118,6 +127,10 @@ async function sendEmail(input: { to: string; subject: string; text: string; htm
 
 function emailShell(title: string, body: string) {
   return `<!doctype html><html lang="en"><body style="margin:0;background:#eef3f8;font-family:Arial,sans-serif;color:#10243f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:32px 14px"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #d5e0eb"><tr><td style="padding:28px 32px;background:#071d49;color:#fff"><div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#83c8ff">British Airways Virtual</div><h1 style="margin:10px 0 0;font-family:Georgia,serif;font-size:30px;font-weight:400">${title}</h1></td></tr><tr><td style="padding:30px 32px;font-size:15px;line-height:1.6">${body}</td></tr><tr><td style="padding:16px 32px;border-top:1px solid #dce5ee;color:#63768d;font-size:11px;line-height:1.5">Flight simulation only · Independent virtual airline project · Not affiliated with British Airways Plc</td></tr></table></td></tr></table></body></html>`;
+}
+
+function privatePreviewEmailShell(title: string, body: string) {
+  return `<!doctype html><html lang="en"><body style="margin:0;background:#07101f;font-family:Arial,sans-serif;color:#eaf0f8"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:32px 14px"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#0c1730;border:1px solid #405070"><tr><td style="padding:28px 32px;background:linear-gradient(120deg,#07142e,#3b1742);color:#fff"><div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c5d4ec">Private aviation preview</div><h1 style="margin:10px 0 0;font-family:Georgia,serif;font-size:30px;font-weight:400">${title}</h1></td></tr><tr><td style="padding:30px 32px;font-size:15px;line-height:1.6;color:#eaf0f8">${body}</td></tr><tr><td style="padding:16px 32px;border-top:1px solid #33435f;color:#afbdd2;font-size:11px;line-height:1.5">Private preview · This message was sent for account security.</td></tr></table></td></tr></table></body></html>`;
 }
 
 function actionLink(label: string, href: string) {
@@ -149,8 +162,20 @@ export async function sendClosedBetaInvitationEmail(input: { name: string; email
   });
 }
 
-export async function sendPilotPasswordResetEmail(input: { name: string; email: string; token: string }) {
-  const resetUrl = `${siteUrl()}/reset-password?token=${encodeURIComponent(input.token)}`;
+export async function sendPilotPasswordResetEmail(input: { name: string; email: string; token: string; privatePreview?: boolean }) {
+  const resetUrl = `${siteUrl()}${input.privatePreview ? "/closed-beta/reset-password" : "/reset-password"}?token=${encodeURIComponent(input.token)}`;
+  if (input.privatePreview) {
+    const delivery = privatePreviewEmailConfig();
+    return sendEmail({
+      to: input.email,
+      from: delivery.from,
+      replyTo: delivery.replyTo,
+      subject: "Reset your private preview password",
+      text: `Hello ${input.name}, use this link to reset your private preview password: ${resetUrl}\n\nThe link expires in one hour. If you did not request it, you can ignore this email.`,
+      html: privatePreviewEmailShell("Reset your password", `<p>Hello ${escapeHtml(input.name)},</p><p>We received a request to reset your private preview password. This link is single-use and expires in one hour.</p>${actionLink("Reset password", resetUrl)}<p style="color:#afbdd2;font-size:12px">If you did not request this, you can safely ignore this email.</p>`),
+    });
+  }
+
   return sendEmail({
     to: input.email,
     subject: "Reset your British Airways Virtual password",

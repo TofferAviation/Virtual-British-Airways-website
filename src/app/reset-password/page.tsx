@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { redirect } from "next/navigation";
+import { closedBetaEnabled } from "@/lib/closed-beta";
 import { PasswordResetConfirmForm } from "./PasswordResetConfirmForm";
 
 export const metadata = { title: "Choose a new password" };
+export const dynamic = "force-dynamic";
 
 type ResetPasswordPageProps = { searchParams: Promise<{ token?: string }> };
 
 export default async function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
   const token = (await searchParams).token ?? "";
+  if (closedBetaEnabled()) {
+    redirect(token ? `/closed-beta/reset-password?token=${encodeURIComponent(token)}` : "/closed-beta/reset-password");
+  }
   return (
     <main className="login-page">
       <header className="login-header">
