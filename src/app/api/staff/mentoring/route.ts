@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addMentoringProgressNote, createMentoringMatch, endMentoringMatch } from "@/lib/pilot-store";
+import { addMentoringProgressNote, createMentoringMatch, endMentoringMatch, reviewMentorApplication, updateMentorRank, type MentorRank } from "@/lib/pilot-store";
 import { requireStaffPermission } from "@/lib/staff-auth";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,15 @@ export async function PATCH(request: NextRequest) {
     if (action === "create") {
       const match = await createMentoringMatch({ mentorPilotId: String(body.mentorPilotId ?? ""), learnerPilotId: String(body.learnerPilotId ?? ""), goal: String(body.goal ?? ""), staffName: session.name });
       return NextResponse.json({ ok: true, match });
+    }
+    if (action === "review" && (body.status === "approved" || body.status === "declined")) {
+      const mentorRank = body.mentorRank === "new" || body.mentorRank === "developing" || body.mentorRank === "experienced" ? body.mentorRank as MentorRank : undefined;
+      const application = await reviewMentorApplication({ applicationId: String(body.applicationId ?? ""), status: body.status, mentorRank, staffName: session.name });
+      return NextResponse.json({ ok: true, application });
+    }
+    if (action === "level" && (body.mentorRank === "new" || body.mentorRank === "developing" || body.mentorRank === "experienced")) {
+      const application = await updateMentorRank({ pilotId: String(body.pilotId ?? ""), mentorRank: body.mentorRank as MentorRank, staffName: session.name });
+      return NextResponse.json({ ok: true, application });
     }
     if (action === "progress") {
       const progress = await addMentoringProgressNote({ matchId: String(body.matchId ?? ""), note: String(body.note ?? ""), staffName: session.name });

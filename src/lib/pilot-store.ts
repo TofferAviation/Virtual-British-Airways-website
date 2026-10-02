@@ -14,7 +14,7 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 9;
+  version: 10;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
@@ -24,6 +24,7 @@ type PilotState = {
   hourAdjustments: PilotHourAdjustment[];
   notifications: PilotNotification[];
   mentoringMatches: MentoringMatch[];
+  mentorApplications: MentorApplication[];
   /**
    * Flight bookings and SimBrief links share the same durable record as the
    * pilot identity. Kept opaque here so the operations module owns its shape.
@@ -33,6 +34,22 @@ type PilotState = {
 
 export type MentoringProgressNote = { id: string; authorName: string; note: string; createdAt: string };
 export type MentoringBonusAward = { pirepId: string; awardedAt: string };
+export type MentorRank = "new" | "developing" | "experienced";
+export type MentorApplication = {
+  id: string;
+  pilotId: string;
+  status: "pending" | "approved" | "declined" | "withdrawn";
+  requestNote: string;
+  requestedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  mentorRank: MentorRank | null;
+};
+export const MENTOR_RANKS: Record<MentorRank, { label: string; multiplier: number }> = {
+  new: { label: "New Mentor", multiplier: 1.25 },
+  developing: { label: "Developing Mentor", multiplier: 1.5 },
+  experienced: { label: "Experienced Mentor", multiplier: 2 },
+};
 export type MentoringMatch = {
   id: string;
   mentorPilotId: string;
@@ -49,6 +66,8 @@ export type MentoringMatch = {
 };
 
 export type PilotMentoringStatus = {
+  application: Pick<MentorApplication, "status" | "requestNote" | "requestedAt" | "reviewedAt" | "mentorRank"> | null;
+  match: {
   role: "mentor" | "learner";
   matchId: string;
   counterpartName: string;
@@ -57,9 +76,11 @@ export type PilotMentoringStatus = {
   expiresAt: string;
   progressNotes: MentoringProgressNote[];
   bonusFlightsThisMonth: number;
-} | null;
+  mentorRank: MentorRank | null;
+  rewardMultiplier: number | null;
+  } | null;
+};
 
-export const MENTOR_REWARD_MULTIPLIER = 1.25;
 export const MENTOR_REWARD_MONTHLY_FLIGHT_CAP = 4;
 const MENTOR_MINIMUM_BLOCK_MINUTES = 30;
 const MENTOR_MATCH_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -192,7 +213,7 @@ export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersio
 
 function emptyState(): PilotState {
   return {
-    version: 9,
+    version: 10,
     nextPilotNumber: 1,
     pilots: [],
     passwordResetTokens: [],
@@ -202,6 +223,7 @@ function emptyState(): PilotState {
     hourAdjustments: [],
     notifications: [],
     mentoringMatches: [],
+    mentorApplications: [],
     operationsState: null,
   };
 }
@@ -417,8 +439,24 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       bonusAwards: Array.isArray(item.bonusAwards) ? item.bonusAwards.filter((award): award is MentoringBonusAward => Boolean(award && typeof award.pirepId === "string" && typeof award.awardedAt === "string")).slice(-100) : [],
     })).filter((item) => item.mentorPilotId !== item.learnerPilotId && pilots.some((pilot) => pilot.id === item.mentorPilotId) && pilots.some((pilot) => pilot.id === item.learnerPilotId)).slice(-2_000)
     : [];
+  const mentorApplications = Array.isArray(raw?.mentorApplications)
+    ? raw.mentorApplications.filter((item): item is MentorApplication => Boolean(
+      item && typeof item.id === "string" && typeof item.pilotId === "string" &&
+      ["pending", "approved", "declined", "withdrawn"].includes(item.status) &&
+      typeof item.requestNote === "string" && typeof item.requestedAt === "string",
+    )).map((item) => ({
+      id: item.id,
+      pilotId: item.pilotId,
+      status: item.status,
+      requestNote: item.requestNote.trim().slice(0, 1_000),
+      requestedAt: item.requestedAt,
+      reviewedAt: typeof item.reviewedAt === "string" ? item.reviewedAt : null,
+      reviewedBy: typeof item.reviewedBy === "string" ? item.reviewedBy.trim().slice(0, 100) || null : null,
+      mentorRank: item.mentorRank === "new" || item.mentorRank === "developing" || item.mentorRank === "experienced" ? item.mentorRank : null,
+    })).filter((item) => pilots.some((pilot) => pilot.id === item.pilotId)).slice(-2_000)
+    : [];
   return {
-    version: 9,
+    version: 10,
     nextPilotNumber,
     pilots,
     passwordResetTokens,
@@ -428,6 +466,7 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     hourAdjustments,
     notifications,
     mentoringMatches,
+    mentorApplications,
     operationsState: raw?.operationsState && typeof raw.operationsState === "object"
       ? structuredClone(raw.operationsState)
       : null,
@@ -1045,7 +1084,29 @@ export async function updatePilotCareerRoster(id: string, input: unknown) {
   return account.careerExperience;
 }
 
-export async function updatePilotMentoringInterest(id: string, input: unknown) { const mentoringInterest = validateMentoringInterest(input); const state = await readState(); const account = state.pilots.find((pilot) => pilot.id === id); if (!account) throw new Error("Pilot account not found."); account.careerExperience = { ...account.careerExperience, mentoringInterest, updatedAt: new Date().toISOString() }; await writeState(state); return account.careerExperience; }
+export async function updatePilotMentoringInterest(id: string, input: unknown) {
+  const mentoringInterest = validateMentoringInterest(input);
+  const requestNote = input && typeof input === "object" && typeof (input as { mentorApplicationNote?: unknown }).mentorApplicationNote === "string"
+    ? (input as { mentorApplicationNote: string }).mentorApplicationNote.trim().replace(/\s+/g, " ").slice(0, 1_000)
+    : "";
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  const latestApplication = [...state.mentorApplications].reverse().find((application) => application.pilotId === id) ?? null;
+  const now = new Date().toISOString();
+  if (mentoringInterest === "mentor" && !latestApplication?.status.includes("approved") && latestApplication?.status !== "pending") {
+    if (requestNote.length < 20) throw new Error("Tell staff briefly why you would like to mentor before submitting your request.");
+    state.mentorApplications.push({ id: randomUUID(), pilotId: id, status: "pending", requestNote, requestedAt: now, reviewedAt: null, reviewedBy: null, mentorRank: null });
+    appendPilotNotification(state, { pilotId: id, kind: "operations", level: "info", title: "Mentor application received", body: "Staff will review your mentoring request before you can be matched with a new pilot.", href: "/account/career" });
+  }
+  if (mentoringInterest !== "mentor" && latestApplication?.status === "pending") {
+    latestApplication.status = "withdrawn";
+    latestApplication.reviewedAt = now;
+  }
+  account.careerExperience = { ...account.careerExperience, mentoringInterest, updatedAt: now };
+  await writeState(state);
+  return account.careerExperience;
+}
 
 function mentoringIsActive(match: MentoringMatch, now = Date.now()) {
   return match.status === "active" && Date.parse(match.expiresAt) > now;
@@ -1066,22 +1127,74 @@ export async function listMentoringMatches() {
   return [...state.mentoringMatches].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+export async function listMentorApplications() {
+  const state = await readState();
+  return [...state.mentorApplications].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt));
+}
+
+function latestMentorApplication(state: PilotState, pilotId: string) {
+  return [...state.mentorApplications].reverse().find((application) => application.pilotId === pilotId) ?? null;
+}
+
+function approvedMentorApplication(state: PilotState, pilotId: string) {
+  const application = latestMentorApplication(state, pilotId);
+  return application?.status === "approved" && application.mentorRank ? application : null;
+}
+
+export async function reviewMentorApplication(input: { applicationId: string; status: "approved" | "declined"; mentorRank?: MentorRank; staffName: string }) {
+  const state = await readState();
+  const application = state.mentorApplications.find((item) => item.id === input.applicationId && item.status === "pending");
+  if (!application) throw new Error("That mentor application is no longer awaiting review.");
+  if (input.status === "approved" && !input.mentorRank) throw new Error("Choose a mentoring level before approving this application.");
+  application.status = input.status;
+  application.mentorRank = input.status === "approved" ? input.mentorRank ?? null : null;
+  application.reviewedAt = new Date().toISOString();
+  application.reviewedBy = input.staffName.trim().slice(0, 100);
+  const account = state.pilots.find((pilot) => pilot.id === application.pilotId);
+  if (account) {
+    const level = application.mentorRank ? MENTOR_RANKS[application.mentorRank] : null;
+    appendPilotNotification(state, { pilotId: account.id, kind: "operations", level: input.status === "approved" ? "success" : "attention", title: input.status === "approved" ? "Mentor application approved" : "Mentor application not approved", body: input.status === "approved" && level ? `You are approved as a ${level.label} and can now be matched with new pilots. Your staff-controlled reward is ${level.multiplier}× on eligible accepted Ember flights.` : "Staff have reviewed your mentoring application. You may update your request in Career when you are ready.", href: "/account/career" });
+  }
+  await writeState(state);
+  return application;
+}
+
+export async function updateMentorRank(input: { pilotId: string; mentorRank: MentorRank; staffName: string }) {
+  const state = await readState();
+  const application = approvedMentorApplication(state, input.pilotId);
+  if (!application) throw new Error("This pilot does not have an approved mentor application.");
+  application.mentorRank = input.mentorRank;
+  application.reviewedAt = new Date().toISOString();
+  application.reviewedBy = input.staffName.trim().slice(0, 100);
+  const level = MENTOR_RANKS[input.mentorRank];
+  appendPilotNotification(state, { pilotId: input.pilotId, kind: "operations", level: "success", title: "Mentoring level updated", body: `Staff have set your mentoring level to ${level.label}. Eligible accepted Ember flights now receive ${level.multiplier}× standard VA and Tier Points while you have an active match.`, href: "/account/career" });
+  await writeState(state);
+  return application;
+}
+
 export async function getPilotMentoringStatus(pilotId: string): Promise<PilotMentoringStatus> {
   const state = await readState();
+  const application = latestMentorApplication(state, pilotId);
   const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && (item.mentorPilotId === pilotId || item.learnerPilotId === pilotId));
-  if (!match) return null;
+  if (!match) return { application: application ? { status: application.status, requestNote: application.requestNote, requestedAt: application.requestedAt, reviewedAt: application.reviewedAt, mentorRank: application.mentorRank } : null, match: null };
   const role = match.mentorPilotId === pilotId ? "mentor" : "learner";
   const counterpart = state.pilots.find((pilot) => pilot.id === (role === "mentor" ? match.learnerPilotId : match.mentorPilotId));
-  if (!counterpart) return null;
+  if (!counterpart) return { application: application ? { status: application.status, requestNote: application.requestNote, requestedAt: application.requestedAt, reviewedAt: application.reviewedAt, mentorRank: application.mentorRank } : null, match: null };
+  const approvedApplication = role === "mentor" ? approvedMentorApplication(state, pilotId) : null;
   return {
-    role,
-    matchId: match.id,
-    counterpartName: counterpart.name,
-    counterpartPilotNumber: counterpart.pilotNumber,
-    goal: match.goal,
-    expiresAt: match.expiresAt,
-    progressNotes: match.progressNotes,
-    bonusFlightsThisMonth: role === "mentor" ? mentorAwardsThisMonth(state, pilotId) : 0,
+    application: application ? { status: application.status, requestNote: application.requestNote, requestedAt: application.requestedAt, reviewedAt: application.reviewedAt, mentorRank: application.mentorRank } : null,
+    match: {
+      role,
+      matchId: match.id,
+      counterpartName: counterpart.name,
+      counterpartPilotNumber: counterpart.pilotNumber,
+      goal: match.goal,
+      expiresAt: match.expiresAt,
+      progressNotes: match.progressNotes,
+      bonusFlightsThisMonth: role === "mentor" ? mentorAwardsThisMonth(state, pilotId) : 0,
+      mentorRank: approvedApplication?.mentorRank ?? (role === "mentor" ? "new" : null),
+      rewardMultiplier: role === "mentor" ? (approvedApplication?.mentorRank ? MENTOR_RANKS[approvedApplication.mentorRank].multiplier : MENTOR_RANKS.new.multiplier) : null,
+    },
   };
 }
 
@@ -1095,7 +1208,7 @@ export async function createMentoringMatch(input: { mentorPilotId: string; learn
   const mentor = state.pilots.find((pilot) => pilot.id === mentorPilotId);
   const learner = state.pilots.find((pilot) => pilot.id === learnerPilotId);
   if (!mentor || !learner || mentor.status !== "active" || learner.status !== "active") throw new Error("Both pilots must have active BAV accounts.");
-  if (mentor.careerExperience.mentoringInterest !== "mentor") throw new Error("That pilot has not volunteered to mentor.");
+  if (mentor.careerExperience.mentoringInterest !== "mentor" || !approvedMentorApplication(state, mentorPilotId)) throw new Error("That mentor application must be approved and still opted in before creating a match.");
   if (learner.careerExperience.mentoringInterest !== "learn") throw new Error("That pilot has not requested mentoring.");
   if (state.mentoringMatches.some((match) => mentoringIsActive(match) && match.learnerPilotId === learnerPilotId)) throw new Error("This pilot already has an active mentoring match.");
   if (state.mentoringMatches.filter((match) => mentoringIsActive(match) && match.mentorPilotId === mentorPilotId).length >= 3) throw new Error("A mentor can support up to three active pilots at once.");
@@ -1140,12 +1253,15 @@ export async function claimMentorPirepReward(input: { pilotId: string; pirepId: 
   if (input.source !== "acars" || input.blockMinutes < MENTOR_MINIMUM_BLOCK_MINUTES) return null;
   const state = await readState();
   const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && item.mentorPilotId === input.pilotId);
+  const approval = approvedMentorApplication(state, input.pilotId);
+  // Existing staff-created matches remain safely on the original New Mentor rate after this upgrade.
+  const multiplier = approval?.mentorRank ? MENTOR_RANKS[approval.mentorRank].multiplier : MENTOR_RANKS.new.multiplier;
   if (!match || state.pilots.find((pilot) => pilot.id === input.pilotId)?.careerExperience.mentoringInterest !== "mentor") return null;
   if (mentorAwardsThisMonth(state, input.pilotId) >= MENTOR_REWARD_MONTHLY_FLIGHT_CAP) return null;
   if (state.mentoringMatches.some((item) => item.bonusAwards.some((award) => award.pirepId === input.pirepId))) return null;
   match.bonusAwards.push({ pirepId: input.pirepId, awardedAt: new Date().toISOString() });
   await writeState(state);
-  return { multiplier: MENTOR_REWARD_MULTIPLIER, matchId: match.id };
+  return { multiplier, matchId: match.id };
 }
 
 export async function changePilotPassword(id: string, currentPassword: string, newPassword: string) {
