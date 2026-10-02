@@ -37,10 +37,24 @@ export function requestUsesHttps(request: NextRequest) {
   return request.nextUrl.protocol === "https:";
 }
 
+const BAV_SESSION_DOMAINS = ["virtualairline.co.uk", "britishairwaysva.co.uk"];
+
+function configuredPublicHostname() {
+  const value = (process.env.BAV_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Share the one BAV account session between britishairwaysva.co.uk and its
- * www hostname. Local development and temporary Render URLs intentionally
- * remain host-only.
+ * Share one BAV account session between each approved public root domain and
+ * its www hostname. Local development and temporary Render URLs stay host-only.
+ * The live virtualairline.co.uk domain is listed explicitly so a stale hosting
+ * environment value cannot reintroduce a split root/www login session.
  */
 export function pilotSessionCookieDomain(request: NextRequest) {
   const browserOrigin = firstHeaderValue(request.headers.get("origin"));
@@ -59,10 +73,11 @@ export function pilotSessionCookieDomain(request: NextRequest) {
       return "";
     }
   });
-  const productionDomain = "britishairwaysva.co.uk";
-  return hosts.some((host) => host === productionDomain || host.endsWith(`.${productionDomain}`))
-    ? productionDomain
-    : undefined;
+  const configuredDomain = configuredPublicHostname();
+  const approvedDomains = configuredDomain
+    ? [...new Set([...BAV_SESSION_DOMAINS, configuredDomain])]
+    : BAV_SESSION_DOMAINS;
+  return approvedDomains.find((domain) => hosts.some((host) => host === domain || host.endsWith(`.${domain}`)));
 }
 
 export function relativeRedirect(location: string, status = 303) {

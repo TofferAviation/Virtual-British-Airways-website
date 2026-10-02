@@ -6,7 +6,7 @@ function sameOrigin(request: NextRequest) {
   if (!origin) return false;
   try {
     const originUrl = new URL(origin);
-    const configuredHost = process.env.BAV_PUBLIC_SITE_URL ? new URL(process.env.BAV_PUBLIC_SITE_URL).hostname : "britishairwaysva.co.uk";
+    const configuredHost = process.env.BAV_PUBLIC_SITE_URL ? new URL(process.env.BAV_PUBLIC_SITE_URL).hostname : "virtualairline.co.uk";
     // Render forwards the public hostname to an internal HTTP request. Compare
     // hostnames (rather than the internal protocol) so real browser requests
     // remain accepted, while requests from another website are still rejected.

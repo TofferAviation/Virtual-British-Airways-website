@@ -32,7 +32,7 @@ services:
       - key: BAV_EMAIL_REPLY_TO
         value: support@britishairwaysva.co.uk
       - key: BAV_PUBLIC_SITE_URL
-        value: https://britishairwaysva.co.uk
+        value: https://virtualairline.co.uk
       - key: BAV_PASSWORD_RESET_SECRET
         generateValue: true
       - key: SIMBRIEF_API_KEY

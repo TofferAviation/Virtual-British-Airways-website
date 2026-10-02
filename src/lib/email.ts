@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import type { PublicPilotAccount } from "@/lib/pilot-store";
 
-const DEFAULT_SITE_URL = "https://britishairwaysva.co.uk";
+const DEFAULT_SITE_URL = "https://virtualairline.co.uk";
 const DEFAULT_FROM = "British Airways Virtual <support@britishairwaysva.co.uk>";
 const DEFAULT_REPLY_TO = "support@britishairwaysva.co.uk";
 

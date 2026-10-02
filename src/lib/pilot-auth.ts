@@ -5,11 +5,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPilotById, type PilotAccount } from "@/lib/pilot-store";
 import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
-// v5 replaces earlier releases. Cookies issued before the custom-domain scope
+// v6 replaces earlier releases. Cookies issued before the custom-domain scope
 // was stable can coexist as host-only and domain-scoped copies, causing the
 // browser to send an unpredictable stale value after navigation.
-export const PILOT_COOKIE_NAME = "bav_pilot_session_v5";
+export const PILOT_COOKIE_NAME = "bav_pilot_session_v6";
 const LEGACY_PILOT_COOKIE_NAMES = [
+  "bav_pilot_session_v5",
   "bav_pilot_session_v4",
   "bav_pilot_session_v3",
   "bav_pilot_session_v2",
