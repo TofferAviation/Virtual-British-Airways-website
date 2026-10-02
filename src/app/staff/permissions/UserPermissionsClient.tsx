@@ -48,6 +48,15 @@ type AuditEntry = {
   details: string;
 };
 
+type BetaPilot = {
+  id: string;
+  name: string;
+  email: string;
+  pilotNumber: string;
+  createdAt: string;
+  mustChangePassword: boolean;
+};
+
 type Props = {
   initialUsers: StaffUser[];
   initialRoles: StaffRoleTemplate[];
@@ -55,6 +64,7 @@ type Props = {
   initialAudit: AuditEntry[];
   currentUserId: string;
   currentPermissions: PermissionId[];
+  initialBetaPilots: BetaPilot[];
 };
 
 type BootstrapResponse = {
@@ -64,6 +74,7 @@ type BootstrapResponse = {
   audit: AuditEntry[];
   currentUserId: string;
   currentPermissions: PermissionId[];
+  betaPilots: BetaPilot[];
 };
 
 function formatDate(value?: string, withTime = false) {
@@ -145,11 +156,13 @@ export function UserPermissionsClient({
   initialAudit,
   currentUserId,
   currentPermissions,
+  initialBetaPilots,
 }: Props) {
   const [users, setUsers] = useState(initialUsers);
   const [roles, setRoles] = useState(initialRoles);
   const [invitations, setInvitations] = useState(initialInvitations);
   const [audit, setAudit] = useState(initialAudit);
+  const [betaPilots, setBetaPilots] = useState(initialBetaPilots);
   const [myPermissions, setMyPermissions] = useState(new Set(currentPermissions));
   const [selectedId, setSelectedId] = useState(initialUsers.find((user) => !user.isEnvironmentAdmin)?.id ?? currentUserId);
   const [draftRoleId, setDraftRoleId] = useState<StaffRoleId>(() => initialUsers.find((user) => user.id === (initialUsers.find((item) => !item.isEnvironmentAdmin)?.id ?? currentUserId))?.roleId ?? "admin");
@@ -170,6 +183,10 @@ export function UserPermissionsClient({
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [roleDraftPermissions, setRoleDraftPermissions] = useState<Set<PermissionId>>(new Set());
+  const [betaInviteOpen, setBetaInviteOpen] = useState(false);
+  const [betaInviteName, setBetaInviteName] = useState("");
+  const [betaInviteEmail, setBetaInviteEmail] = useState("");
+  const [betaTemporaryPassword, setBetaTemporaryPassword] = useState("");
 
   const selected = users.find((user) => user.id === selectedId) ?? users[0];
   const draftRole = roleById(roles, draftRoleId);
@@ -250,12 +267,56 @@ export function UserPermissionsClient({
     setRoles(body.roles);
     setInvitations(body.invitations);
     setAudit(body.audit);
+    setBetaPilots(body.betaPilots ?? []);
     setMyPermissions(new Set(body.currentPermissions));
     const nextSelected = body.users.find((user) => user.id === selectedId) ?? body.users[0];
     if (nextSelected) {
       setSelectedId(nextSelected.id);
       setDraftRoleId(nextSelected.roleId);
       setDraftOverrides({ ...nextSelected.overrides });
+    }
+  }
+
+  async function inviteClosedBetaPilot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canManageUsers) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/staff/permissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "invite-closed-beta", name: betaInviteName, email: betaInviteEmail, temporaryPassword: betaTemporaryPassword || undefined }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string; emailDelivery?: "sent" | "not-configured" | "failed" };
+      if (!response.ok) throw new Error(body.error || "Could not create the beta invitation.");
+      await refreshData();
+      setBetaInviteOpen(false);
+      setBetaInviteName("");
+      setBetaInviteEmail("");
+      setBetaTemporaryPassword("");
+      setMessage(body.emailDelivery === "sent" ? "Closed-beta invitation created and emailed." : "Closed-beta access was created, but the invitation email could not be sent. Check the email delivery settings before inviting more pilots.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not create the beta invitation.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeClosedBetaPilot(pilot: BetaPilot) {
+    if (!canManageUsers || !window.confirm(`Revoke closed-beta access for ${pilot.name}? Their pilot record will remain.`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/staff/permissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "revoke-closed-beta", pilotId: pilot.id }) });
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not revoke closed-beta access.");
+      await refreshData();
+      setMessage("Closed-beta access revoked. The pilot record remains intact.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not revoke closed-beta access.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -544,6 +605,14 @@ export function UserPermissionsClient({
         </div>
 
         <div className="permissions-right-column">
+          <section className="permissions-panel" id="closed-beta-access">
+            <div className="permissions-panel-head role-heading"><div><span className="permissions-kicker">Closed beta access</span><h2>Invite pilot testers</h2><p>Each invited pilot receives their own temporary password by email. Existing pilot records can be renewed safely.</p></div><button className="permissions-primary small" onClick={() => setBetaInviteOpen(true)} disabled={!canManageUsers}>Invite beta pilot +</button></div>
+            <div className="permissions-invitation-list">
+              {betaPilots.map((pilot) => <div key={pilot.id}><strong>{pilot.name}</strong><span>{pilot.email}</span><span>{pilot.pilotNumber}</span><span className={`permissions-status ${pilot.mustChangePassword ? "invited" : "active"}`}>{pilot.mustChangePassword ? "Password change due" : "Active"}</span><time>Added {formatDate(pilot.createdAt)}</time><button onClick={() => revokeClosedBetaPilot(pilot)} disabled={busy || !canManageUsers}>Revoke</button></div>)}
+              {!betaPilots.length ? <p>No pilot testers have been invited yet.</p> : null}
+            </div>
+          </section>
+
           <section className="permissions-panel" id="role-overview">
             <div className="permissions-panel-head role-heading"><div><span className="permissions-kicker">Role overview</span><p>Number of users in each role and quick actions.</p></div><div><button className="permissions-primary small" onClick={() => openRoleEditor("new")} disabled={!canManageRoles}>Create role +</button><button className="permissions-secondary small" onClick={() => setInviteOpen(true)} disabled={!canManageUsers}>Invite staff +</button></div></div>
             <div className="permissions-role-list">{roles.map((role) => <button key={role.id} onClick={() => openRoleEditor(role)} disabled={!canManageRoles && role.id !== "admin"}><span>{roleIcon(role.id)}</span><strong>{role.name}</strong><em>{users.filter((user) => user.status === "active" && user.roleId === role.id).length}</em><small>{role.description}</small><i>{canManageRoles ? "Manage →" : "View"}</i></button>)}</div>
@@ -580,6 +649,16 @@ export function UserPermissionsClient({
       {invitationsOpen ? <div className="permissions-modal-backdrop" onMouseDown={(event) => event.currentTarget === event.target && setInvitationsOpen(false)}><section className="permissions-modal wide-modal">
         <header><div><span className="permissions-kicker">Staff invitations</span><h2>Pending and recent invitations</h2></div><button onClick={() => setInvitationsOpen(false)}>×</button></header>
         <div className="permissions-invitation-list">{invitations.map((invite) => <div key={invite.id}><strong>{invite.name}</strong><span>{invite.email}</span><span>{roleById(roles, invite.roleId)?.name ?? invite.roleId}</span><span className={`permissions-status ${invite.status === "accepted" ? "active" : invite.status === "pending" ? "invited" : "inactive"}`}>{invite.status}</span><time>Expires {formatDate(invite.expiresAt)}</time>{invite.status === "pending" ? <button onClick={() => revokeInvitation(invite.id)} disabled={busy}>Revoke</button> : <span />}</div>)}{!invitations.length ? <p>No staff invitations yet.</p> : null}</div>
+      </section></div> : null}
+
+      {betaInviteOpen ? <div className="permissions-modal-backdrop" onMouseDown={(event) => event.currentTarget === event.target && setBetaInviteOpen(false)}><section className="permissions-modal">
+        <header><div><span className="permissions-kicker">Closed beta</span><h2>Invite pilot tester</h2></div><button onClick={() => setBetaInviteOpen(false)}>×</button></header>
+        <form onSubmit={inviteClosedBetaPilot} className="permissions-modal-form">
+          <label><span>Full name</span><input value={betaInviteName} onChange={(event) => setBetaInviteName(event.target.value)} placeholder="Pilot name" required /></label>
+          <label><span>Email address</span><input type="email" value={betaInviteEmail} onChange={(event) => setBetaInviteEmail(event.target.value)} placeholder="pilot@example.com" required /></label>
+          <label className="wide"><span>Temporary password <em>(optional)</em></span><input type="password" minLength={10} value={betaTemporaryPassword} onChange={(event) => setBetaTemporaryPassword(event.target.value)} placeholder="Leave blank to generate a secure password" autoComplete="new-password" /><small>It is emailed directly to the pilot and must be changed from their Account settings.</small></label>
+          <div className="permissions-modal-actions"><button type="button" className="permissions-secondary" onClick={() => setBetaInviteOpen(false)}>Cancel</button><button type="submit" className="permissions-primary" disabled={busy}>{busy ? "Creating…" : "Create & email invitation"}</button></div>
+        </form>
       </section></div> : null}
 
       {roleModal ? <div className="permissions-modal-backdrop" onMouseDown={(event) => event.currentTarget === event.target && setRoleModal(null)}><section className="permissions-modal role-modal">

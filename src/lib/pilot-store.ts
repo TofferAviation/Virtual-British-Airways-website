@@ -144,6 +144,10 @@ export type PilotAccount = {
   /** Explicit consent captured when a pilot creates their BAV account. */
   pilotRulesAcceptedAt: string | null;
   pilotRulesVersion: string | null;
+  /** Closed-beta access is granted individually by authorised BAV staff. */
+  betaAccess: boolean;
+  /** A staff-issued temporary password should be replaced by the pilot. */
+  mustChangePassword: boolean;
   /** Permanent BAV career awards earned through accepted flight activity. */
   awards: PilotAward[];
   /** Optional planning preferences. These never grant career privileges. */
@@ -219,6 +223,8 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     accountBackground: normaliseStoredAccountBackground(raw.accountBackground),
     pilotRulesAcceptedAt: typeof raw.pilotRulesAcceptedAt === "string" ? raw.pilotRulesAcceptedAt : null,
     pilotRulesVersion: typeof raw.pilotRulesVersion === "string" ? raw.pilotRulesVersion : null,
+    betaAccess: raw.betaAccess === true,
+    mustChangePassword: raw.mustChangePassword === true,
     awards: Array.isArray(raw.awards) ? raw.awards.filter((award) => Boolean(
       award && isPilotCareerAwardId(award.id) && typeof award.awardedAt === "string" && typeof award.sourcePirepId === "string",
     )).map((award) => ({
@@ -574,6 +580,8 @@ export async function registerPilot(input: { name: string; email: string; passwo
     accountBackground: null,
     pilotRulesAcceptedAt: now,
     pilotRulesVersion: PILOT_RULES_VERSION,
+    betaAccess: !closedBetaEnabledForRegistration(),
+    mustChangePassword: false,
     awards: [],
     careerExperience: createCareerExperiencePreferences(now),
   };
@@ -581,6 +589,63 @@ export async function registerPilot(input: { name: string; email: string; passwo
   state.pilots.push(account);
   await writeState(state);
   return account;
+}
+
+function closedBetaEnabledForRegistration() {
+  return ["true", "1", "enabled"].includes((process.env.BAV_CLOSED_BETA_ENABLED ?? "").trim().toLowerCase());
+}
+
+function betaInvitePassword() {
+  return `BAV-${randomBytes(9).toString("base64url")}`;
+}
+
+export async function createClosedBetaPilot(input: { name: string; email: string; temporaryPassword?: string }) {
+  const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
+  const email = normalizeEmail(input.email);
+  const temporaryPassword = input.temporaryPassword?.trim() || betaInvitePassword();
+  if (name.length < 2) throw new Error("Please enter the pilot's full name.");
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Please enter a valid email address.");
+  if (temporaryPassword.length < 10) throw new Error("The temporary password must be at least 10 characters long.");
+
+  const state = await readState();
+  const now = new Date().toISOString();
+  let account = state.pilots.find((pilot) => pilot.email === email);
+  const existing = Boolean(account);
+  if (account) {
+    account.name = name;
+    account.passwordHash = hashPilotPassword(temporaryPassword);
+    account.authVersion += 1;
+    account.status = "active";
+    account.betaAccess = true;
+    account.mustChangePassword = true;
+    revokePilotDeviceSessions(state, account.id, now);
+  } else {
+    const pilotNumber = `BAWVA${String(state.nextPilotNumber).padStart(4, "0")}`;
+    account = {
+      id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(temporaryPassword), status: "active",
+      authVersion: 1,
+      createdAt: now, lastLoginAt: null, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub("LHR"), tier: "Blue",
+      points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0, heathrowDepartures: 0,
+      averageLanding: null, bestLanding: null, onTime: 100, streak: 0, simbriefPilotId: null, profileImage: null, accountBackground: null,
+      pilotRulesAcceptedAt: null, pilotRulesVersion: null, betaAccess: true, mustChangePassword: true, awards: [],
+      careerExperience: createCareerExperiencePreferences(now),
+    };
+    state.nextPilotNumber += 1;
+    state.pilots.push(account);
+  }
+  await writeState(state);
+  return { pilot: toPublicPilot(account), temporaryPassword, existing };
+}
+
+export async function revokeClosedBetaAccess(id: string) {
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  account.betaAccess = false;
+  account.authVersion += 1;
+  revokePilotDeviceSessions(state, account.id);
+  await writeState(state);
+  return toPublicPilot(account);
 }
 
 export async function findPilotByEmail(email: string) {
@@ -939,6 +1004,7 @@ export async function changePilotPassword(id: string, currentPassword: string, n
   if (!verifyPilotPassword(currentPassword, account.passwordHash)) throw new Error("Your current password is incorrect.");
   account.passwordHash = hashPilotPassword(newPassword);
   account.authVersion += 1;
+  account.mustChangePassword = false;
   revokePilotDeviceSessions(state, account.id);
   await writeState(state);
 }
@@ -1013,6 +1079,7 @@ export async function resetPilotPassword(token: string, newPassword: string) {
 
   pilot.passwordHash = hashPilotPassword(newPassword);
   pilot.authVersion += 1;
+  pilot.mustChangePassword = false;
   revokePilotDeviceSessions(state, pilot.id);
   reset.usedAt = new Date(now).toISOString();
   state.passwordResetTokens = state.passwordResetTokens.filter((item) => item.pilotId !== pilot.id || item === reset);

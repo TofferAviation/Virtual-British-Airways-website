@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { closedBetaEnabled, issueClosedBetaAccess } from "@/lib/closed-beta";
 import { issuePilotSession } from "@/lib/pilot-auth";
 import { findPilotByEmail, markPilotLogin, verifyPilotPassword } from "@/lib/pilot-store";
 
@@ -17,13 +18,17 @@ export async function POST(request: NextRequest) {
   if (!account || account.status !== "active" || !verifyPilotPassword(password, account.passwordHash)) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
+  if (closedBetaEnabled() && !account.betaAccess) {
+    return NextResponse.json({ error: "This website is currently in closed beta. Please use an invitation email address." }, { status: 403 });
+  }
 
   try {
     await markPilotLogin(account.id);
   } catch {
     return NextResponse.json({ error: "Pilot account service is temporarily unavailable. Please try again shortly." }, { status: 503 });
   }
-  const response = NextResponse.json({ ok: true, pilotNumber: account.pilotNumber });
+  const response = NextResponse.json({ ok: true, pilotNumber: account.pilotNumber, mustChangePassword: account.mustChangePassword });
   issuePilotSession(response, request, account);
+  if (account.betaAccess) await issueClosedBetaAccess(response, request, { pilotId: account.id, authVersion: account.authVersion });
   return response;
 }

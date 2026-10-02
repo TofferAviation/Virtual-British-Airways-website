@@ -35,5 +35,7 @@ services:
         value: https://virtualairline.co.uk
       - key: BAV_PASSWORD_RESET_SECRET
         generateValue: true
+      - key: BAV_CLOSED_BETA_ENABLED
+        value: "false"
       - key: SIMBRIEF_API_KEY
         sync: false

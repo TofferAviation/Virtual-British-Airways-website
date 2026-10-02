@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { requireStaffPermission } from "@/lib/staff-auth";
 import { getStaffState, permissionsForUser } from "@/lib/staff-store";
+import { listPilots } from "@/lib/pilot-store";
 import { UserPermissionsClient } from "./UserPermissionsClient";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 
 export default async function StaffPermissionsPage() {
   const session = await requireStaffPermission("users.view");
-  const state = await getStaffState();
+  const [state, pilots] = await Promise.all([getStaffState(), listPilots()]);
   const currentUser = state.users.find((user) => user.id === session.userId)!;
   const safeUsers = state.users.map(({ passwordHash: _passwordHash, ...user }) => {
     void _passwordHash;
@@ -44,6 +45,7 @@ export default async function StaffPermissionsPage() {
           initialAudit={state.audit.slice(0, 30)}
           currentUserId={currentUser.id}
           currentPermissions={currentPermissions}
+          initialBetaPilots={pilots.filter((pilot) => pilot.betaAccess).map((pilot) => ({ id: pilot.id, name: pilot.name, email: pilot.email, pilotNumber: pilot.pilotNumber, createdAt: pilot.createdAt, mustChangePassword: pilot.mustChangePassword }))}
         />
       </main>
       <SiteFooter />

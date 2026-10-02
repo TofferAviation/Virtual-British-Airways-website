@@ -24,7 +24,7 @@ async function patchProfile(payload: Record<string, string | null>) {
   return body;
 }
 
-export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null }) {
+export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -140,6 +140,7 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
 
       <form className="pilot-profile-card" onSubmit={savePassword}>
         <div><span className="pilot-profile-kicker">SECURITY</span><h2>Change password</h2><p>Your password is stored as a one-way salted hash and is never shown to staff.</p></div>
+        {mustChangePassword ? <p className="pilot-profile-message">Welcome to the closed beta. Please replace the temporary password from your invitation email with a personal password.</p> : null}
         <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
         <label>New password<input name="newPassword" type="password" minLength={8} autoComplete="new-password" required /></label>
         <label>Confirm new password<input name="confirmPassword" type="password" minLength={8} autoComplete="new-password" required /></label>

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 import { getPilotById, type PilotAccount } from "@/lib/pilot-store";
 import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
+import { closedBetaEnabled } from "@/lib/closed-beta";
 
 // v6 replaces earlier releases. Cookies issued before the custom-domain scope
 // was stable can coexist as host-only and domain-scoped copies, causing the
@@ -142,6 +143,7 @@ export async function getPilotSession() {
     pilotActive: account?.status === "active",
   });
   if (!account || account.status !== "active" || (session.authVersion ?? 1) !== account.authVersion) return null;
+  if (closedBetaEnabled() && !account.betaAccess) return null;
   return {
     ...session,
     pilotNumber: account.pilotNumber,

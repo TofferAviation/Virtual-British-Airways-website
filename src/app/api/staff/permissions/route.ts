@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { publicWebsiteUrl, sendStaffInvitationEmail } from "@/lib/email";
+import { publicWebsiteUrl, sendClosedBetaInvitationEmail, sendStaffInvitationEmail } from "@/lib/email";
+import { createClosedBetaPilot, listPilots, revokeClosedBetaAccess } from "@/lib/pilot-store";
 import {
   allPermissions,
   expandPermissionDependencies,
@@ -70,6 +71,10 @@ export async function GET() {
       })
     : [];
 
+  const betaPilots = hasPermission(state, actor, "users.roles")
+    ? (await listPilots()).filter((pilot) => pilot.betaAccess).map((pilot) => ({ id: pilot.id, name: pilot.name, email: pilot.email, pilotNumber: pilot.pilotNumber, createdAt: pilot.createdAt, mustChangePassword: pilot.mustChangePassword }))
+    : [];
+
   return NextResponse.json({
     users: state.users.map(publicUser),
     roles: state.roles,
@@ -77,6 +82,7 @@ export async function GET() {
     audit,
     currentUserId: actor.id,
     currentPermissions,
+    betaPilots,
   });
 }
 
@@ -86,6 +92,52 @@ export async function POST(request: NextRequest) {
   const { state, actor } = context;
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const action = typeof body?.action === "string" ? body.action : "";
+
+  if (action === "invite-closed-beta") {
+    if (!hasPermission(state, actor, "users.roles")) return jsonError("You do not have permission to invite closed-beta pilots.", 403);
+    const name = typeof body?.name === "string" ? body.name : "";
+    const email = typeof body?.email === "string" ? body.email : "";
+    const temporaryPassword = typeof body?.temporaryPassword === "string" ? body.temporaryPassword : undefined;
+    try {
+      const result = await createClosedBetaPilot({ name, email, temporaryPassword });
+      const emailDelivery = await sendClosedBetaInvitationEmail({
+        name: result.pilot.name,
+        email: result.pilot.email,
+        pilotNumber: result.pilot.pilotNumber,
+        temporaryPassword: result.temporaryPassword,
+      });
+      addAudit(state, {
+        actorEmail: actor.email,
+        actorName: actor.name,
+        action: result.existing ? "closed-beta.access.renewed" : "closed-beta.access.granted",
+        targetName: result.pilot.name,
+        details: `${result.existing ? "Renewed" : "Granted"} closed-beta access for ${result.pilot.email} and sent a temporary-password invitation email.`,
+      });
+      await saveStaffState(state);
+      return NextResponse.json({ pilot: result.pilot, emailDelivery }, { status: 201 });
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : "Could not create the closed-beta invitation.");
+    }
+  }
+
+  if (action === "revoke-closed-beta") {
+    if (!hasPermission(state, actor, "users.roles")) return jsonError("You do not have permission to revoke closed-beta access.", 403);
+    const pilotId = typeof body?.pilotId === "string" ? body.pilotId : "";
+    try {
+      const pilot = await revokeClosedBetaAccess(pilotId);
+      addAudit(state, {
+        actorEmail: actor.email,
+        actorName: actor.name,
+        action: "closed-beta.access.revoked",
+        targetName: pilot.name,
+        details: `Revoked closed-beta access for ${pilot.email}. Their pilot record remains intact.`,
+      });
+      await saveStaffState(state);
+      return NextResponse.json({ pilot });
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : "Could not revoke closed-beta access.");
+    }
+  }
 
   if (action === "save-user") {
     if (!hasPermission(state, actor, "users.roles")) return jsonError("You do not have permission to assign staff roles.", 403);

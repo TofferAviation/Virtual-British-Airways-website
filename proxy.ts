@@ -4,10 +4,12 @@ import {
   getPreviewAccessToken,
   previewProtectionEnabled,
 } from "./src/lib/preview-access";
+import { CLOSED_BETA_COOKIE_NAME, closedBetaEnabled, hasClosedBetaAccess } from "./src/lib/closed-beta";
 import { isDirectLocalRequest, relativeRedirect } from "./src/lib/request-context";
 
 const ACCESS_PAGE = "/preview-access";
 const ACCESS_API = "/api/preview-access";
+const CLOSED_BETA_PAGE = "/closed-beta";
 
 function isPublicPreviewPath(pathname: string) {
   if (pathname === ACCESS_PAGE || pathname.startsWith(`${ACCESS_PAGE}/`)) return true;
@@ -17,7 +19,23 @@ function isPublicPreviewPath(pathname: string) {
   return /\.[a-zA-Z0-9]+$/.test(pathname);
 }
 
+function isPublicClosedBetaPath(pathname: string) {
+  if (pathname === CLOSED_BETA_PAGE || pathname.startsWith(`${CLOSED_BETA_PAGE}/`)) return true;
+  if (pathname === "/login" || pathname === "/forgot-password" || pathname === "/reset-password") return true;
+  if (pathname === "/staff-login" || pathname.startsWith("/staff") || pathname.startsWith("/staff-invite")) return true;
+  if (pathname.startsWith("/api/")) return true;
+  return /\.[a-zA-Z0-9]+$/.test(pathname);
+}
+
 export async function proxy(request: NextRequest) {
+  if (closedBetaEnabled() && !isDirectLocalRequest(request)) {
+    const { pathname } = request.nextUrl;
+    if (!isPublicClosedBetaPath(pathname) && !await hasClosedBetaAccess(request.cookies.get(CLOSED_BETA_COOKIE_NAME)?.value)) {
+      const params = new URLSearchParams({ next: `${request.nextUrl.pathname}${request.nextUrl.search}` });
+      return relativeRedirect(`${CLOSED_BETA_PAGE}?${params.toString()}`, 307);
+    }
+  }
+
   if (!previewProtectionEnabled()) return NextResponse.next();
 
   // Only direct local browsing bypasses the preview gate.

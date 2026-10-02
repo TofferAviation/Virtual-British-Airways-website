@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 
-export function PilotLoginForm({ returnTo = "/account" }: { returnTo?: string }) {
+export function PilotLoginForm({ returnTo = "/account", closedBeta = false }: { returnTo?: string; closedBeta?: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -21,12 +21,12 @@ export function PilotLoginForm({ returnTo = "/account" }: { returnTo?: string })
         cache: "no-store",
         body: JSON.stringify({ email, password }),
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      const body = (await response.json().catch(() => ({}))) as { error?: string; mustChangePassword?: boolean };
       if (!response.ok) {
         setError(body.error || "Could not sign in.");
         return;
       }
-      window.location.replace(returnTo);
+      window.location.replace(body.mustChangePassword ? "/account/profile?change-password=required" : returnTo);
     } catch {
       setError("Could not reach the BAV login service.");
     } finally {
@@ -41,7 +41,7 @@ export function PilotLoginForm({ returnTo = "/account" }: { returnTo?: string })
       {error ? <p className="pilot-auth-error" role="alert">{error}</p> : null}
       <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       <p className="pilot-auth-switch"><Link href="/forgot-password">Forgot your password?</Link></p>
-      <p className="pilot-auth-switch">New to British Airways Virtual? <Link href="/register">Create a pilot account</Link></p>
+      {closedBeta ? <p className="pilot-auth-switch">Invited users only. Please use the email address that received your beta invitation.</p> : <p className="pilot-auth-switch">New to British Airways Virtual? <Link href="/register">Create a pilot account</Link></p>}
     </form>
   );
 }

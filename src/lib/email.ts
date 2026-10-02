@@ -139,6 +139,16 @@ export async function sendPilotWelcomeEmail(pilot: PublicPilotAccount | Pick<Pub
   });
 }
 
+export async function sendClosedBetaInvitationEmail(input: { name: string; email: string; pilotNumber: string; temporaryPassword: string }) {
+  const loginUrl = `${siteUrl()}/closed-beta`;
+  return sendEmail({
+    to: input.email,
+    subject: "Your British Airways Virtual closed-beta access",
+    text: `Hello ${input.name}, you have been invited to the British Airways Virtual closed beta.\n\nPilot reference: ${input.pilotNumber}\nEmail: ${input.email}\nTemporary password: ${input.temporaryPassword}\n\nSign in at ${loginUrl}. Please change this temporary password from Account settings after you sign in.\n\nIf you were not expecting this invitation, you can ignore this email.`,
+    html: emailShell("Welcome to the closed beta", `<p>Hello ${escapeHtml(input.name)},</p><p>You have been invited to the British Airways Virtual closed beta.</p><p><strong>Pilot reference:</strong> ${escapeHtml(input.pilotNumber)}<br /><strong>Email:</strong> ${escapeHtml(input.email)}<br /><strong>Temporary password:</strong> <span style="font-family:monospace">${escapeHtml(input.temporaryPassword)}</span></p><p>Please change this temporary password from <strong>Account settings</strong> after you sign in.</p>${actionLink("Sign in to the closed beta", loginUrl)}<p style="color:#63768d;font-size:12px">If you were not expecting this invitation, you can safely ignore this email.</p>`),
+  });
+}
+
 export async function sendPilotPasswordResetEmail(input: { name: string; email: string; token: string }) {
   const resetUrl = `${siteUrl()}/reset-password?token=${encodeURIComponent(input.token)}`;
   return sendEmail({

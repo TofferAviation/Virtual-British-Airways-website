@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { closedBetaEnabled } from "@/lib/closed-beta";
 import { sendPilotWelcomeEmail } from "@/lib/email";
 import { issuePilotSession } from "@/lib/pilot-auth";
 import { registerPilot } from "@/lib/pilot-store";
 
 export async function POST(request: NextRequest) {
+  if (closedBetaEnabled()) {
+    return NextResponse.json({ error: "British Airways Virtual is currently in closed beta. Accounts are available by invitation only." }, { status: 403 });
+  }
   const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string; hub?: string; acceptPilotRules?: boolean } | null;
   try {
     const account = await registerPilot({
