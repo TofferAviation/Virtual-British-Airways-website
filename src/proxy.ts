@@ -3,9 +3,9 @@ import {
   PREVIEW_ACCESS_COOKIE,
   getPreviewAccessToken,
   previewProtectionEnabled,
-} from "./src/lib/preview-access";
-import { CLOSED_BETA_COOKIE_NAME, closedBetaEnabled, hasClosedBetaAccess } from "./src/lib/closed-beta";
-import { isDirectLocalRequest, relativeRedirect } from "./src/lib/request-context";
+} from "./lib/preview-access";
+import { CLOSED_BETA_COOKIE_NAME, closedBetaEnabled, hasClosedBetaAccess } from "./lib/closed-beta";
+import { isDirectLocalRequest, relativeRedirect } from "./lib/request-context";
 
 const ACCESS_PAGE = "/preview-access";
 const ACCESS_API = "/api/preview-access";
