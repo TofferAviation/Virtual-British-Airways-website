@@ -14,7 +14,7 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 10;
+  version: 11;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
@@ -25,6 +25,8 @@ type PilotState = {
   notifications: PilotNotification[];
   mentoringMatches: MentoringMatch[];
   mentorApplications: MentorApplication[];
+  mentoringFlightReviews: MentoringFlightReview[];
+  pilotMentoringExperience: PilotMentoringExperience[];
   /**
    * Flight bookings and SimBrief links share the same durable record as the
    * pilot identity. Kept opaque here so the operations module owns its shape.
@@ -44,6 +46,32 @@ export type MentorApplication = {
   reviewedAt: string | null;
   reviewedBy: string | null;
   mentorRank: MentorRank | null;
+};
+export type PilotMentoringExperienceLevel = "rookie" | "developing" | "experienced";
+export type PilotMentoringExperience = {
+  pilotId: string;
+  level: PilotMentoringExperienceLevel;
+  updatedAt: string;
+  updatedBy: string;
+  sourceReviewId: string;
+};
+export type MentoringFlightReview = {
+  id: string;
+  matchId: string;
+  mentorPilotId: string;
+  learnerPilotId: string;
+  pirepId: string;
+  approach: "within_parameters" | "too_high" | "too_low" | "unstable" | "not_observed";
+  descentRate: "within_parameters" | "high" | "low" | "not_observed";
+  overall: "progressing" | "needs_coaching" | "ready_for_next_step";
+  mentorNote: string;
+  createdAt: string;
+  staffReviewedAt: string | null;
+  staffReviewedBy: string | null;
+  experienceLevel: PilotMentoringExperienceLevel | null;
+  bonusPercent: number | null;
+  bonusVaPoints: number | null;
+  bonusTierPoints: number | null;
 };
 export const MENTOR_RANKS: Record<MentorRank, { label: string; multiplier: number }> = {
   new: { label: "New Mentor", multiplier: 1.25 },
@@ -71,6 +99,7 @@ export type PilotMentoringStatus = {
   role: "mentor" | "learner";
   matchId: string;
   counterpartName: string;
+  counterpartPilotId: string;
   counterpartPilotNumber: string;
   goal: string;
   expiresAt: string;
@@ -213,7 +242,7 @@ export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersio
 
 function emptyState(): PilotState {
   return {
-    version: 10,
+    version: 11,
     nextPilotNumber: 1,
     pilots: [],
     passwordResetTokens: [],
@@ -224,6 +253,8 @@ function emptyState(): PilotState {
     notifications: [],
     mentoringMatches: [],
     mentorApplications: [],
+    mentoringFlightReviews: [],
+    pilotMentoringExperience: [],
     operationsState: null,
   };
 }
@@ -455,8 +486,28 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
       mentorRank: item.mentorRank === "new" || item.mentorRank === "developing" || item.mentorRank === "experienced" ? item.mentorRank : null,
     })).filter((item) => pilots.some((pilot) => pilot.id === item.pilotId)).slice(-2_000)
     : [];
+  const mentoringFlightReviews = Array.isArray(raw?.mentoringFlightReviews)
+    ? raw.mentoringFlightReviews.filter((item): item is MentoringFlightReview => Boolean(
+      item && typeof item.id === "string" && typeof item.matchId === "string" && typeof item.mentorPilotId === "string" && typeof item.learnerPilotId === "string" && typeof item.pirepId === "string" &&
+      ["within_parameters", "too_high", "too_low", "unstable", "not_observed"].includes(item.approach) &&
+      ["within_parameters", "high", "low", "not_observed"].includes(item.descentRate) &&
+      ["progressing", "needs_coaching", "ready_for_next_step"].includes(item.overall) && typeof item.mentorNote === "string" && typeof item.createdAt === "string",
+    )).map((item) => ({
+      ...item,
+      mentorNote: item.mentorNote.trim().slice(0, 2_000),
+      staffReviewedAt: typeof item.staffReviewedAt === "string" ? item.staffReviewedAt : null,
+      staffReviewedBy: typeof item.staffReviewedBy === "string" ? item.staffReviewedBy.trim().slice(0, 100) || null : null,
+      experienceLevel: item.experienceLevel === "rookie" || item.experienceLevel === "developing" || item.experienceLevel === "experienced" ? item.experienceLevel : null,
+      bonusPercent: [0, 5, 10, 25].includes(Number(item.bonusPercent)) ? Number(item.bonusPercent) : null,
+      bonusVaPoints: Number.isFinite(item.bonusVaPoints) ? Math.max(0, Math.round(Number(item.bonusVaPoints))) : null,
+      bonusTierPoints: Number.isFinite(item.bonusTierPoints) ? Math.max(0, Math.round(Number(item.bonusTierPoints))) : null,
+    })).filter((item) => pilots.some((pilot) => pilot.id === item.mentorPilotId) && pilots.some((pilot) => pilot.id === item.learnerPilotId)).slice(-5_000)
+    : [];
+  const pilotMentoringExperience = Array.isArray(raw?.pilotMentoringExperience)
+    ? raw.pilotMentoringExperience.filter((item): item is PilotMentoringExperience => Boolean(item && typeof item.pilotId === "string" && ["rookie", "developing", "experienced"].includes(item.level) && typeof item.updatedAt === "string" && typeof item.updatedBy === "string" && typeof item.sourceReviewId === "string")).map((item) => ({ ...item, updatedBy: item.updatedBy.trim().slice(0, 100) })).filter((item) => pilots.some((pilot) => pilot.id === item.pilotId)).slice(-2_000)
+    : [];
   return {
-    version: 10,
+    version: 11,
     nextPilotNumber,
     pilots,
     passwordResetTokens,
@@ -467,6 +518,8 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     notifications,
     mentoringMatches,
     mentorApplications,
+    mentoringFlightReviews,
+    pilotMentoringExperience,
     operationsState: raw?.operationsState && typeof raw.operationsState === "object"
       ? structuredClone(raw.operationsState)
       : null,
@@ -1127,6 +1180,15 @@ export async function listMentoringMatches() {
   return [...state.mentoringMatches].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+/** The only pilot identities a mentor may view through the protected coaching desk. */
+export async function listActiveMentoringLearners(mentorPilotId: string) {
+  const state = await readState();
+  return state.mentoringMatches.filter((match) => mentoringIsActive(match) && match.mentorPilotId === mentorPilotId).flatMap((match) => {
+    const learner = state.pilots.find((pilot) => pilot.id === match.learnerPilotId);
+    return learner ? [{ matchId: match.id, pilotId: learner.id, name: learner.name, pilotNumber: learner.pilotNumber, expiresAt: match.expiresAt, goal: match.goal }] : [];
+  });
+}
+
 export async function listMentorApplications() {
   const state = await readState();
   return [...state.mentorApplications].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt));
@@ -1187,6 +1249,7 @@ export async function getPilotMentoringStatus(pilotId: string): Promise<PilotMen
       role,
       matchId: match.id,
       counterpartName: counterpart.name,
+      counterpartPilotId: counterpart.id,
       counterpartPilotNumber: counterpart.pilotNumber,
       goal: match.goal,
       expiresAt: match.expiresAt,
@@ -1262,6 +1325,64 @@ export async function claimMentorPirepReward(input: { pilotId: string; pirepId: 
   match.bonusAwards.push({ pirepId: input.pirepId, awardedAt: new Date().toISOString() });
   await writeState(state);
   return { multiplier, matchId: match.id };
+}
+
+export async function createMentoringFlightReview(input: {
+  mentorPilotId: string; learnerPilotId: string; pirepId: string; approach: MentoringFlightReview["approach"]; descentRate: MentoringFlightReview["descentRate"]; overall: MentoringFlightReview["overall"]; mentorNote: string;
+}) {
+  const mentorNote = input.mentorNote.trim().replace(/\s+/g, " ").slice(0, 2_000);
+  if (mentorNote.length < 12) throw new Error("Add a constructive mentoring note before submitting a review.");
+  if (!["within_parameters", "too_high", "too_low", "unstable", "not_observed"].includes(input.approach) || !["within_parameters", "high", "low", "not_observed"].includes(input.descentRate) || !["progressing", "needs_coaching", "ready_for_next_step"].includes(input.overall)) throw new Error("Choose a valid coaching assessment.");
+  const state = await readState();
+  const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && item.id && item.mentorPilotId === input.mentorPilotId && item.learnerPilotId === input.learnerPilotId);
+  if (!match) throw new Error("You can only review flights for a pilot in your active mentoring match.");
+  if (state.mentoringFlightReviews.some((review) => review.pirepId === input.pirepId)) throw new Error("A mentoring review has already been submitted for this flight.");
+  const review: MentoringFlightReview = { id: randomUUID(), matchId: match.id, mentorPilotId: input.mentorPilotId, learnerPilotId: input.learnerPilotId, pirepId: input.pirepId, approach: input.approach, descentRate: input.descentRate, overall: input.overall, mentorNote, createdAt: new Date().toISOString(), staffReviewedAt: null, staffReviewedBy: null, experienceLevel: null, bonusPercent: null, bonusVaPoints: null, bonusTierPoints: null };
+  state.mentoringFlightReviews.push(review);
+  appendPilotNotification(state, { pilotId: input.learnerPilotId, kind: "operations", level: "info", title: "Mentor flight review added", body: "Your mentor has added constructive feedback to a completed Ember flight. This never reduces your points or flight credit.", href: "/account/career" });
+  await writeState(state);
+  return review;
+}
+
+export async function listMentoringFlightReviews(input?: { mentorPilotId?: string; learnerPilotId?: string }) {
+  const state = await readState();
+  return state.mentoringFlightReviews.filter((review) => (!input?.mentorPilotId || review.mentorPilotId === input.mentorPilotId) && (!input?.learnerPilotId || review.learnerPilotId === input.learnerPilotId)).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+export async function getPilotMentoringExperience(pilotId: string) {
+  const state = await readState();
+  return state.pilotMentoringExperience.find((profile) => profile.pilotId === pilotId) ?? null;
+}
+
+export async function staffAssessMentoringFlightReview(input: { reviewId: string; experienceLevel: PilotMentoringExperienceLevel; bonusPercent: number; baseVaPoints: number; baseTierPoints: number; staffName: string }) {
+  if (![0, 5, 10, 25].includes(input.bonusPercent)) throw new Error("Choose an approved positive bonus amount.");
+  const state = await readState();
+  const review = state.mentoringFlightReviews.find((item) => item.id === input.reviewId && item.staffReviewedAt === null);
+  if (!review) throw new Error("That mentoring review has already been assessed.");
+  const account = state.pilots.find((pilot) => pilot.id === review.learnerPilotId);
+  if (!account) throw new Error("Pilot account not found.");
+  const bonusVaPoints = Math.max(0, Math.round(Math.max(0, input.baseVaPoints) * input.bonusPercent / 100));
+  const bonusTierPoints = Math.max(0, Math.round(Math.max(0, input.baseTierPoints) * input.bonusPercent / 100));
+  review.staffReviewedAt = new Date().toISOString();
+  review.staffReviewedBy = input.staffName.trim().slice(0, 100);
+  review.experienceLevel = input.experienceLevel;
+  review.bonusPercent = input.bonusPercent;
+  review.bonusVaPoints = bonusVaPoints;
+  review.bonusTierPoints = bonusTierPoints;
+  const existingProfile = state.pilotMentoringExperience.find((profile) => profile.pilotId === account.id);
+  const profile: PilotMentoringExperience = { pilotId: account.id, level: input.experienceLevel, updatedAt: review.staffReviewedAt, updatedBy: review.staffReviewedBy, sourceReviewId: review.id };
+  if (existingProfile) Object.assign(existingProfile, profile); else state.pilotMentoringExperience.push(profile);
+  // This is deliberately additive: coaching observations never remove flight credit, VA Points, or Tier Points.
+  account.points += bonusVaPoints;
+  account.tierPoints += bonusTierPoints;
+  account.lifetimeTierPoints += bonusTierPoints;
+  if (account.tierPoints >= state.rewardSettings.tierGoldThreshold) account.tier = "Gold";
+  else if (account.tierPoints >= state.rewardSettings.tierSilverThreshold) account.tier = "Silver";
+  else if (account.tierPoints >= state.rewardSettings.tierBronzeThreshold) account.tier = "Bronze";
+  else account.tier = "Blue";
+  appendPilotNotification(state, { pilotId: account.id, kind: "career_credit", level: "success", title: "Mentoring assessment recorded", body: `Staff recorded your mentoring experience level as ${input.experienceLevel.replaceAll("_", " ")}.${bonusVaPoints || bonusTierPoints ? ` You also received +${bonusVaPoints} VA Points and +${bonusTierPoints} Tier Points for this reviewed flight.` : " No points were changed."}`, href: "/account/career" });
+  await writeState(state);
+  return review;
 }
 
 export async function changePilotPassword(id: string, currentPassword: string, newPassword: string) {

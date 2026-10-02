@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { PilotMentoringStatus } from "@/lib/pilot-store";
 
 type Interest = "none" | "learn" | "mentor";
@@ -26,6 +27,6 @@ export function CareerMentoringForm({ initialInterest, status }: { initialIntere
     <p>{match?.role === "mentor" ? "A staff-approved match activates your assigned mentoring reward. It applies only to accepted Ember flights of at least 30 minutes, is capped at four each calendar month, and ends with the match." : "Choose the role that feels right. A mentor request is reviewed by staff; a preference alone never grants a reward."}</p>
     <div className="career-focus">{([ ["none", "Not right now"], ["learn", "I would like support"], ["mentor", "Apply to mentor new pilots"] ] as const).map(([value, label]) => <label key={value}><input type="radio" name="mentor" checked={interest === value} onChange={() => setInterest(value)} /> {label}</label>)}</div>
     {interest === "mentor" && application?.status !== "approved" ? <label className="career-textarea-label">Why would you like to mentor? <textarea value={applicationNote} onChange={(event) => setApplicationNote(event.target.value)} placeholder="Tell staff about your experience and how you would support new pilots." maxLength={1000} /></label> : null}
-    <div className="career-experience-actions"><button className="career-button" type="button" onClick={save}>{interest === "mentor" && application?.status !== "approved" ? "Submit mentor application" : "Save mentoring preference"}</button>{message ? <span role="status">{message}</span> : null}</div>
+    <div className="career-experience-actions"><button className="career-button" type="button" onClick={save}>{interest === "mentor" && application?.status !== "approved" ? "Submit mentor application" : "Save mentoring preference"}</button>{match?.role === "mentor" ? <Link className="career-button" href="/account/career/mentoring">Open mentor flight desk →</Link> : null}{message ? <span role="status">{message}</span> : null}</div>
   </article>;
 }
