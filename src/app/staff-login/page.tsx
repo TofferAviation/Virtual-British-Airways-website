@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { getStaffSession } from "@/lib/staff-auth";
 import { isConfiguredStaffOwner } from "@/lib/staff-owner";
+import styles from "@/app/closed-beta/recovery.module.css";
 import { StaffLoginForm } from "./StaffLoginForm";
 import { StaffSetupForm } from "./StaffSetupForm";
 
@@ -24,33 +25,24 @@ export default async function StaffLoginPage({ searchParams }: { searchParams: P
   const canRecoverOwnerPassword = Boolean(pilot && isConfiguredStaffOwner(pilot.email));
 
   return (
-    <main className="staff-login-page">
-      <header className="staff-login-header">
-        <Link className="staff-login-brand" href="/closed-beta" aria-label="Private preview sign-in">PRIVATE AVIATION PREVIEW</Link>
-        <Link className="staff-login-back" href="/closed-beta">Return to sign in</Link>
+    <main className={styles.page}>
+      <div className={styles.atmosphere} aria-hidden="true" />
+      <header className={styles.header}>
+        <Link href="/closed-beta" aria-label="Private preview sign-in">Private aviation preview</Link>
+        <span>Authorised team</span>
       </header>
 
-      <section className="staff-login-main">
-        <div className="staff-login-copy">
-          <span className="section-kicker">Staff access</span>
-          <h1>Manage the private preview.</h1>
-          <p>
-            Staff Centre access is restricted to authorised team members. Your assigned role and individual permissions control which operational tools you can use.
-          </p>
-          <div className="staff-login-security">
-            <strong>Separate Staff Centre sign-in</strong>
-            <p>Your Staff Centre email and password are separate from your pilot account. Your staff role determines which operational tools you can open.</p>
-          </div>
-        </div>
-
-        <div className="staff-login-card">
-          <span className="section-kicker">Authorised staff only</span>
-          <h2>Enter Staff Centre</h2>
-          <StaffLoginForm returnTo={returnTo} />
-          {canRecoverOwnerPassword ? <div className="staff-login-setup"><span className="section-kicker">Founding administrator</span><h3>Set or recover Staff password</h3><StaffSetupForm /></div> : null}
-          <p className="staff-login-footnote">Private preview · Authorised team members only</p>
-        </div>
+      <section className={styles.card} aria-labelledby="staff-access-title">
+        <div className={styles.mark} aria-hidden="true">✦</div>
+        <span className={styles.eyebrow}>Private preview · staff access</span>
+        <h1 id="staff-access-title">Enter Staff Centre</h1>
+        <p className={styles.intro}>Sign in to access the private preview&apos;s operational tools.</p>
+        <StaffLoginForm returnTo={returnTo} />
+        {canRecoverOwnerPassword ? <div className={styles.setup}><span className={styles.eyebrow}>Founding administrator</span><h2>Set or recover your staff password</h2><StaffSetupForm /></div> : null}
+        <p className={styles.security}>Staff access is restricted to authorised team members. Your role controls the tools you can use.</p>
       </section>
+
+      <footer className={styles.footer}><span>Built for the aviation community</span><span>Private preview · authorised team</span></footer>
     </main>
   );
 }

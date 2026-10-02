@@ -45,6 +45,11 @@
   text-transform: uppercase;
 }
 
+.header a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .card {
   width: min(100% - 36px, 570px);
   align-self: center;
@@ -103,13 +108,15 @@
   font-size: 13px;
 }
 
-.card :global(.pilot-auth-form) {
+.card :global(.pilot-auth-form),
+.card :global(.staff-login-form) {
   display: grid;
   gap: 16px;
   margin-top: 32px;
 }
 
-.card :global(.pilot-auth-form label) {
+.card :global(.pilot-auth-form label),
+.card :global(.staff-login-form label) {
   display: grid;
   gap: 8px;
   color: #e7edf8;
@@ -117,7 +124,8 @@
   font-weight: 700;
 }
 
-.card :global(.pilot-auth-form input) {
+.card :global(.pilot-auth-form input),
+.card :global(.staff-login-form input) {
   width: 100%;
   min-height: 50px;
   padding: 12px 14px;
@@ -127,7 +135,8 @@
   background: #192845;
 }
 
-.card :global(.pilot-auth-form .button) {
+.card :global(.pilot-auth-form .button),
+.card :global(.staff-login-form .button) {
   width: 100%;
   margin-top: 4px;
   border: 0;
@@ -138,7 +147,8 @@
 
 .card :global(.pilot-auth-switch),
 .card :global(.pilot-auth-success),
-.card :global(.pilot-auth-error) {
+.card :global(.pilot-auth-error),
+.card :global(.staff-login-config-note) {
   margin: 0;
   color: #c8d5eb;
   font-size: 13px;
@@ -159,12 +169,39 @@
   text-align: left;
 }
 
+.card :global(.staff-login-error) {
+  margin: 0;
+  padding: 12px;
+  border-left: 3px solid #ff4076;
+  color: #ffe4ec;
+  background: rgba(101, 17, 48, 0.58);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .card :global(.pilot-auth-success) {
   padding: 12px;
   border-left: 3px solid #69c9a8;
   color: #dbfff1;
   background: rgba(13, 78, 66, 0.54);
   text-align: left;
+}
+
+.setup {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+  padding-top: 28px;
+  border-top: 1px solid rgba(149, 174, 213, 0.32);
+}
+
+.setup h2 {
+  margin: 0;
+  color: #fff;
+  font-family: Georgia, serif;
+  font-size: 25px;
+  font-weight: 400;
+  text-align: center;
 }
 
 @media (max-width: 620px) {
