@@ -12,6 +12,7 @@ import {
   verifyPassword,
   type StaffAccount,
 } from "@/lib/staff-store";
+import { closedBetaEnabled, issueClosedBetaAccess } from "@/lib/closed-beta";
 import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
 // v2 deliberately replaces v1. Earlier production versions could issue v1
@@ -109,7 +110,12 @@ function expireCookie(response: NextResponse, name: string, request: NextRequest
 }
 
 /** Issue one unambiguous Staff Centre session and retire all older variants. */
-export function issueStaffSession(response: NextResponse, request: NextRequest, account: StaffAccount) {
+/**
+ * A successful active Staff Centre sign-in is also a trusted closed-beta
+ * identity. Keep that access issuance here so the normal login, owner setup,
+ * and owner recovery flows cannot drift apart.
+ */
+export async function issueStaffSession(response: NextResponse, request: NextRequest, account: StaffAccount) {
   const domain = pilotSessionCookieDomain(request);
   response.cookies.set(STAFF_COOKIE_NAME, createStaffSessionToken(account), {
     ...staffSessionCookieOptions,
@@ -119,6 +125,12 @@ export function issueStaffSession(response: NextResponse, request: NextRequest, 
   for (const name of LEGACY_STAFF_COOKIE_NAMES) {
     expireCookie(response, name, request, domain);
     if (domain) expireCookie(response, name, request);
+  }
+  if (closedBetaEnabled()) {
+    // Staff accounts do not have the pilot auth-version counter. Their signed
+    // Staff Centre session is the authentication boundary, so a stable
+    // positive version is sufficient for the short-lived beta-access token.
+    await issueClosedBetaAccess(response, request, { pilotId: `staff:${account.id}`, authVersion: 1 });
   }
 }
 

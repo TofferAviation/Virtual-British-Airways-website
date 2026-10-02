@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     const account = await resetFoundingStaffPassword(pilot.email, password);
     const response = NextResponse.json({ ok: true });
-    issueStaffSession(response, request, account);
+    await issueStaffSession(response, request, account);
     return response;
   } catch (error) {
     return NextResponse.json(
