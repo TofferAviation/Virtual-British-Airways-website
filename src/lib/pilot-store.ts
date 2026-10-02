@@ -110,11 +110,11 @@ export type PilotMentoringStatus = {
   } | null;
 };
 
-export const MENTOR_REWARD_MONTHLY_FLIGHT_CAP = 4;
+/** Staff-approved mentors can earn a limited amount of additional progression for their service. */
+export const MENTOR_REWARD_MONTHLY_FLIGHT_CAP = 15;
+export const MENTORING_SECTOR_MONTHLY_CAP = 15;
 const MENTOR_MINIMUM_BLOCK_MINUTES = 30;
 export const MENTOR_MINIMUM_CAREER_HOURS = 140;
-const MENTOR_REVIEW_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-const MENTOR_LEARNER_REVIEW_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 const MENTOR_MATCH_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PilotPasswordResetToken = {
@@ -1179,6 +1179,11 @@ function mentorAwardsThisMonth(state: PilotState, mentorPilotId: string, now = n
   return state.mentoringMatches.filter((match) => match.mentorPilotId === mentorPilotId).flatMap((match) => match.bonusAwards).filter((award) => calendarMonth(award.awardedAt) === month).length;
 }
 
+function mentoringSectorsThisMonth(state: PilotState, mentorPilotId: string, now = new Date().toISOString()) {
+  const month = calendarMonth(now);
+  return state.mentoringFlightReviews.filter((review) => review.mentorPilotId === mentorPilotId && calendarMonth(review.createdAt) === month).length;
+}
+
 export async function listMentoringMatches() {
   const state = await readState();
   return [...state.mentoringMatches].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -1282,7 +1287,6 @@ export async function createMentoringMatch(input: { mentorPilotId: string; learn
   if (mentor.careerExperience.mentoringInterest !== "mentor" || !approvedMentorApplication(state, mentorPilotId)) throw new Error("That mentor application must be approved and still opted in before creating a match.");
   if (learner.careerExperience.mentoringInterest !== "learn") throw new Error("That pilot has not requested mentoring.");
   if (state.mentoringMatches.some((match) => mentoringIsActive(match) && match.learnerPilotId === learnerPilotId)) throw new Error("This pilot already has an active mentoring match.");
-  if (state.mentoringMatches.filter((match) => mentoringIsActive(match) && match.mentorPilotId === mentorPilotId).length >= 3) throw new Error("A mentor can support up to three active pilots at once.");
   const now = new Date();
   const match: MentoringMatch = { id: randomUUID(), mentorPilotId, learnerPilotId, status: "active", goal, createdAt: now.toISOString(), createdBy: input.staffName.trim().slice(0, 100), expiresAt: new Date(now.getTime() + MENTOR_MATCH_DURATION_MS).toISOString(), endedAt: null, endedBy: null, progressNotes: [], bonusAwards: [] };
   state.mentoringMatches.push(match);
@@ -1327,7 +1331,7 @@ export async function claimMentorPirepReward(input: { pilotId: string; pirepId: 
   const approval = approvedMentorApplication(state, input.pilotId);
   // Existing staff-created matches remain safely on the original New Mentor rate after this upgrade.
   const multiplier = approval?.mentorRank ? MENTOR_RANKS[approval.mentorRank].multiplier : MENTOR_RANKS.new.multiplier;
-  if (!match || state.pilots.find((pilot) => pilot.id === input.pilotId)?.careerExperience.mentoringInterest !== "mentor") return null;
+  if (!match || !approval || state.pilots.find((pilot) => pilot.id === input.pilotId)?.careerExperience.mentoringInterest !== "mentor") return null;
   if (mentorAwardsThisMonth(state, input.pilotId) >= MENTOR_REWARD_MONTHLY_FLIGHT_CAP) return null;
   if (state.mentoringMatches.some((item) => item.bonusAwards.some((award) => award.pirepId === input.pirepId))) return null;
   match.bonusAwards.push({ pirepId: input.pirepId, awardedAt: new Date().toISOString() });
@@ -1344,14 +1348,12 @@ export async function createMentoringFlightReview(input: {
   const state = await readState();
   const mentor = state.pilots.find((pilot) => pilot.id === input.mentorPilotId);
   if (!mentor || mentor.hours < MENTOR_MINIMUM_CAREER_HOURS) throw new Error(`Mentors need at least ${MENTOR_MINIMUM_CAREER_HOURS} accepted career hours before submitting coaching reviews.`);
+  if (!approvedMentorApplication(state, input.mentorPilotId)) throw new Error("Only staff-approved mentors can submit coaching reviews.");
   const match = state.mentoringMatches.find((item) => mentoringIsActive(item) && item.id && item.mentorPilotId === input.mentorPilotId && item.learnerPilotId === input.learnerPilotId);
   if (!match) throw new Error("You can only review flights for a pilot in your active mentoring match.");
   if (state.mentoringFlightReviews.some((review) => review.pirepId === input.pirepId)) throw new Error("A mentoring review has already been submitted for this flight.");
   const now = Date.now();
-  const mentorCooldown = state.mentoringFlightReviews.find((review) => review.mentorPilotId === input.mentorPilotId && now - Date.parse(review.createdAt) < MENTOR_REVIEW_COOLDOWN_MS);
-  if (mentorCooldown) throw new Error("Mentoring reviews have a 24-hour cooldown for each mentor. Please return after the cooldown ends.");
-  const learnerCooldown = state.mentoringFlightReviews.find((review) => review.mentorPilotId === input.mentorPilotId && review.learnerPilotId === input.learnerPilotId && now - Date.parse(review.createdAt) < MENTOR_LEARNER_REVIEW_COOLDOWN_MS);
-  if (learnerCooldown) throw new Error("This mentor–learner pairing has a 12-hour review cooldown. Please return after the cooldown ends.");
+  if (mentoringSectorsThisMonth(state, input.mentorPilotId, new Date(now).toISOString()) >= MENTORING_SECTOR_MONTHLY_CAP) throw new Error(`You have reached this month’s ${MENTORING_SECTOR_MONTHLY_CAP}-sector mentoring recognition limit. You can keep coaching, and new records open at the start of next month.`);
   const review: MentoringFlightReview = { id: randomUUID(), matchId: match.id, mentorPilotId: input.mentorPilotId, learnerPilotId: input.learnerPilotId, pirepId: input.pirepId, approach: input.approach, descentRate: input.descentRate, overall: input.overall, mentorNote, createdAt: new Date(now).toISOString(), staffReviewedAt: null, staffReviewedBy: null, experienceLevel: null, bonusPercent: null, bonusVaPoints: null, bonusTierPoints: null };
   state.mentoringFlightReviews.push(review);
   appendPilotNotification(state, { pilotId: input.learnerPilotId, kind: "operations", level: "info", title: "Mentor flight review added", body: "Your mentor has added constructive feedback to a completed Ember flight. This never reduces your points or flight credit.", href: "/account/career" });
