@@ -59,6 +59,10 @@ services:
       # never make a booking, assign a registration or change a pilot record.
       - key: BAV_FEATURE_CAREER_DISPATCHER
         value: "enabled"
+      # Private availability preferences used only to choose planning dates in
+      # the Dispatcher. A saved day never creates a rostered duty or booking.
+      - key: BAV_FEATURE_CAREER_ROSTERS
+        value: "enabled"
       - key: BAV_FEATURE_CAREER_PATHS
         value: "disabled"
       # Staged qualification rollout: only Realistic Operations pilots are
