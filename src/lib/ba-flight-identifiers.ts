@@ -39,8 +39,10 @@ export function toBritishAirwaysCallsign(value: string) {
 
 /**
  * A checked timetable may use an ICAO identifier that is not a mechanical
- * BAW + flight-number conversion (for example an operational alpha suffix).
- * Prefer that route-level source of truth whenever it is present.
+ * BAW + flight-number conversion (for example BAW71K or SHT2QB). Prefer that
+ * route-level source of truth whenever it is present. Real services are not
+ * allowed to enter the booking flow without this field; the fallback only
+ * preserves old booking records and BAV's explicitly virtual services.
  */
 export function resolveBritishAirwaysCallsign(flightNumber: string, routeCallsign?: string | null) {
   return normaliseApprovedBaGroupCallsign(routeCallsign) ?? toBritishAirwaysCallsign(flightNumber);

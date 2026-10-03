@@ -249,7 +249,10 @@ type FlightSearchOptions = {
 
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from && route.to === to);
-  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
+  // A real service must carry the tracker-checked ICAO identifier for its
+  // validity window. Never turn a bare BA flight number into a guessed BAW
+  // callsign simply to keep it bookable.
+  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
   const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
   const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
   // A checked BA service always takes priority. Otherwise BAV's clearly
@@ -261,7 +264,7 @@ export async function getFlightsForRoute(from: string, to: string, date?: string
 /** Lists every active BAV service departing the selected station. */
 export async function getFlightsFromStation(from: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from);
-  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
+  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
   const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
   const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
   const catalogue = matching.filter((route) => route.catalogueOnly && !verifiedPairs.has(`${route.from}-${route.to}`));
@@ -274,6 +277,6 @@ export async function getFlightsFromHub(from: string, date?: string, options: Fl
 }
 
 export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = (await getBookableRoutes()).filter((route) => route.active && !route.catalogueOnly && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)) && (route.virtualTimetable || routeOperatesOn(route, date)));
+  const managed = (await getBookableRoutes()).filter((route) => route.active && !route.catalogueOnly && (route.virtualTimetable || Boolean(normaliseApprovedBaGroupCallsign(route.callsign))) && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)) && (route.virtualTimetable || routeOperatesOn(route, date)));
   return withAvailability(managed, date);
 }
