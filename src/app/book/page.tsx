@@ -111,10 +111,10 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             <div>
               <div className="section-kicker">Operational flight schedule</div>
               <h1>{aircraft && !hasCityPair && !departureStation ? `${aircraft} routes` : hasCityPair ? `${airportName(from)} (${from}) → ${airportName(to)} (${to})` : `Flights departing ${airportName(departureStation ?? "LHR")} (${departureStation ?? "LHR"})`}</h1>
-              <p>{date} · checked BA flight numbers and operating callsigns · flight-simulation planning times</p>
+              <p>{date} · real BA flight numbers and operating callsigns · flight-simulation planning times</p>
               {aircraft ? <p>Showing only routes that can operate with {aircraft}. Choose a matching registration while booking, or let Ember select one later.</p> : null}
-              {hub ? <p>{hub.role}. Only date-checked BA services with their tracker-confirmed ICAO identifier appear here.</p> : null}
-              {!hub && departureStation ? <p>Only verified BA services from this station are available to book.</p> : null}
+              {hub ? <p>{hub.role}. Services use either an exact date check or a researched 2025–26 operational reference with its observed ICAO identifier.</p> : null}
+              {!hub && departureStation ? <p>Real BA services and researched operational references from this station are available to book.</p> : null}
               {flexible ? <p><strong>Flexible planning:</strong> this view includes checked services outside the selected reference date. The displayed identifier remains the verified one.</p> : null}
             </div>
             <Link className="button button-outline" href="/#flight-search">Edit search</Link>
@@ -142,7 +142,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
           {invalidDurationRange ? <div className="integration-note"><strong>Check the flight-time range:</strong> the minimum duration must be less than or equal to the maximum duration.</div> : null}
           <div className="booking-results-heading">
             <h2>{aircraft && !hasCityPair && !departureStation ? `Current routes for ${aircraft}` : departureStation ? `Available departures from ${departureStation}` : "Available flights"}</h2>
-            <p>{distinctRouteCount} verified airport-pair route{distinctRouteCount === 1 ? "" : "s"} found{durationRangeLabel ? ` · ${durationRangeLabel}` : ""}.</p>
+            <p>{distinctRouteCount} operational airport-pair route{distinctRouteCount === 1 ? "" : "s"} found{durationRangeLabel ? ` · ${durationRangeLabel}` : ""}.</p>
           </div>
           <div className="flight-results">
             {flights.length ? flights.map((flight) => {
@@ -155,7 +155,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                 .map((item) => ({ id: item.id, registration: item.registration, aircraft: item.aircraftModel, station: item.currentStation }))]));
               return <article className="result-flight card" key={flight.routeId}>
                 <div className="result-times"><div><strong>{flight.departure}</strong><span>{flight.from}</span></div><div className="result-line"><span>{flight.duration}</span><i /></div><div><strong>{flight.arrival}</strong><span>{flight.to}</span></div></div>
-                <div className="result-meta"><strong>{flight.number} · British Airways</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{callsignLabel(flight.number, flight.callsign)} · {flight.aircraft} · {flight.scheduledForSelectedDate ? "Scheduled equipment" : "Verified flexible reference"}</span></div>
+                <div className="result-meta"><strong>{flight.number} · British Airways</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{callsignLabel(flight.number, flight.callsign)} · {flight.aircraft} · {flight.referenceOnly ? "2025–26 operational reference" : flight.scheduledForSelectedDate ? "Scheduled equipment" : "Checked flexible reference"}</span></div>
                 <div className="result-availability"><strong>{flight.slots > 0 ? "● Available" : "● Full"}</strong><span>{flight.slots} of {flight.capacity} pilot slots open</span></div>
                 {pilotSession && pilot ? (
                   flight.slots > 0 && eligibleAircraft.length > 0 ? <form action={bookFlight}>
@@ -167,7 +167,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
               </article>;
             }) : <div className="empty-state card"><h2>{invalidDurationRange ? "Choose a valid flight-time range" : hasDurationFilter ? "No verified flights in this range" : aircraft ? "No verified flights published for this airframe" : "No verified service published"}</h2><p>{invalidDurationRange ? "Set the first hour at or below the second hour, then apply the filter again." : hasDurationFilter ? "Try a wider range or clear the filter to see every checked service." : aircraft ? `Operations has not published a date-checked BA service using ${aircraft} for this date.` : `There is no date-checked BA flight with a confirmed operating callsign for ${hasCityPair ? `${airportName(from)} to ${airportName(to)}` : departureStation ?? "this search"} yet.`}</p><Link className="button button-primary" href={hasDurationFilter ? `/book?${clearDurationFilterParams.toString()}` : "/"}>{hasDurationFilter ? "Clear flight-time filter" : "Return to flight search"}</Link></div>}
           </div>
-          <div className="integration-note"><strong>Operational accuracy:</strong> each selectable flight has a real BA flight number, local schedule, aircraft and date-checked operating ICAO identifier. Services without all of those details are withheld from booking until Operations verifies them. An ICAO identifier is never generated from the BA flight number.</div>
+          <div className="integration-note"><strong>Operational accuracy:</strong> each selectable flight uses a real BA flight number, local planning time, aircraft and observed operating ICAO identifier. A 2025–26 operational reference is clearly labelled when the selected date has not been individually checked. An ICAO identifier is never generated from the BA flight number.</div>
         </div>
       </main>
       <SiteFooter />

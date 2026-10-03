@@ -27,6 +27,8 @@ type ResolveFlightCallsignInput = {
   /** Callsign copied from a checked timetable record at booking time. */
   routeCallsign?: string | null;
   routeVerifiedAt?: string | null;
+  routeSource?: Exclude<CallsignSource, "vatsim" | "fallback">;
+  routeConfidence?: CallsignConfidence;
 };
 
 type NewCallsignMapping = Omit<FlightCallsignMapping, "id" | "flightNumberNumeric" | "operatingCarrier" | "operatorIata" | "operatorIcao" | "telephony" | "createdAt" | "updatedAt"> & {
@@ -179,13 +181,20 @@ export async function resolveFlightCallsign(input: ResolveFlightCallsignInput): 
   if (mapped) return toResolution(mapped.operationalCallsign, mapped.source, mapped.confidence, mapped.callsignLastVerifiedAt, mapped.id, commercialFlightNumber);
 
   const routeCallsign = normaliseApprovedBaGroupCallsign(input.routeCallsign);
-  if (routeCallsign) return toResolution(routeCallsign, "schedule", "verified", cleanDate(input.routeVerifiedAt), null, commercialFlightNumber);
+  if (routeCallsign) return toResolution(
+    routeCallsign,
+    input.routeSource ?? "schedule",
+    input.routeConfidence ?? "verified",
+    cleanDate(input.routeVerifiedAt),
+    null,
+    commercialFlightNumber,
+  );
 
   return toResolution(toBritishAirwaysCallsign(commercialFlightNumber), "fallback", "inferred", null, null, commercialFlightNumber);
 }
 
 /** Creates the versioned mapping that accompanies a checked timetable record. */
-export async function captureCheckedRouteCallsign(input: { flightNumber: string; callsign: string | null | undefined; from: string; to: string; validFrom?: string | null; validUntil?: string | null; verifiedAt?: string | null; source?: FlightCallsignMapping["source"] }) {
+export async function captureCheckedRouteCallsign(input: { flightNumber: string; callsign: string | null | undefined; from: string; to: string; validFrom?: string | null; validUntil?: string | null; verifiedAt?: string | null; source?: FlightCallsignMapping["source"]; confidence?: CallsignConfidence }) {
   const operationalCallsign = normaliseApprovedBaGroupCallsign(input.callsign);
   if (!operationalCallsign) return null;
   return upsertFlightCallsignMapping({
@@ -196,7 +205,7 @@ export async function captureCheckedRouteCallsign(input: { flightNumber: string;
     validFrom: input.validFrom ?? null,
     validTo: input.validUntil ?? null,
     source: input.source ?? "schedule",
-    confidence: "verified",
+    confidence: input.confidence ?? "verified",
     callsignLastVerifiedAt: input.verifiedAt ?? null,
     lastSeenAt: null,
   });

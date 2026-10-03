@@ -22,6 +22,8 @@ export type ManagedRoute = {
   aircraftOptions?: string[];
   sourceUrl?: string;
   validatedAt?: string;
+  /** A researched BA flight reference, not an exact date-specific timetable. */
+  referenceOnly?: boolean;
   /** Timetables are references by default; Operations may opt a service into late-start scoring. */
   scheduleScoringEnabled?: boolean;
   /** Published BA airport pair with detailed BA service data still pending. */
@@ -60,6 +62,7 @@ function normalizedRoutes(routes: unknown[]) {
       : undefined,
     sourceUrl: typeof route.sourceUrl === "string" && /^https:\/\//.test(route.sourceUrl) ? route.sourceUrl : undefined,
     validatedAt: typeof route.validatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validatedAt) ? route.validatedAt : undefined,
+    referenceOnly: route.referenceOnly === true,
     scheduleScoringEnabled: route.scheduleScoringEnabled === true,
     catalogueOnly: route.catalogueOnly === true,
     virtualTimetable: route.virtualTimetable === true,
@@ -234,7 +237,8 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       scheduleScoringEnabled: route.scheduleScoringEnabled === true,
       catalogueOnly: route.catalogueOnly === true,
       virtualTimetable: route.virtualTimetable === true,
-      scheduledForSelectedDate: routeOperatesOn(route, date),
+      referenceOnly: route.referenceOnly === true,
+      scheduledForSelectedDate: route.referenceOnly !== true && routeOperatesOn(route, date),
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),
     };
@@ -259,7 +263,7 @@ function isPublishedOperationalService(route: ManagedRoute, date?: string, inclu
     !route.catalogueOnly &&
     !route.virtualTimetable &&
     Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) &&
-    (includeFlexible || routeOperatesOn(route, date));
+    (route.referenceOnly === true || includeFlexible || routeOperatesOn(route, date));
 }
 
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {

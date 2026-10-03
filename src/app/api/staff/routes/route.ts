@@ -63,6 +63,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   const from = text(raw.from).toUpperCase();
   const to = text(raw.to).toUpperCase();
   const virtualTimetable = bool(raw.virtualTimetable, false);
+  const referenceOnly = bool(raw.referenceOnly, false);
   if (virtualTimetable) {
     throw new Error("Virtual BAV service references cannot be published. Add a date-checked BA flight number and operational ICAO identifier instead.");
   }
@@ -112,6 +113,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     sourceUrl,
     validatedAt,
     scheduleScoringEnabled: bool(raw.scheduleScoringEnabled, false),
+    referenceOnly,
     catalogueOnly: false,
     virtualTimetable: false,
   };
@@ -210,6 +212,7 @@ function parseTimetableImport(csv: string) {
         sourceUrl: csvValue(row, headers, "sourceUrl"),
         validatedAt: csvValue(row, headers, "validatedAt"),
         scheduleScoringEnabled: csvBoolean(csvValue(row, headers, "scheduleScoringEnabled"), false),
+        referenceOnly: csvBoolean(csvValue(row, headers, "referenceOnly", "operationalReference"), false),
       });
       const key = timetableKey(route);
       if (keys.has(key)) throw new Error("Duplicate service in this import.");
@@ -279,6 +282,8 @@ export async function POST(request: NextRequest) {
           validFrom: route.validFrom,
           validUntil: route.validUntil,
           verifiedAt: route.validatedAt,
+          source: route.referenceOnly ? "observed_real_operation" : "schedule",
+          confidence: route.referenceOnly ? "historical" : "verified",
         });
       }
       const auditState = await getStaffState();
@@ -296,6 +301,8 @@ export async function POST(request: NextRequest) {
       validFrom: created.validFrom,
       validUntil: created.validUntil,
       verifiedAt: created.validatedAt,
+      source: created.referenceOnly ? "observed_real_operation" : "schedule",
+      confidence: created.referenceOnly ? "historical" : "verified",
     });
     const auditState = await getStaffState();
     addAudit(auditState, {
@@ -328,6 +335,8 @@ export async function PUT(request: NextRequest) {
       validFrom: updated.validFrom,
       validUntil: updated.validUntil,
       verifiedAt: updated.validatedAt,
+      source: updated.referenceOnly ? "observed_real_operation" : "schedule",
+      confidence: updated.referenceOnly ? "historical" : "verified",
     });
     const auditState = await getStaffState();
     addAudit(auditState, {

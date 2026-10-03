@@ -33,6 +33,12 @@ export type BavNetworkRouteSeed = {
   sourceUrl?: string;
   /** ISO date when the individual service was checked. */
   validatedAt?: string;
+  /**
+   * A real BA service and observed operational callsign, retained as a
+   * simulator reference when an exact selected-date timetable has not been
+   * checked. It must never be presented as an exact live timetable.
+   */
+  referenceOnly?: boolean;
   /** A published city pair without a verified individual BA timetable yet. */
   catalogueOnly?: boolean;
   /** A bookable BAV operational schedule, not a copied BA published timetable. */
@@ -40,7 +46,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-verified-operational-timetable-2026-10-03-r8";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-base-2026-10-03-r9";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -162,6 +168,10 @@ const sources = {
   portland: "https://www.flight.info/BA267",
   oslo: "https://planefinder.net/data/flight/BA784/history/5-83332140",
   miami: "https://planefinder.net/data/flight/BA207/history/5-49627838",
+  singapore: "https://planefinder.net/data/flight/BA11/history/5-48737853",
+  sydneyViaSingapore: "https://planefinder.net/data/flight/BA15/history/5-52295037",
+  newYork: "https://planefinder.net/data/flight/BA183/history/5-57469201",
+  madrid: "https://planefinder.net/data/flight/BA464/history/5-78114224",
 } as const;
 
 /**
@@ -169,6 +179,15 @@ const sources = {
  * More can be added through the Staff Centre route editor as they are audited.
  */
 const verifiedSchedules: BavNetworkRouteSeed[] = [
+  // Research-backed operational references: the source records an actual BA
+  // flight number, aircraft and ADS-B callsign in 2025/26. These remain
+  // bookable for the VA, but are labelled as references rather than claiming
+  // the selected booking date has an exact airline timetable check.
+  { id: "ba-reference-lhr-sin-ba11", from: "LHR", to: "SIN", flightNumber: "BA11", callsign: "BAW11", departure: "19:25", arrival: "16:10", duration: "12h 45m", aircraft: "Airbus A380-800", aircraftOptions: ["Airbus A380-800"], slots: 12, active: true, sourceUrl: sources.singapore, validatedAt: "2026-10-03", referenceOnly: true },
+  { id: "ba-reference-lhr-sin-ba15", from: "LHR", to: "SIN", flightNumber: "BA15", callsign: "BAW15", departure: "22:00", arrival: "18:40", duration: "13h 40m", aircraft: "Boeing 787-9", aircraftOptions: ["Boeing 787-9"], slots: 12, active: true, sourceUrl: sources.sydneyViaSingapore, validatedAt: "2026-10-03", referenceOnly: true },
+  { id: "ba-reference-lhr-jfk-ba183", from: "LHR", to: "JFK", flightNumber: "BA183", callsign: "BAW183", departure: "19:25", arrival: "22:25", duration: "8h 00m", aircraft: "Boeing 777-200ER", aircraftOptions: ["Boeing 777-200ER", "Boeing 777-300ER"], slots: 12, active: true, sourceUrl: sources.newYork, validatedAt: "2026-10-03", referenceOnly: true },
+  { id: "ba-reference-lhr-mad-ba464", from: "LHR", to: "MAD", flightNumber: "BA464", callsign: "BAW46BL", departure: "16:30", arrival: "20:05", duration: "2h 35m", aircraft: "Airbus A320neo", aircraftOptions: ["Airbus A320neo", "Airbus A320", "Airbus A321neo"], slots: 12, active: true, sourceUrl: sources.madrid, validatedAt: "2026-10-03", referenceOnly: true },
+
   // Miami: the flight number, local schedule, equipment and tracker
   // identifier were checked for the Sunday 4 October operation. The tracker
   // uses BAW3G for BA207, demonstrating why the ICAO identifier must never be

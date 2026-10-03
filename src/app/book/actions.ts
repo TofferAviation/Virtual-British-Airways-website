@@ -88,6 +88,8 @@ export async function bookFlight(formData: FormData) {
       operatingDate: date,
       routeCallsign: flight.callsign,
       routeVerifiedAt: flight.validatedAt,
+      routeSource: flight.referenceOnly ? "observed_real_operation" : "schedule",
+      routeConfidence: flight.referenceOnly ? "historical" : "verified",
     });
     booking = await createPilotBooking({
       pilotId: session.pilotId,
