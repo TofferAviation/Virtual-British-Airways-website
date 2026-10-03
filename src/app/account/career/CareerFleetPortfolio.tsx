@@ -19,6 +19,10 @@ function blockTime(minutes: number) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 
+function label(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 type Props = {
   fleetAircraft: FleetAircraftSummary[];
   pireps: PilotPirep[];
@@ -43,6 +47,7 @@ export function CareerFleetPortfolio({ fleetAircraft, pireps, qualifications, ac
       fleetMatches: matchingFleetAircraft.length,
       fleetHoursMinutes: matchingFleetAircraft.reduce((total, item) => total + Math.max(0, item.airframeHoursMinutes), 0),
       fleetCycles: matchingFleetAircraft.reduce((total, item) => total + Math.max(0, item.airframeCycles), 0),
+      fleetContext: matchingFleetAircraft.filter((item) => item.currentStation || item.lastFlightAt || item.nextAssignedFlightReference).sort((left, right) => (right.lastFlightAt ?? "").localeCompare(left.lastFlightAt ?? "")).slice(0, 2),
       qualification: qualification?.status ?? null,
     };
   }).sort((left, right) => right.blockMinutes - left.blockMinutes || left.aircraft.localeCompare(right.aircraft));
@@ -53,7 +58,7 @@ export function CareerFleetPortfolio({ fleetAircraft, pireps, qualifications, ac
     <div className="career-card-head"><div><span>FLEET CAREER · PILOT PORTFOLIO</span><h2>Your virtual fleet story</h2></div><Link href="/fleet">View Fleet →</Link></div>
     <p>Accepted BAV PIREPs build this personal aircraft portfolio. It is a record of your flying, not a registration assignment, operational restriction or real-world logbook.</p>
     <div className={styles.summary} aria-label="Fleet career summary"><div><span>Types operated</span><strong>{entries.length}</strong><small>Across accepted BAV PIREPs</small></div><div><span>Accepted sectors</span><strong>{accepted.length}</strong><small>Your completed pilot cycles</small></div><div><span>Fleet block time</span><strong>{blockTime(totalMinutes)}</strong><small>Accepted BAV PIREPs only</small></div><div><span>Nautical miles</span><strong>{totalDistanceNm.toLocaleString("en-GB")}</strong><small>Accepted BAV PIREPs only</small></div></div>
-    {entries.length ? <div className={styles.entries}>{entries.map((entry) => <section key={entry.aircraft}><div><span>{entry.family}</span><strong>{entry.aircraft}</strong></div><dl><div><dt>Your sectors / cycles</dt><dd>{entry.flights}</dd></div><div><dt>Your block time</dt><dd>{blockTime(entry.blockMinutes)}</dd></div><div><dt>Your nautical miles</dt><dd>{entry.distanceNm.toLocaleString("en-GB")} NM</dd></div><div><dt>Fleet registrations</dt><dd>{entry.fleetMatches || "No matching record"}</dd></div>{entry.fleetMatches ? <><div><dt>Fleet airframe time</dt><dd>{blockTime(entry.fleetHoursMinutes)}</dd></div><div><dt>Fleet cycles</dt><dd>{entry.fleetCycles.toLocaleString("en-GB")}</dd></div></> : null}<div><dt>Qualification</dt><dd>{entry.qualification?.replaceAll("_", " ") ?? "Not yet held"}</dd></div></dl><Link href={`/book?aircraft=${encodeURIComponent(entry.aircraft)}`}>View scheduled flights →</Link></section>)}</div> : <p className={styles.empty}>Your first accepted BAV PIREP will create an aircraft entry here.</p>}
-    <p className={styles.note}>{activeAssignment ? `${activeAssignment} is currently linked to a Fleet registration. ` : "No active Fleet registration is currently linked to your account. "}Fleet status remains authoritative in the existing Fleet service; this portfolio is read-only.</p>
+    {entries.length ? <div className={styles.entries}>{entries.map((entry) => <section key={entry.aircraft}><div><span>{entry.family}</span><strong>{entry.aircraft}</strong></div><dl><div><dt>Your sectors / cycles</dt><dd>{entry.flights}</dd></div><div><dt>Your block time</dt><dd>{blockTime(entry.blockMinutes)}</dd></div><div><dt>Your nautical miles</dt><dd>{entry.distanceNm.toLocaleString("en-GB")} NM</dd></div><div><dt>Fleet registrations</dt><dd>{entry.fleetMatches || "No matching record"}</dd></div>{entry.fleetMatches ? <><div><dt>Fleet airframe time</dt><dd>{blockTime(entry.fleetHoursMinutes)}</dd></div><div><dt>Fleet cycles</dt><dd>{entry.fleetCycles.toLocaleString("en-GB")}</dd></div></> : null}<div><dt>Qualification</dt><dd>{entry.qualification?.replaceAll("_", " ") ?? "Not yet held"}</dd></div></dl>{entry.fleetContext.length ? <div className={styles.context}><span>Fleet lifecycle now</span>{entry.fleetContext.map((aircraft) => <p key={aircraft.id}><strong>{aircraft.registration}</strong> · {aircraft.currentStation ?? "station pending"} · {label(aircraft.technicalStatus)} / {label(aircraft.dispatchStatus)}{aircraft.nextAssignedFlightReference ? ` · assigned ${aircraft.nextAssignedFlightReference}` : ""}</p>)}</div> : null}<Link href={`/book?aircraft=${encodeURIComponent(entry.aircraft)}`}>View scheduled flights →</Link></section>)}</div> : <p className={styles.empty}>Your first accepted BAV PIREP will create an aircraft entry here.</p>}
+    <p className={styles.note}>{activeAssignment ? `${activeAssignment} is currently linked to a Fleet registration. ` : "No active Fleet registration is currently linked to your account. "}Your personal hours, sectors and miles come only from accepted BAV PIREPs; the lifecycle context is a read-only view of the live Fleet service.</p>
   </article>;
 }

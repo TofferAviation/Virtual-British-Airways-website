@@ -1072,6 +1072,32 @@ export async function getActiveFleetFlightAssignmentForPilot(actor: FleetActor):
   return data ? asFlightAssignment(data as FlightAssignmentRow) : null;
 }
 
+/**
+ * Verifies a pilot's own completed registration assignment before a
+ * post-flight technical observation can enter the existing Fleet log.
+ * The website never trusts a registration supplied by the browser alone.
+ */
+export async function getFleetFlightAssignmentForPilotAndFlight(input: { pilotSubject: string; aircraftId: string; flightReference: string }): Promise<FleetFlightAssignment | null> {
+  const pilotSubject = input.pilotSubject.trim().toUpperCase();
+  const flightReference = input.flightReference.trim().toUpperCase();
+  if (!pilotSubject || !flightReference || !/^[0-9a-f-]{20,80}$/i.test(input.aircraftId)) return null;
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const { data, error } = await client
+    .from("aircraft_flight_assignments")
+    .select("id, aircraft_id, pilot_subject, pilot_display_name, flight_reference, departure_station, arrival_station, status, reserved_at, off_block_at, on_block_at, block_minutes")
+    .eq("organization_id", organization)
+    .eq("aircraft_id", input.aircraftId)
+    .eq("pilot_subject", pilotSubject)
+    .eq("flight_reference", flightReference)
+    .in("status", ["reserved", "operating", "completed"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new FleetServiceError(`Could not verify the Fleet assignment: ${error.message}`);
+  return data ? asFlightAssignment(data as FlightAssignmentRow) : null;
+}
+
 export async function startFleetAircraftFlight(aircraftId: string, actor: FleetActor, input: FleetFlightAssignmentInput) {
   const flight = flightActor(input);
   const client = getServerClient();

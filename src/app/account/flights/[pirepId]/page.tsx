@@ -5,8 +5,11 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { parsePirepArrivalReconciliation } from "@/lib/acars-arrival";
 import { getAcarsSession, listAcarsSessionSnapshots } from "@/lib/acars-store";
 import type { AcarsFlightSnapshot, SupportedSimulator } from "@/lib/acars-contract";
-import { getPirep } from "@/lib/pilot-operations-store";
+import { getPilotBooking, getPirep } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
+import { isCareerFeatureEnabled } from "@/lib/career-experience";
+import { getFleetAircraftRecord, getFleetFlightAssignmentForPilotAndFlight, listFleetAircraft } from "@/lib/fleet-service";
+import { FleetDefectReport } from "./FleetDefectReport";
 import "./debrief.css";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +57,27 @@ export default async function FlightDebriefPage({ params }: { params: Promise<{ 
   const registration = session?.lastSnapshot?.registration ?? null;
   const reportCount = snapshots.length;
   const arrivalReconciliation = parsePirepArrivalReconciliation(pirep.pilotComments);
+  const booking = pirep.bookingId ? await getPilotBooking(pirep.bookingId, pilot.pilotId) : null;
+  const fleetEnabled = isCareerFeatureEnabled("fleet");
+  const bookedFleetAircraftId = registration && booking?.fleetAircraftId && booking.registration === registration ? booking.fleetAircraftId : null;
+  const registrationFleetAircraft = fleetEnabled && registration && !bookedFleetAircraftId
+    ? (await listFleetAircraft()).find((candidate) => candidate.registration === registration) ?? null
+    : null;
+  const fleetAircraftId = bookedFleetAircraftId ?? registrationFleetAircraft?.id ?? null;
+  const verifiedFleetAssignment = fleetEnabled && !bookedFleetAircraftId && fleetAircraftId
+    ? await getFleetFlightAssignmentForPilotAndFlight({ pilotSubject: `bav:${pilot.pilotId}`, aircraftId: fleetAircraftId, flightReference: pirep.flightNumber }).catch(() => null)
+    : null;
+  const verifiedFleetAircraftId = bookedFleetAircraftId ?? (verifiedFleetAssignment?.aircraftId === fleetAircraftId ? fleetAircraftId : null);
+  const fleetRecord = verifiedFleetAircraftId
+    ? await getFleetAircraftRecord(verifiedFleetAircraftId).catch(() => null)
+    : null;
+  const openDefects = fleetRecord?.defects.filter((defect) => !["closed", "void"].includes(defect.status)).length ?? 0;
+  const activeMaintenance = fleetRecord?.maintenanceEvents.filter((event) => !["completed", "cancelled"].includes(event.status)).length ?? 0;
+  const fleetTurnaround = fleetRecord?.availability.available
+    ? "Available for its next virtual operation"
+    : openDefects || activeMaintenance
+      ? "Technical follow-up is awaiting staff review"
+      : "Fleet operations are reviewing the next turnaround";
 
   return <><SiteHeader /><main className="page-shell debrief-page"><div className="page-container debrief-container">
     <nav className="debrief-breadcrumb" aria-label="Breadcrumb"><Link href="/account">Pilot dashboard</Link><span>›</span><span>Flight debrief</span></nav>
@@ -69,6 +93,7 @@ export default async function FlightDebriefPage({ params }: { params: Promise<{ 
       <article><span>FUEL USED</span><strong>{pirep.fuelUsedKg == null ? "—" : `${pirep.fuelUsedKg.toLocaleString()} kg`}</strong><small>{pirep.fuelUsedKg == null ? "Not supplied by the simulator" : "Recorded by ACARS"}</small></article>
     </section>
     {arrivalReconciliation ? <section className={`debrief-arrival-reconciliation ${arrivalReconciliation.outcome}`}><strong>{arrivalReconciliation.outcome === "returned_to_origin" ? "Returned to departure airport" : arrivalReconciliation.outcome === "diverted" ? "Diversion recorded" : "Arrival airport needs verification"}</strong><span>{arrivalReconciliation.outcome === "arrival_unverified" ? `Planned arrival ${arrivalReconciliation.plannedStation} was not verified by Ember. Fleet was not moved.` : `Planned ${arrivalReconciliation.plannedStation} · actual ${arrivalReconciliation.actualStation ?? "not verified"}.`}</span></section> : null}
+    {fleetRecord ? <section className="debrief-card debrief-fleet-turnaround"><div><span className="debrief-label">FLEET TURNAROUND · LIVE RECORD</span><h2>{fleetRecord.registration} after your flight</h2><p>Fleet has the authoritative registration record for this operation. Its location and technical state remain independent from your PIREP credit.</p></div><div className="debrief-fleet-grid"><div><span>Current station</span><strong>{fleetRecord.currentStation ?? "Fleet location pending"}</strong></div><div><span>Turnaround state</span><strong>{fleetTurnaround}</strong></div><div><span>Fleet time / cycles</span><strong>{duration(fleetRecord.airframeHoursMinutes)} · {fleetRecord.airframeCycles.toLocaleString()} cycles</strong></div><div><span>Technical follow-up</span><strong>{openDefects + activeMaintenance ? `${openDefects} open log item${openDefects === 1 ? "" : "s"} · ${activeMaintenance} maintenance event${activeMaintenance === 1 ? "" : "s"}` : "No active follow-up shown"}</strong></div></div><FleetDefectReport pirepId={pirep.id} registration={fleetRecord.registration} /></section> : null}
 
     <div className="debrief-grid">
       <section className="debrief-card"><span className="debrief-label">FLIGHT TIMELINE</span><h2>What Ember recorded</h2><ol className="debrief-timeline">

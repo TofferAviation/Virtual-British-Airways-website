@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireFleetPilot } from "@/lib/fleet-pilot-auth";
+import { requireFleetPilot, requireFleetPilotAircraftForActiveBooking } from "@/lib/fleet-pilot-auth";
 import { FleetServiceError, reportFleetDefect, type FleetDefectInput } from "@/lib/fleet-service";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +11,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const body = await request.json() as { defect?: FleetDefectInput };
     if (!body.defect || typeof body.defect !== "object") throw new FleetServiceError("A defect report is required.", 400);
     const { id } = await context.params;
+    await requireFleetPilotAircraftForActiveBooking(actor, id);
     const defect = await reportFleetDefect(id, actor, { ...body.defect, source: body.defect.source ?? "cabin_crew" });
     return NextResponse.json({ defect }, { status: 201 });
   } catch (error) {
