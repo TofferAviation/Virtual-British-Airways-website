@@ -9,6 +9,7 @@ import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
 import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
+import { resolveFlightCallsign } from "@/lib/flight-callsigns";
 import { ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
 
 export async function bookFlight(formData: FormData) {
@@ -80,11 +81,29 @@ export async function bookFlight(formData: FormData) {
 
   let booking;
   try {
+    const callsignResolution = await resolveFlightCallsign({
+      commercialFlightNumber: flight.number,
+      departureIata: from,
+      arrivalIata: to,
+      operatingDate: date,
+      routeCallsign: flight.callsign,
+      routeVerifiedAt: flight.validatedAt,
+    });
     booking = await createPilotBooking({
       pilotId: session.pilotId,
       routeId: flight.routeId,
       flightNumber: flight.number,
-      callsign: flight.callsign ?? null,
+      callsign: callsignResolution.callsign,
+      callsignResolution: {
+        commercialFlightNumber: callsignResolution.commercialFlightNumber,
+        operatorIcao: callsignResolution.operatorIcao,
+        telephony: callsignResolution.telephony,
+        spokenCallsign: callsignResolution.spokenCallsign,
+        confidence: callsignResolution.confidence,
+        source: callsignResolution.source,
+        verifiedAt: callsignResolution.verifiedAt,
+        mappingId: callsignResolution.mappingId,
+      },
       from,
       to,
       aircraft: selectedAircraft,

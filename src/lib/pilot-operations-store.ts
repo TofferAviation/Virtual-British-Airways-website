@@ -10,6 +10,7 @@ import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 import { creditAcceptedPirepSalary } from "@/lib/pilot-career";
 import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
+import type { FlightCallsignResolution } from "@/lib/flight-callsigns";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
@@ -62,6 +63,8 @@ export type PilotBooking = {
   flightNumber: string;
   /** Checked route-level ICAO identifier captured when the assignment is made. */
   callsign: string | null;
+  /** Immutable resolution evidence so later route updates never rewrite a completed operation. */
+  callsignResolution?: Pick<FlightCallsignResolution, "commercialFlightNumber" | "operatorIcao" | "telephony" | "spokenCallsign" | "confidence" | "source" | "verifiedAt" | "mappingId"> | null;
   from: string;
   to: string;
   aircraft: string;
@@ -209,6 +212,7 @@ function normalizeBooking(booking: PilotBooking): PilotBooking {
   return {
     ...booking,
     callsign: normaliseApprovedBaGroupCallsign(booking.callsign),
+    callsignResolution: booking.callsignResolution && typeof booking.callsignResolution === "object" ? booking.callsignResolution : null,
     routeId: booking.routeId ?? null,
     fleetAircraftId: typeof booking.fleetAircraftId === "string" && booking.fleetAircraftId.trim() ? booking.fleetAircraftId.trim() : null,
     registration: typeof booking.registration === "string" && booking.registration.trim() ? booking.registration.trim().toUpperCase() : null,

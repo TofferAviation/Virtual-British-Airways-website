@@ -80,6 +80,8 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
   const [routeDraft, setRouteDraft] = useState<ManagedRoute | null>(null);
   const [timetableImportOpen, setTimetableImportOpen] = useState(false);
   const [timetableCsv, setTimetableCsv] = useState("");
+  const [callsignImportOpen, setCallsignImportOpen] = useState(false);
+  const [callsignCsv, setCallsignCsv] = useState("");
   const [routeSearch, setRouteSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -206,6 +208,27 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
     }
   }
 
+  async function importCallsignMappings() {
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/staff/callsigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: callsignCsv }),
+      });
+      const body = (await response.json()) as { imported?: number; error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not import callsign mappings.");
+      setCallsignImportOpen(false);
+      setCallsignCsv("");
+      setMessage(`Operational callsigns imported: ${body.imported ?? 0} dated mapping${body.imported === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not import callsign mappings.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       <section className="staff-shell staff-hero">
@@ -269,6 +292,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
           <div className="staff-tool-list">
             <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add verified service</b><small>Enter a confirmed BA flight manually.</small><i>›</i></button>
             <button onClick={() => setTimetableImportOpen(true)}><span>↥</span><b>Import timetable CSV</b><small>Publish many verified BA services safely.</small><i>›</i></button>
+            <button onClick={() => setCallsignImportOpen(true)}><span>⌁</span><b>Import callsign mappings</b><small>Version real ATC identifiers without rewriting history.</small><i>›</i></button>
             <button onClick={() => setRouteDraft(timetableRecords[0] ?? emptyRoute())}><span>⚙</span><b>Manage timetable records</b><small>Correct service times, aircraft or scoring rules.</small><i>›</i></button>
             <Link href="/book"><span>□</span><b>Preview availability</b><small>Open the public flight search.</small><i>›</i></Link>
             <a href="/api/health" target="_blank" rel="noreferrer"><span>↥</span><b>Service health</b><small>Check the current website API status.</small><i>›</i></a>
@@ -395,6 +419,18 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
             <label className="staff-import-label"><span>CSV format</span><code>flightNumber,callsign,from,to,departure,arrival,duration,aircraft,aircraftOptions,slots,validFrom,validUntil,operatingDays,sourceUrl,validatedAt,scheduleScoringEnabled,active</code></label>
             <label className="staff-import-label"><span>Verified timetable CSV</span><textarea rows={12} value={timetableCsv} onChange={(event) => setTimetableCsv(event.target.value)} placeholder={"BA267,BAW267,LHR,PDX,15:40,17:40,10h 00m,Boeing 787-10,Boeing 787-10,12,2026-09-01,2026-09-30,0;1;2;3;4;5;6,https://www.britishairways.com/travel/schedules/public/en_gb,2026-09-19,false,true"} /></label>
             <div className="staff-modal-actions"><span /><div><button className="staff-secondary-button" onClick={() => setTimetableImportOpen(false)} disabled={saving}>Cancel</button><button className="staff-primary-button" onClick={importTimetable} disabled={saving || !timetableCsv.trim()}>{saving ? "Importing…" : "Validate & publish timetable"}</button></div></div>
+          </div>
+        </div>
+      ) : null}
+
+      {callsignImportOpen ? (
+        <div className="staff-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setCallsignImportOpen(false); }}>
+          <div className="staff-modal staff-route-modal" role="dialog" aria-modal="true" aria-label="Import operational callsigns">
+            <div className="staff-modal-heading"><div><span className="staff-kicker">Operational callsign import</span><h2>Version real-world ATC identifiers</h2></div><button onClick={() => setCallsignImportOpen(false)} disabled={saving}>×</button></div>
+            <p className="staff-modal-lead">Use a separate mapping for each period a flight’s callsign is observed. Importing a new callsign never overwrites an earlier dated record. These mappings take precedence over a timetable route’s saved identifier when a pilot books that date.</p>
+            <label className="staff-import-label"><span>CSV format</span><code>flightNumber,callsign,origin,destination,validFrom,validTo,source,confidence,verifiedAt</code></label>
+            <label className="staff-import-label"><span>Operational callsign CSV</span><textarea rows={12} value={callsignCsv} onChange={(event) => setCallsignCsv(event.target.value)} placeholder={"BA713,BAW3ZL,RAK,LHR,2026-10-01,2026-10-31,observed_real_operation,verified,2026-10-03"} /></label>
+            <div className="staff-modal-actions"><span /><div><button className="staff-secondary-button" onClick={() => setCallsignImportOpen(false)} disabled={saving}>Cancel</button><button className="staff-primary-button" onClick={importCallsignMappings} disabled={saving || !callsignCsv.trim()}>{saving ? "Importing…" : "Validate & import callsigns"}</button></div></div>
           </div>
         </div>
       ) : null}

@@ -11,6 +11,7 @@ import type { PermissionId } from "@/lib/permissions";
 import { getStaffSession } from "@/lib/staff-auth";
 import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
 import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
+import { captureCheckedRouteCallsign } from "@/lib/flight-callsigns";
 
 function text(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
@@ -267,6 +268,15 @@ export async function POST(request: NextRequest) {
         }
       }
       await saveManagedRoutes(next);
+      await Promise.all(imported.map((route) => captureCheckedRouteCallsign({
+        flightNumber: route.flightNumber,
+        callsign: route.callsign,
+        from: route.from,
+        to: route.to,
+        validFrom: route.validFrom,
+        validUntil: route.validUntil,
+        verifiedAt: route.validatedAt,
+      })));
       const auditState = await getStaffState();
       addAudit(auditState, { actorEmail: auth.actor.email, actorName: auth.actor.name, action: "route.timetable_imported", details: `Imported ${imported.length} verified BA service record${imported.length === 1 ? "" : "s"} (${created} created, ${updated} updated).` });
       await saveStaffState(auditState);
@@ -274,6 +284,15 @@ export async function POST(request: NextRequest) {
     }
     const route = normalizeRoute(body.route);
     const created = await createManagedRoute(route);
+    await captureCheckedRouteCallsign({
+      flightNumber: created.flightNumber,
+      callsign: created.callsign,
+      from: created.from,
+      to: created.to,
+      validFrom: created.validFrom,
+      validUntil: created.validUntil,
+      verifiedAt: created.validatedAt,
+    });
     const auditState = await getStaffState();
     addAudit(auditState, {
       actorEmail: auth.actor.email,
@@ -297,6 +316,15 @@ export async function PUT(request: NextRequest) {
     if (!id) throw new Error("Route id is required.");
     const route = normalizeRoute(body.route, id);
     const updated = await updateManagedRoute(id, route);
+    await captureCheckedRouteCallsign({
+      flightNumber: updated.flightNumber,
+      callsign: updated.callsign,
+      from: updated.from,
+      to: updated.to,
+      validFrom: updated.validFrom,
+      validUntil: updated.validUntil,
+      verifiedAt: updated.validatedAt,
+    });
     const auditState = await getStaffState();
     addAudit(auditState, {
       actorEmail: auth.actor.email,

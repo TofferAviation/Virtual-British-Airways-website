@@ -15,6 +15,27 @@ import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile
 import type { ManagedRoute } from "@/lib/route-store";
 import { normalizeSiteTraffic, type SiteTrafficState } from "@/lib/site-traffic-types";
 
+export type FlightCallsignMapping = {
+  id: string;
+  commercialFlightNumber: string;
+  flightNumberNumeric: string;
+  operatingCarrier: string;
+  operatorIata: string;
+  operatorIcao: "BAW" | "SHT" | "CFE" | "EFW";
+  operationalCallsign: string;
+  telephony: "SPEEDBIRD" | "SHUTTLE" | "FLYER" | "EUROFLYER";
+  departureIata: string;
+  arrivalIata: string;
+  validFrom: string | null;
+  validTo: string | null;
+  source: "schedule" | "observed_real_operation" | "vatsim" | "historical_db" | "manual";
+  confidence: "verified" | "historical" | "inferred";
+  callsignLastVerifiedAt: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StaffAccountStatus = "active" | "invited" | "inactive";
 
 export type StaffAccount = {
@@ -66,6 +87,8 @@ export type StaffState = {
   routeSchedule: ManagedRoute[];
   /** Allows the verified seed schedule to safely replace a previous generated baseline. */
   routeScheduleVersion?: string;
+  /** Versioned operational callsigns, deliberately separate from route records. */
+  flightCallsignMappings: FlightCallsignMapping[];
   /** Aggregate first-party traffic only; no visitor identity or IP address is stored. */
   siteTraffic?: SiteTrafficState;
 };
@@ -124,6 +147,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
   const audit = Array.isArray(input?.audit) ? input!.audit! : [];
   const routeSchedule = Array.isArray(input?.routeSchedule) ? input!.routeSchedule! : [];
   const routeScheduleVersion = typeof input?.routeScheduleVersion === "string" ? input.routeScheduleVersion : undefined;
+  const flightCallsignMappings = Array.isArray(input?.flightCallsignMappings) ? input.flightCallsignMappings! : [];
   const siteTraffic = normalizeSiteTraffic(input?.siteTraffic);
 
   const admin = envAdmin();
@@ -153,7 +177,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     }
   }
 
-  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion, siteTraffic };
+  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion, flightCallsignMappings, siteTraffic };
 }
 
 async function ensureDataDir() {
