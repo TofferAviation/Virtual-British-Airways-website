@@ -60,6 +60,18 @@ const procedures = [
     copy: "If you suspect an account compromise, data issue, incorrect production behaviour or a public-safety problem, stop making changes, record what you observed and escalate to an administrator. At the end of a shift, leave any open ticket, PIREP, fleet defect or incident with a concise status and named next owner.",
     links: [["Service status", "/staff/service-status"], ["Staff Centre", "/staff"]],
   },
+  {
+    number: "09",
+    title: "Run the Type Rating Academy with evidence",
+    copy: "Use Training & qualifications to review Academy applications, approve a suitable programme, record completed modules and review the required check flight. A virtual payment, an application or a completed module alone never issues a rating. Only a passed check-flight review or a documented manual/grandfathered issue may create a qualification record, and every action must retain its audit reason.",
+    links: [["Training & qualifications", "/staff/training"], ["Pilot Management", "/staff/pilots"]],
+  },
+  {
+    number: "10",
+    title: "Keep optional career experiences voluntary",
+    copy: "Career Paths, rotations, rosters and mentoring are designed to support—not pressure—pilots. Do not imply that selecting a Career mode, accepting a rotation or completing a virtual training payment changes a pilot’s rank or aircraft authority. Apply any future Realistic Operations policy only when Operations has formally enabled and communicated it.",
+    links: [["Pilot Management", "/staff/pilots"], ["Mentoring", "/staff/mentoring"], ["Training & qualifications", "/staff/training"]],
+  },
 ] as const;
 
 export default async function StaffSopPage() {
