@@ -9,22 +9,22 @@ export const metadata: Metadata = {
 };
 
 const members = [
-  { name: "Alaska Airlines", code: "AS", region: "North America" },
-  { name: "American Airlines", code: "AA", region: "North America" },
-  { name: "British Airways", code: "BA", region: "United Kingdom" },
-  { name: "Cathay Pacific", code: "CX", region: "Hong Kong" },
-  { name: "Fiji Airways", code: "FJ", region: "South Pacific" },
-  { name: "Finnair", code: "AY", region: "Finland" },
-  { name: "Hawaiian Airlines", code: "HA", region: "Hawai‘i" },
-  { name: "Iberia", code: "IB", region: "Spain" },
-  { name: "Japan Airlines", code: "JL", region: "Japan" },
-  { name: "Malaysia Airlines", code: "MH", region: "Malaysia" },
-  { name: "Oman Air", code: "WY", region: "Oman" },
-  { name: "Qantas", code: "QF", region: "Australia" },
-  { name: "Qatar Airways", code: "QR", region: "Qatar" },
-  { name: "Royal Air Maroc", code: "AT", region: "Morocco" },
-  { name: "Royal Jordanian", code: "RJ", region: "Jordan" },
-  { name: "SriLankan Airlines", code: "UL", region: "Sri Lanka" },
+  { name: "Alaska Airlines", code: "AS", region: "North America", community: "vASA · Alaska Virtual", href: "https://www.virtual-asa.com/" },
+  { name: "American Airlines", code: "AA", region: "North America", community: "American Airlines Virtual", href: "https://www.aavirtual.com/" },
+  { name: "British Airways", code: "BA", region: "United Kingdom", community: "British Airways Virtual", href: "/book", internal: true },
+  { name: "Cathay Pacific", code: "CX", region: "Hong Kong", community: "CX Virtual", href: "https://cxvirtual.hk/" },
+  { name: "Fiji Airways", code: "FJ", region: "South Pacific", community: "Fiji Airline Virtual", href: "https://www.fijiairvirtual.com/" },
+  { name: "Finnair", code: "AY", region: "Finland", community: "Virtual Finnair", href: "https://virtualfinnair.com/" },
+  { name: "Hawaiian Airlines", code: "HA", region: "Hawai‘i", community: "vASA · Alaska & Hawaiian", href: "https://www.virtual-asa.com/" },
+  { name: "Iberia", code: "IB", region: "Spain", community: "Grupo Iberia Virtual", href: "https://crew.iberiava.net/" },
+  { name: "Japan Airlines", code: "JL", region: "Japan", community: "JAL Virtual", href: "https://jalvirtual.com/" },
+  { name: "Malaysia Airlines", code: "MH", region: "Malaysia", community: "vMAS · Virtual Malaysia Airlines", href: "https://vmas.my/" },
+  { name: "Oman Air", code: "WY", region: "Oman", community: "Oman Air Virtual", href: "https://community.infiniteflight.com/t/25oct26-oman-air-virtual-presents-oman-skies/1279341" },
+  { name: "Qantas", code: "QF", region: "Australia", community: "QVirtual", href: "https://www.qvirtual.com.au/" },
+  { name: "Qatar Airways", code: "QR", region: "Qatar", community: "Qatar Virtual Airways", href: "https://www.qatarvirtual.net/" },
+  { name: "Royal Air Maroc", code: "AT", region: "Morocco", community: "Royal Air Maroc on JetStream Virtual", href: "https://jetstreamvirtual.com/dairlines/RAM" },
+  { name: "Royal Jordanian", code: "RJ", region: "Jordan", community: "Royal Jordanian on JetStream Virtual", href: "https://jetstreamvirtual.com/airlines/royal-jordanian" },
+  { name: "SriLankan Airlines", code: "UL", region: "Sri Lanka", community: "Explore oneworld Virtual", href: "https://oneworldvirtual.org/airlines" },
 ].map((member) => ({
   ...member,
   logo: `https://www.gstatic.com/flights/airline_logos/70px/${member.code}.png`,
@@ -131,22 +131,33 @@ export default function OneworldPage() {
           <span className="ow-kicker">Alliance reference</span>
           <h2>oneworld member airlines</h2>
           <p className="ow-members-lead">
-            These are the real-world oneworld member airlines represented here as an informational reference for
-            our virtual operations.
+            Explore a selected independent virtual-airline community for each real-world member. British Airways
+            opens our own virtual operation. External links are community recommendations, not partnerships or
+            endorsements by oneworld or any real-world airline.
           </p>
           <div className="ow-member-grid">
-            {members.map((member) => (
-              <article className="ow-member-card" key={member.code}>
+            {members.map((member) => {
+              const card = <>
                 <div className="ow-member-logo">
                   <img src={member.logo} alt={`${member.name} logo`} loading="lazy" />
                 </div>
                 <div>
                   <h3>{member.name}</h3>
-                  <p>{member.region}</p>
+                  <p>{member.region} · {member.community}</p>
                 </div>
                 <span className="ow-card-arrow" aria-hidden="true">→</span>
-              </article>
-            ))}
+              </>;
+
+              return member.internal ? (
+                <Link className="ow-member-card" key={member.code} href={member.href} aria-label={`Open ${member.community}`}>
+                  {card}
+                </Link>
+              ) : (
+                <a className="ow-member-card" key={member.code} href={member.href} target="_blank" rel="noopener noreferrer" aria-label={`Visit ${member.community} (opens in a new tab)`}>
+                  {card}
+                </a>
+              );
+            })}
           </div>
         </section>
 
