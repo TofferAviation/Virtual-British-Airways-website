@@ -6,7 +6,10 @@ export async function GET() {
     service: "BAV Ember ACARS",
     protocolVersion: ACARS_PROTOCOL_VERSION,
     supportedSimulators: Object.entries(supportedSimulatorLabels).map(([id, name]) => ({ id, name })),
-    telemetryEndpointStatus: "planned",
+    // Ember v0.5.33+ sends real simulator samples to the session telemetry
+    // endpoint. Keep this capability truthful so desktop clients and support
+    // tools do not mistake the live integration for a future placeholder.
+    telemetryEndpointStatus: "available",
     pirepPipeline: "shared",
   });
 }
