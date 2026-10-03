@@ -90,10 +90,9 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
   }, [events]);
 
   const activeEventCount = upcoming.filter((event) => event.published).length;
-  const activeRouteCount = new Set(routes.filter((route) => route.active).map((route) => `${route.from}-${route.to}`)).size;
+  const activeRouteCount = new Set(routes.filter((route) => route.active && !route.catalogueOnly && !route.virtualTimetable && Boolean(route.callsign)).map((route) => `${route.from}-${route.to}`)).size;
   const verifiedScheduleCount = routes.filter((route) => route.active && !route.catalogueOnly && !route.virtualTimetable).length;
-  const virtualScheduleCount = routes.filter((route) => route.active && route.virtualTimetable).length;
-  const timetableRecords = useMemo(() => routes.filter((route) => !route.catalogueOnly).sort((left, right) => `${left.from}${left.to}${left.flightNumber}`.localeCompare(`${right.from}${right.to}${right.flightNumber}`)), [routes]);
+  const timetableRecords = useMemo(() => routes.filter((route) => !route.catalogueOnly && !route.virtualTimetable && Boolean(route.callsign)).sort((left, right) => `${left.from}${left.to}${left.flightNumber}`.localeCompare(`${right.from}${right.to}${right.flightNumber}`)), [routes]);
   const matchingTimetableRecords = useMemo(() => {
     const search = routeSearch.trim().toLowerCase();
     if (!search) return timetableRecords;
@@ -266,7 +265,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
         </div>
 
         <div className="staff-panel" id="route-tools">
-          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage our virtual network</h2><p>BAV virtual services keep every published city pair bookable. Confirmed services remain separately controlled with their flight number, checked BA Group ICAO identifier, local times and scheduled aircraft.</p></div></div>
+          <div className="staff-panel-heading"><div><span className="staff-kicker">Route and schedule tools</span><h2>Manage operational schedules</h2><p>Only verified services are published to pilots: each requires its real BA flight number, checked BA Group ICAO identifier, local times and scheduled aircraft.</p></div></div>
           <div className="staff-tool-list">
             <button onClick={() => setRouteDraft(emptyRoute())}><span>✈</span><b>Add verified service</b><small>Enter a confirmed BA flight manually.</small><i>›</i></button>
             <button onClick={() => setTimetableImportOpen(true)}><span>↥</span><b>Import timetable CSV</b><small>Publish many verified BA services safely.</small><i>›</i></button>
@@ -275,10 +274,10 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
             <a href="/api/health" target="_blank" rel="noreferrer"><span>↥</span><b>Service health</b><small>Check the current website API status.</small><i>›</i></a>
           </div>
           <div className="staff-route-summary">
-            <strong>{activeRouteCount} active BAV city pair{activeRouteCount === 1 ? "" : "s"} · {virtualScheduleCount} BAV virtual service{virtualScheduleCount === 1 ? "" : "s"} · {verifiedScheduleCount} verified BA service record{verifiedScheduleCount === 1 ? "" : "s"}</strong>
-            <span>A verified BA service takes priority over the matching BAV virtual service on the Book page.</span>
+            <strong>{activeRouteCount} active airport-pair route{activeRouteCount === 1 ? "" : "s"} · {verifiedScheduleCount} verified BA service record{verifiedScheduleCount === 1 ? "" : "s"}</strong>
+            <span>Only these verified services can be selected on the Book page.</span>
           </div>
-          {timetableRecords.length ? <div className="staff-timetable-records"><label><span>Find a timetable record</span><input value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} placeholder="Flight number, callsign, airport or aircraft" /></label><div className="staff-mini-routes">{matchingTimetableRecords.slice(0, 20).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}{route.callsign ? ` · ${route.callsign}` : ""}</strong><span>{route.from} → {route.to} · {route.departure}–{route.arrival} {route.virtualTimetable ? "UTC reference" : "local"}</span><small>{route.aircraft}{route.virtualTimetable ? " · BAV virtual service" : route.scheduleScoringEnabled ? " · schedule scoring on" : " · verified BA timetable"}</small></button>)}</div>{matchingTimetableRecords.length > 20 ? <small className="staff-timetable-limit">Showing the first 20 matching records. Narrow the search to edit a specific service.</small> : null}</div> : null}
+          {timetableRecords.length ? <div className="staff-timetable-records"><label><span>Find a timetable record</span><input value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} placeholder="Flight number, callsign, airport or aircraft" /></label><div className="staff-mini-routes">{matchingTimetableRecords.slice(0, 20).map((route) => <button key={route.id} onClick={() => setRouteDraft(route)}><strong>{route.flightNumber}{route.callsign ? ` · ${route.callsign}` : ""}</strong><span>{route.from} → {route.to} · {route.departure}–{route.arrival} local</span><small>{route.aircraft}{route.scheduleScoringEnabled ? " · schedule scoring on" : " · verified BA timetable"}</small></button>)}</div>{matchingTimetableRecords.length > 20 ? <small className="staff-timetable-limit">Showing the first 20 matching records. Narrow the search to edit a specific service.</small> : null}</div> : null}
         </div>
       </section>
 

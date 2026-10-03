@@ -40,11 +40,6 @@ function baFlightNumber(value: unknown) {
   return /^BA\d{1,4}$/.test(candidate) ? candidate : undefined;
 }
 
-function bavVirtualFlightNumber(value: unknown) {
-  const candidate = text(value).toUpperCase().replace(/\s+/g, "");
-  return /^BAV\d{3,5}$/.test(candidate) ? candidate : undefined;
-}
-
 function callsign(value: unknown) {
   return normaliseApprovedBaGroupCallsign(text(value)) ?? undefined;
 }
@@ -67,7 +62,10 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   const from = text(raw.from).toUpperCase();
   const to = text(raw.to).toUpperCase();
   const virtualTimetable = bool(raw.virtualTimetable, false);
-  const flightNumber = virtualTimetable ? bavVirtualFlightNumber(raw.flightNumber) : baFlightNumber(raw.flightNumber);
+  if (virtualTimetable) {
+    throw new Error("Virtual BAV service references cannot be published. Add a date-checked BA flight number and operational ICAO identifier instead.");
+  }
+  const flightNumber = baFlightNumber(raw.flightNumber);
   const departure = time(raw.departure);
   const arrival = time(raw.arrival);
   const aircraft = text(raw.aircraft);
@@ -77,7 +75,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   if (!/^(?:LHR|LGW|LCY)$/.test(from) || !/^[A-Z]{3}$/.test(to)) {
     throw new Error("The departure hub must be LHR, LGW or LCY and the destination must be a three-letter IATA code.");
   }
-  if (!flightNumber) throw new Error(virtualTimetable ? "Use a BAV virtual service reference in the format BAV1001." : "Use a real BA flight number in the format BA123.");
+  if (!flightNumber) throw new Error("Use a real BA flight number in the format BA123.");
   if (!departure || !arrival || !aircraft) {
     throw new Error("Local departure time, arrival time and scheduled aircraft are required.");
   }
@@ -91,7 +89,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   if (suppliedCallsign && !verifiedCallsign) {
     throw new Error("Use a checked BA Group ICAO identifier, for example BAW267, CFE123 or BAW26PV.");
   }
-  if (!virtualTimetable && !verifiedCallsign) {
+  if (!verifiedCallsign) {
     throw new Error("A verified ICAO callsign is required for a published BA timetable.");
   }
   return {
@@ -99,7 +97,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     from,
     to,
     flightNumber,
-    callsign: verifiedCallsign ?? `BAW${flightNumber.replace(/^(?:BAV|BA)/i, "")}`,
+    callsign: verifiedCallsign,
     departure,
     arrival,
     duration: text(raw.duration, "2h 00m"),
@@ -114,7 +112,7 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     validatedAt,
     scheduleScoringEnabled: bool(raw.scheduleScoringEnabled, false),
     catalogueOnly: false,
-    virtualTimetable,
+    virtualTimetable: false,
   };
 }
 

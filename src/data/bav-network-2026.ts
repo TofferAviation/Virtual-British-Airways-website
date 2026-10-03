@@ -40,7 +40,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-virtual-operational-timetable-2026-10-03-r7";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-verified-operational-timetable-2026-10-03-r8";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -161,6 +161,7 @@ const sources = {
   newcastle: "https://www.directflights.com/LHR-NCL",
   portland: "https://www.flight.info/BA267",
   oslo: "https://planefinder.net/data/flight/BA784/history/5-83332140",
+  miami: "https://planefinder.net/data/flight/BA207/history/5-49627838",
 } as const;
 
 /**
@@ -168,6 +169,12 @@ const sources = {
  * More can be added through the Staff Centre route editor as they are audited.
  */
 const verifiedSchedules: BavNetworkRouteSeed[] = [
+  // Miami: the flight number, local schedule, equipment and tracker
+  // identifier were checked for the Sunday 4 October operation. The tracker
+  // uses BAW3G for BA207, demonstrating why the ICAO identifier must never be
+  // generated mechanically from the BA flight number.
+  { id: "ba-a26-lhr-mia-ba207-20261004", from: "LHR", to: "MIA", flightNumber: "BA207", callsign: "BAW3G", departure: "09:55", arrival: "14:35", duration: "9h 40m", aircraft: "Airbus A380-800", aircraftOptions: ["Airbus A380-800"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.miami, validatedAt: "2026-10-03" },
+
   // Oslo: schedule and tracker identifier checked on 3 October 2026 for the
   // Sunday 4 October operation. This replaces the BAV placeholder only for
   // this verified service window; it is not extrapolated into later dates.

@@ -242,32 +242,35 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
 }
 
 type FlightSearchOptions = {
-  /** Lets pilots fly a real BAV service on a different simulator day. */
+  /** Lets pilots book a checked real-world service outside its reference date. */
   includeVirtualFlexible?: boolean;
 };
 
-export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
-  const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from && route.to === to);
-  // A real service must carry the tracker-checked ICAO identifier for its
-  // validity window. Never turn a bare BA flight number into a guessed BAW
-  // callsign simply to keep it bookable.
-  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
-  const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
-  const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
-  // A checked BA service always takes priority. Otherwise BAV's clearly
-  // labelled virtual operational service keeps the real network city pair
-  // bookable without inventing a BA timetable.
-  return withAvailability([...verified, ...virtual], date);
+/**
+ * The public booking flow is deliberately stricter than the internal route
+ * catalogue. A selectable service must have both a real BA flight number and
+ * the date-checked ICAO identifier actually used by the operating carrier.
+ * Virtual BAV planning records remain in the staff catalogue for audit and
+ * future verification, but they can never become a pilot booking or a
+ * fabricated callsign.
+ */
+function isPublishedOperationalService(route: ManagedRoute, date?: string, includeFlexible = false) {
+  return route.active &&
+    !route.catalogueOnly &&
+    !route.virtualTimetable &&
+    Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) &&
+    (includeFlexible || routeOperatesOn(route, date));
 }
 
-/** Lists every active BAV service departing the selected station. */
+export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
+  const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from && route.to === to);
+  return withAvailability(matching.filter((route) => isPublishedOperationalService(route, date, options.includeVirtualFlexible)), date);
+}
+
+/** Lists every published, operationally checked service from the station. */
 export async function getFlightsFromStation(from: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from);
-  const verified = matching.filter((route) => !route.catalogueOnly && !route.virtualTimetable && Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) && (options.includeVirtualFlexible || routeOperatesOn(route, date)));
-  const verifiedPairs = new Set(verified.map((route) => `${route.from}-${route.to}`));
-  const virtual = matching.filter((route) => route.virtualTimetable && !verifiedPairs.has(`${route.from}-${route.to}`));
-  const catalogue = matching.filter((route) => route.catalogueOnly && !verifiedPairs.has(`${route.from}-${route.to}`));
-  return withAvailability([...verified, ...virtual, ...catalogue], date);
+  return withAvailability(matching.filter((route) => isPublishedOperationalService(route, date, options.includeVirtualFlexible)), date);
 }
 
 /** @deprecated Use getFlightsFromStation; retained for hub links. */
@@ -276,6 +279,6 @@ export async function getFlightsFromHub(from: string, date?: string, options: Fl
 }
 
 export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = (await getBookableRoutes()).filter((route) => route.active && !route.catalogueOnly && (route.virtualTimetable || Boolean(normaliseApprovedBaGroupCallsign(route.callsign))) && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)) && (route.virtualTimetable || routeOperatesOn(route, date)));
+  const managed = (await getBookableRoutes()).filter((route) => isPublishedOperationalService(route, date) && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)));
   return withAvailability(managed, date);
 }
