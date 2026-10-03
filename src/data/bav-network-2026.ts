@@ -50,7 +50,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-base-2026-10-03-r12";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-base-2026-10-03-r13";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -171,6 +171,7 @@ const sources = {
   hannover: "https://www.flight.info/BA894",
   belfastCity: "https://www.flightconnections.com/flights-from-lhr-to-bhd",
   copenhagen: "https://www.flight.info/BA812",
+  copenhagenLive: "https://www.flightaware.com/live/findflight?origin=EGLL&destination=EKCH",
   newcastle: "https://www.directflights.com/LHR-NCL",
   portland: "https://www.flight.info/BA267",
   oslo: "https://planefinder.net/data/flight/BA784/history/5-83332140",
@@ -203,6 +204,13 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
   // Equipment varies by day, so the published Sunday A319 remains the primary
   // assignment and the other documented A320-family variants remain eligible.
   { id: "ba-a26-lhr-cph-ba812-sun", from: "LHR", to: "CPH", flightNumber: "BA812", callsign: "BAW812", departure: "06:35", arrival: "09:25", duration: "1h 50m", aircraft: "Airbus A319", aircraftOptions: ["Airbus A319", "Airbus A320", "Airbus A320neo", "Airbus A321neo"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-18", operatingDays: [0], sourceUrl: sources.copenhagen, validatedAt: "2026-10-03" },
+  // FlightAware's LHR–CPH route view was checked on 3 October for these
+  // individual current operations. Each entry is deliberately dated; a new
+  // seasonal or daily record is added rather than extrapolating the schedule.
+  { id: "ba-a26-lhr-cph-ba820-20261004", from: "LHR", to: "CPH", flightNumber: "BA820", callsign: "BAW820", departure: "08:15", arrival: "11:05", duration: "1h 50m", aircraft: "Airbus A319", aircraftOptions: ["Airbus A319", "Airbus A320", "Airbus A320neo", "Airbus A321neo"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.copenhagenLive, validatedAt: "2026-10-03" },
+  { id: "ba-a26-lhr-cph-ba816-20261004", from: "LHR", to: "CPH", flightNumber: "BA816", callsign: "BAW816", departure: "12:40", arrival: "15:40", duration: "2h 00m", aircraft: "Airbus A320", aircraftOptions: ["Airbus A320", "Airbus A319", "Airbus A320neo", "Airbus A321neo"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.copenhagenLive, validatedAt: "2026-10-03" },
+  { id: "ba-a26-lhr-cph-ba814-20261004", from: "LHR", to: "CPH", flightNumber: "BA814", callsign: "BAW814", departure: "14:55", arrival: "17:55", duration: "2h 00m", aircraft: "Airbus A321neo", aircraftOptions: ["Airbus A321neo", "Airbus A320neo", "Airbus A320", "Airbus A319"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.copenhagenLive, validatedAt: "2026-10-03" },
+  { id: "ba-a26-lhr-cph-ba822-20261003", from: "LHR", to: "CPH", flightNumber: "BA822", callsign: "BAW822", departure: "20:40", arrival: "23:25", duration: "1h 45m", aircraft: "Airbus A319", aircraftOptions: ["Airbus A319", "Airbus A320", "Airbus A320neo", "Airbus A321neo"], slots: 12, active: true, validFrom: "2026-10-03", validUntil: "2026-10-03", operatingDays: [6], sourceUrl: sources.copenhagenLive, validatedAt: "2026-10-03" },
 
   // Miami: the flight number, local schedule, equipment and tracker
   // identifier were checked for the Sunday 4 October operation. The tracker
