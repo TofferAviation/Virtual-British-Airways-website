@@ -4,6 +4,7 @@ import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { getPilotById } from "@/lib/pilot-store";
+import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 
 export type FleetPilotActor = FleetActor & { pilotId: string };
 
@@ -35,10 +36,13 @@ export async function requireFleetPilotAircraftEligibility(actor: FleetPilotActo
   if (!pilot) throw new FleetServiceError("Your BAV pilot account could not be found. Refresh your BAV profile and try again.", 401);
   if (!aircraft) throw new FleetServiceError("Aircraft not found.", 404);
   const legacyEligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: aircraft.aircraftModel });
-  const careerEligibility = process.env.BAV_CAREER_ENFORCEMENT === "true"
+  const accessPolicy = getCareerAircraftAccessPolicy(pilot.careerExperience.mode);
+  const careerEligibility = accessPolicy === "realistic_operations"
     ? await checkAircraftCareerEligibility(pilot, aircraft.aircraftModel)
     : null;
-  const eligibility = careerEligibility
+  const eligibility = accessPolicy === "optional"
+    ? { eligible: true, category: legacyEligibility.category, requiredRating: legacyEligibility.requiredRating, reason: "Aircraft access is optional in your selected Career experience." }
+    : careerEligibility
     ? { eligible: careerEligibility.eligible, category: legacyEligibility.category, requiredRating: legacyEligibility.requiredRating, reason: careerEligibility.reasons[0] ?? `Eligible as ${careerEligibility.role.replaceAll("_", " ")}.` }
     : legacyEligibility;
   if (!eligibility.eligible) throw new FleetServiceError(eligibility.reason, 403);

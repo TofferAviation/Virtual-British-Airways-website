@@ -3,6 +3,7 @@ import { supportedSimulatorLabels, type SupportedSimulator } from "@/lib/acars-c
 import { requireAcarsBearer } from "@/lib/acars-auth";
 import { startAcarsSession } from "@/lib/acars-store";
 import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
+import { getCareerAircraftAccessPolicy, isCareerEnforcementEnabled } from "@/lib/career-enforcement";
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { getPilotById } from "@/lib/pilot-store";
 import { getFleetAircraft } from "@/lib/fleet-service";
@@ -19,11 +20,15 @@ export async function POST(request: Request) {
   if (!isSupportedSimulator(simulator)) return NextResponse.json({ error: "Unsupported simulator." }, { status: 400 });
   const booking = await getActivePilotBooking(auth.account.id);
   if (!booking) return NextResponse.json({ error: "No active BAV assignment." }, { status: 409 });
-  if (booking.fleetAircraftId && process.env.BAV_CAREER_ENFORCEMENT === "true") {
-    const [pilot, aircraft] = await Promise.all([getPilotById(auth.account.id), getFleetAircraft(booking.fleetAircraftId)]);
-    if (!pilot || !aircraft) return NextResponse.json({ error: "The selected registration could not be verified. Refresh Flight Planning before starting Ember." }, { status: 409 });
-    const eligibility = await checkAircraftCareerEligibility(pilot, aircraft.aircraftModel);
-    if (!eligibility.eligible) return NextResponse.json({ error: `Flight start blocked: ${eligibility.reasons.join(" ")}` }, { status: 403 });
+  if (booking.fleetAircraftId && isCareerEnforcementEnabled()) {
+    const pilot = await getPilotById(auth.account.id);
+    if (!pilot) return NextResponse.json({ error: "Your BAV pilot account could not be verified. Refresh Flight Planning before starting Ember." }, { status: 409 });
+    if (getCareerAircraftAccessPolicy(pilot.careerExperience.mode) === "realistic_operations") {
+      const aircraft = await getFleetAircraft(booking.fleetAircraftId);
+      if (!aircraft) return NextResponse.json({ error: "The selected registration could not be verified. Refresh Flight Planning before starting Ember." }, { status: 409 });
+      const eligibility = await checkAircraftCareerEligibility(pilot, aircraft.aircraftModel);
+      if (!eligibility.eligible) return NextResponse.json({ error: `Flight start blocked: ${eligibility.reasons.join(" ")}` }, { status: 403 });
+    }
   }
 
   const session = await startAcarsSession({

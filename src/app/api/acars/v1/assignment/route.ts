@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAcarsBearer } from "@/lib/acars-auth";
 import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
+import { getCareerAircraftAccessPolicy, isCareerEnforcementEnabled } from "@/lib/career-enforcement";
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { getPilotById } from "@/lib/pilot-store";
 import { getSimbriefCodes } from "@/lib/simbrief";
@@ -12,14 +13,18 @@ export async function GET(request: Request) {
   const assignment = await getActivePilotBooking(auth.account.id);
   const codes = assignment ? getSimbriefCodes(assignment) : null;
   let careerNotice: string | null = null;
-  if (assignment?.fleetAircraftId && process.env.BAV_CAREER_ENFORCEMENT === "true") {
-    const [pilot, aircraft] = await Promise.all([getPilotById(auth.account.id), getFleetAircraft(assignment.fleetAircraftId)]);
-    if (!pilot || !aircraft) careerNotice = "The selected registration could not be checked. Refresh Flight Planning before starting Ember.";
-    else {
-      const eligibility = await checkAircraftCareerEligibility(pilot, aircraft.aircraftModel);
-      careerNotice = eligibility.eligible
-        ? `Qualification verified: ${eligibility.requiredRating?.replaceAll("_", " ") ?? "operational"} · ${eligibility.role.replaceAll("_", " ")}.`
-        : `Flight start blocked: ${eligibility.reasons.join(" ")}`;
+  if (assignment?.fleetAircraftId && isCareerEnforcementEnabled()) {
+    const pilot = await getPilotById(auth.account.id);
+    if (!pilot) careerNotice = "Your BAV pilot account could not be verified. Refresh Flight Planning before starting Ember.";
+    else if (getCareerAircraftAccessPolicy(pilot.careerExperience.mode) === "realistic_operations") {
+      const aircraft = await getFleetAircraft(assignment.fleetAircraftId);
+      if (!aircraft) careerNotice = "The selected registration could not be checked. Refresh Flight Planning before starting Ember.";
+      else {
+        const eligibility = await checkAircraftCareerEligibility(pilot, aircraft.aircraftModel);
+        careerNotice = eligibility.eligible
+          ? `Qualification verified: ${eligibility.requiredRating?.replaceAll("_", " ") ?? "operational"} · ${eligibility.role.replaceAll("_", " ")}.`
+          : `Flight start blocked: ${eligibility.reasons.join(" ")}`;
+      }
     }
   }
   return NextResponse.json({
