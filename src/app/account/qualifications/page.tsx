@@ -8,7 +8,7 @@ import { getPilotById } from "@/lib/pilot-store";
 import { applyForTrainingAction, payForRecurrentTrainingAction, payForTrainingAction } from "../career-actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Qualifications & Training" };
+export const metadata = { title: "Type Rating Academy" };
 const money = (value: number) => `£${value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function QualificationsPage({ searchParams }: { searchParams: Promise<{ applied?: string; payment?: string; recurrent?: string; error?: string }> }) {
@@ -21,9 +21,10 @@ export default async function QualificationsPage({ searchParams }: { searchParam
   const qualificationByDefinition = new Map(career.qualifications.map((qualification) => [qualification.qualificationDefinitionId, qualification]));
   const applicationByDefinition = new Map(career.applications.map((application) => [application.qualificationDefinitionId, application]));
   return <><SiteHeader /><main className="career-page"><div className="career-shell">
-    <nav className="career-breadcrumbs"><Link href="/account">Pilot account</Link><span>›</span><Link href="/account/career">Career</Link><span>›</span><strong>Qualifications & training</strong></nav>
-    <header className="career-hero"><div><span>QUALIFICATIONS</span><h1>Training & type ratings</h1><p>Meet every operational requirement, apply for training, complete the programme, and pass the required check before an aircraft family becomes available.</p></div><Link href="/account/finances">Virtual finances →</Link></header>
+    <nav className="career-breadcrumbs"><Link href="/account">Pilot account</Link><span>›</span><Link href="/account/career">Career</Link><span>›</span><strong>Type Rating Academy</strong></nav>
+    <header className="career-hero"><div><span>TYPE RATING ACADEMY</span><h1>Build your virtual operating record</h1><p>Choose an optional virtual training programme, learn with BAV Operations and earn a staff-approved career record. This is a British Airways Virtual simulation feature, not real-world certification or employment training.</p></div><Link href="/account/finances">Virtual finances →</Link></header>
     {params.applied ? <p className="career-feedback success">Your training application has been submitted to BAV Operations.</p> : null}{params.payment ? <p className="career-feedback success">Virtual training payment recorded. Your training modules are now active.</p> : null}{params.recurrent ? <p className="career-feedback success">Your virtual recurrent-training payment is recorded. BAV Operations can now complete the recurrent check.</p> : null}{params.error ? <p className="career-feedback error">{params.error}</p> : null}
+    <section className="career-card career-card-wide career-module career-module-academy" aria-label="How the Type Rating Academy works"><div className="career-card-head"><div><span>YOUR ACADEMY JOURNEY</span><h2>Structured, optional progression</h2></div><Link href="/account/career">Career overview →</Link></div><p>Fly and Career pilots always retain their chosen freedom. Once the separate Realistic Operations policy is introduced, completed Academy records can support that optional experience.</p><ol className="career-academy-steps"><li><b>01</b><div><strong>Check readiness</strong><span>See the transparent rank, block-time and sector requirements for each programme.</span></div></li><li><b>02</b><div><strong>Apply to Operations</strong><span>Your application goes to staff for review; submitting it never grants a rating.</span></div></li><li><b>03</b><div><strong>Complete training</strong><span>Staff record the training modules and required check flight in your virtual career file.</span></div></li><li><b>04</b><div><strong>Keep it current</strong><span>Approved records show their validity and recurrent-training dates in one place.</span></div></li></ol></section>
     <section className="qualification-grid">{career.definitions.filter((definition) => definition.kind !== "instructor").map((definition) => {
       const eligibility = eligibilityByDefinition.get(definition.id)!;
       const qualification = qualificationByDefinition.get(definition.id);
