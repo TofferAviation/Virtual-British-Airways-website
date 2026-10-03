@@ -268,15 +268,19 @@ export async function POST(request: NextRequest) {
         }
       }
       await saveManagedRoutes(next);
-      await Promise.all(imported.map((route) => captureCheckedRouteCallsign({
-        flightNumber: route.flightNumber,
-        callsign: route.callsign,
-        from: route.from,
-        to: route.to,
-        validFrom: route.validFrom,
-        validUntil: route.validUntil,
-        verifiedAt: route.validatedAt,
-      })));
+      // Callsign mappings share the persistent staff-state document. Preserve every
+      // imported record by writing them in sequence rather than racing JSON updates.
+      for (const route of imported) {
+        await captureCheckedRouteCallsign({
+          flightNumber: route.flightNumber,
+          callsign: route.callsign,
+          from: route.from,
+          to: route.to,
+          validFrom: route.validFrom,
+          validUntil: route.validUntil,
+          verifiedAt: route.validatedAt,
+        });
+      }
       const auditState = await getStaffState();
       addAudit(auditState, { actorEmail: auth.actor.email, actorName: auth.actor.name, action: "route.timetable_imported", details: `Imported ${imported.length} verified BA service record${imported.length === 1 ? "" : "s"} (${created} created, ${updated} updated).` });
       await saveStaffState(auditState);
