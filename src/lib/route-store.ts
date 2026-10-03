@@ -114,6 +114,13 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
     // LHR–SIN–SYD through service. Replace only the untouched r9 seed; any
     // subsequent Staff Centre correction remains authoritative.
     if (route.id === "ba-reference-lhr-sin-ba15" && route.sourceUrl === "https://planefinder.net/data/flight/BA15/history/5-52295037") continue;
+    // r12 adds FlightAware-verified identifiers to shipped services that
+    // previously had no callsign. Keep any staff scheduling edit, but attach
+    // the newly checked identifier so the service becomes bookable.
+    if (shipped?.callsign && !route.callsign) {
+      byId.set(route.id, { ...route, callsign: shipped.callsign, sourceUrl: shipped.sourceUrl, validatedAt: shipped.validatedAt });
+      continue;
+    }
     byId.set(route.id, route);
   }
   const migrated = normalizedRoutes([...byId.values()]);
