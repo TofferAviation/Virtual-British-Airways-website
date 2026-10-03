@@ -152,13 +152,63 @@ export async function sendPilotWelcomeEmail(pilot: PublicPilotAccount | Pick<Pub
   });
 }
 
+function closedBetaAgreementText() {
+  return `CLOSED BETA CONFIDENTIALITY AGREEMENT
+
+1. Welcome and early access
+You are receiving early access to the British Airways Virtual closed beta. Features, systems, pages and applications may change, be removed, be unavailable or contain errors before public release.
+
+2. Confidentiality
+All non-public beta information is confidential. This includes screenshots and video; user-interface designs and unreleased pages; Ember, Res2 iPort/DCS, fleet, cabin, passenger and internal operations systems; source code, APIs and technical details; plans, roadmaps, test builds, staff communications, beta announcements, bugs, discussions, and login or access information.
+
+3. Screenshots, video and streaming
+Do not publish, distribute, stream, upload, forward or otherwise share any non-public beta material without written permission from the British Airways Virtual team. This includes public screenshots, videos, livestreams, social posts, public Discord messages and public screen sharing. Material the team has already officially made public is excluded.
+
+4. Personal access and account security
+Your access is issued to you personally. Do not share your account, password, builds, files or access with another person, and do not attempt to bypass access restrictions.
+
+5. Testing and feedback
+Please report bugs, crashes, broken or missing features, usability issues, incorrect data and suggestions. You keep ownership of your feedback, and grant the team permission to use it to improve the project without compensation.
+
+6. Beta software and data
+The beta is for testing only. It may contain bugs, crashes, incomplete features, incorrect information, data loss or unexpected changes. Do not rely on it for permanent data storage or critical information.
+
+7. Intellectual property and third-party brands
+All beta designs, software, code, systems, assets and documentation remain the property of British Airways Virtual. Do not copy, redistribute, republish, sell, modify, reverse engineer or use beta material outside the agreed testing purpose. This is an independent flight-simulation and virtual-airline project; it is not affiliated with, endorsed by or employed by British Airways Plc or its affiliates.
+
+8. Virtual systems
+Virtual currency, credits, ranks, achievements, careers and similar in-project systems have no real-world monetary value and cannot be exchanged for money, goods or services.
+
+9. Security and responsible testing
+Do not bypass authentication, access another person's account, extract data that does not belong to you, disrupt systems or exploit vulnerabilities. Report any security concern privately to the team.
+
+10. Removal of access
+Access may be removed at any time. Confidentiality obligations continue after access is removed or the beta ends.
+
+11. No employment relationship
+Participation is voluntary and does not create employment, wages, benefits, partnership or any other legal relationship.
+
+Acceptance
+By signing in to or continuing to use the closed beta after receiving this invitation, you confirm that you have read and agree to these terms.`;
+}
+
+function closedBetaAgreementHtml() {
+  const heading = "margin:25px 0 7px;font-size:16px;line-height:1.3;color:#10243f";
+  const paragraph = "margin:0 0 13px";
+  return `<div style="margin:26px 0 0;padding:22px 20px;background:#f4f7fb;border:1px solid #d5e0eb"><div style="font-size:11px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#075aaa">Closed beta confidentiality agreement</div><h2 style="margin:8px 0 16px;font-family:Georgia,serif;font-size:24px;font-weight:400;color:#10243f">Private testing terms</h2><h3 style="${heading}">1. Welcome and early access</h3><p style="${paragraph}">You are receiving early access to the British Airways Virtual closed beta. Features, systems, pages and applications may change, be removed, be unavailable or contain errors before public release.</p><h3 style="${heading}">2. Confidentiality</h3><p style="${paragraph}">All non-public beta information is confidential. This includes screenshots and video; user-interface designs and unreleased pages; Ember, Res2 iPort/DCS, fleet, cabin, passenger and internal operations systems; source code, APIs and technical details; plans, roadmaps, test builds, staff communications, beta announcements, bugs, discussions, and login or access information.</p><h3 style="${heading}">3. Screenshots, video and streaming</h3><p style="${paragraph}">Do not publish, distribute, stream, upload, forward or otherwise share non-public beta material without written permission from the British Airways Virtual team. This includes public screenshots, videos, livestreams, social posts, public Discord messages and public screen sharing. Material the team has already officially made public is excluded.</p><h3 style="${heading}">4. Personal access and account security</h3><p style="${paragraph}">Your access is issued to you personally. Do not share your account, password, builds, files or access with another person, and do not attempt to bypass access restrictions.</p><h3 style="${heading}">5. Testing and feedback</h3><p style="${paragraph}">Please report bugs, crashes, broken or missing features, usability issues, incorrect data and suggestions. You keep ownership of your feedback, and grant the team permission to use it to improve the project without compensation.</p><h3 style="${heading}">6. Beta software and data</h3><p style="${paragraph}">The beta is for testing only. It may contain bugs, crashes, incomplete features, incorrect information, data loss or unexpected changes. Do not rely on it for permanent data storage or critical information.</p><h3 style="${heading}">7. Intellectual property and third-party brands</h3><p style="${paragraph}">All beta designs, software, code, systems, assets and documentation remain the property of British Airways Virtual. Do not copy, redistribute, republish, sell, modify, reverse engineer or use beta material outside the agreed testing purpose. This is an independent flight-simulation and virtual-airline project; it is not affiliated with, endorsed by or employed by British Airways Plc or its affiliates.</p><h3 style="${heading}">8. Virtual systems</h3><p style="${paragraph}">Virtual currency, credits, ranks, achievements, careers and similar in-project systems have no real-world monetary value and cannot be exchanged for money, goods or services.</p><h3 style="${heading}">9. Security and responsible testing</h3><p style="${paragraph}">Do not bypass authentication, access another person&rsquo;s account, extract data that does not belong to you, disrupt systems or exploit vulnerabilities. Report any security concern privately to the team.</p><h3 style="${heading}">10. Removal of access</h3><p style="${paragraph}">Access may be removed at any time. Confidentiality obligations continue after access is removed or the beta ends.</p><h3 style="${heading}">11. No employment relationship</h3><p style="${paragraph}">Participation is voluntary and does not create employment, wages, benefits, partnership or any other legal relationship.</p><div style="margin-top:22px;padding:15px 16px;border-left:3px solid #d71944;background:#fff"><strong>Acceptance</strong><br />By signing in to or continuing to use the closed beta after receiving this invitation, you confirm that you have read and agree to these terms.</div></div>`;
+}
+
 export async function sendClosedBetaInvitationEmail(input: { name: string; email: string; pilotNumber: string; temporaryPassword: string }) {
   const loginUrl = `${siteUrl()}/closed-beta`;
+  const name = escapeHtml(input.name);
+  const pilotNumber = escapeHtml(input.pilotNumber);
+  const email = escapeHtml(input.email);
+  const temporaryPassword = escapeHtml(input.temporaryPassword);
   return sendEmail({
     to: input.email,
-    subject: "Your British Airways Virtual closed-beta access",
-    text: `Hello ${input.name}, you have been invited to the British Airways Virtual closed beta.\n\nPilot reference: ${input.pilotNumber}\nEmail: ${input.email}\nTemporary password: ${input.temporaryPassword}\n\nSign in at ${loginUrl}. Please change this temporary password from Account settings after you sign in.\n\nIf you were not expecting this invitation, you can ignore this email.`,
-    html: emailShell("Welcome to the closed beta", `<p>Hello ${escapeHtml(input.name)},</p><p>You have been invited to the British Airways Virtual closed beta.</p><p><strong>Pilot reference:</strong> ${escapeHtml(input.pilotNumber)}<br /><strong>Email:</strong> ${escapeHtml(input.email)}<br /><strong>Temporary password:</strong> <span style="font-family:monospace">${escapeHtml(input.temporaryPassword)}</span></p><p>Please change this temporary password from <strong>Account settings</strong> after you sign in.</p>${actionLink("Sign in to the closed beta", loginUrl)}<p style="color:#63768d;font-size:12px">If you were not expecting this invitation, you can safely ignore this email.</p>`),
+    subject: "Your closed-beta invitation and confidentiality agreement",
+    text: `Hello ${input.name},\n\nYou have been invited to the British Airways Virtual closed beta. Your access is personal and should not be shared.\n\nPilot reference: ${input.pilotNumber}\nEmail: ${input.email}\nTemporary password: ${input.temporaryPassword}\n\nSign in at ${loginUrl}. Please change this temporary password from Account settings after you sign in.\n\nBefore you continue, please read the agreement below. By signing in to or continuing to use the closed beta after receiving this invitation, you confirm that you have read and agree to these terms.\n\n${closedBetaAgreementText()}\n\nIf you were not expecting this invitation, you can safely ignore this email.`,
+    html: emailShell("Your closed-beta invitation", `<p>Hello ${name},</p><p>You have been invited to the British Airways Virtual closed beta. Your access is personal and should not be shared.</p><div style="margin:22px 0;padding:18px 20px;background:#eef5fc;border-left:3px solid #075aaa"><strong>Pilot reference:</strong> ${pilotNumber}<br /><strong>Email:</strong> ${email}<br /><strong>Temporary password:</strong> <span style="font-family:monospace">${temporaryPassword}</span></div><p>Please change this temporary password from <strong>Account settings</strong> after you sign in. By signing in to or continuing to use the closed beta after receiving this invitation, you confirm that you have read and agree to the agreement below.</p>${closedBetaAgreementHtml()}${actionLink("Read, agree and sign in", loginUrl)}<p style="color:#63768d;font-size:12px">If you were not expecting this invitation, you can safely ignore this email.</p>`),
   });
 }
 
