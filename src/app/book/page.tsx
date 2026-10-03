@@ -26,8 +26,9 @@ function airportName(code: string) {
 
 function callsignLabel(flightNumber: string, callsign?: string) {
   const virtualNumber = /^BAV(\d{1,5})$/i.exec(flightNumber.trim())?.[1];
+  if (virtualNumber) return "BAV virtual service · no real-world callsign";
   const identifier = resolveBritishAirwaysCallsign(flightNumber, callsign);
-  return virtualNumber ? `${identifier} · BAV virtual service` : `${identifier} · checked ICAO identifier`;
+  return `${identifier} · checked ICAO identifier`;
 }
 
 function durationToMinutes(value: string) {

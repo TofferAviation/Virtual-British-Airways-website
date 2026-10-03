@@ -1,5 +1,5 @@
 import { countActiveScheduleBookings } from "@/lib/pilot-operations-store";
-import { normaliseApprovedBaGroupCallsign, toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
 import { getStaffState, saveStaffState } from "@/lib/staff-store";
 import { BAV_NETWORK_2026, BAV_NETWORK_SCHEDULE_VERSION } from "@/data/bav-network-2026";
 
@@ -183,8 +183,8 @@ function virtualReturnService(route: ManagedRoute): ManagedRoute | null {
   if (departure === null || duration === null || !flightNumberMatch) return null;
 
   // 6000–8999 are reserved for the generated return side of BAV's
-  // 1000–3999 outbound virtual schedules. This preserves a readable and
-  // stable BAW callsign without imitating a real BA flight number.
+  // 1000–3999 outbound virtual schedules. It remains an internal BAV
+  // reference and must not claim a real-world operational callsign.
   const returnFlightNumber = `BAV${Number(flightNumberMatch[1]) + 5000}`;
   const returnDeparture = departure + 60; // virtual turnaround allowance
   return {
@@ -193,7 +193,6 @@ function virtualReturnService(route: ManagedRoute): ManagedRoute | null {
     from: route.to,
     to: route.from,
     flightNumber: returnFlightNumber,
-    callsign: toBritishAirwaysCallsign(returnFlightNumber),
     departure: minutesToClock(returnDeparture),
     arrival: minutesToClock(returnDeparture + duration),
   };

@@ -40,7 +40,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-virtual-operational-timetable-2026-09-19-r6";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-virtual-operational-timetable-2026-10-03-r7";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -138,7 +138,6 @@ const virtualOperationalRoutes: BavNetworkRouteSeed[] = (Object.keys(destination
       from,
       to,
       flightNumber,
-      callsign: toBritishAirwaysCallsign(flightNumber),
       departure: toClock(departureMinutes),
       arrival: toClock(departureMinutes + duration.hours * 60 + duration.minutes),
       duration: `${duration.hours}h ${String(duration.minutes).padStart(2, "0")}m`,
@@ -161,6 +160,7 @@ const sources = {
   belfastCity: "https://www.flightconnections.com/flights-from-lhr-to-bhd",
   newcastle: "https://www.directflights.com/LHR-NCL",
   portland: "https://www.flight.info/BA267",
+  oslo: "https://planefinder.net/data/flight/BA784/history/5-83332140",
 } as const;
 
 /**
@@ -168,6 +168,11 @@ const sources = {
  * More can be added through the Staff Centre route editor as they are audited.
  */
 const verifiedSchedules: BavNetworkRouteSeed[] = [
+  // Oslo: schedule and tracker identifier checked on 3 October 2026 for the
+  // Sunday 4 October operation. This replaces the BAV placeholder only for
+  // this verified service window; it is not extrapolated into later dates.
+  { id: "ba-a26-lhr-osl-ba784-20261004", from: "LHR", to: "OSL", flightNumber: "BA784", callsign: "BAW784", departure: "20:25", arrival: "23:30", duration: "2h 05m", aircraft: "Airbus A319", aircraftOptions: ["Airbus A319"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.oslo, validatedAt: "2026-10-03" },
+
   // Portland: current published schedule independently corroborated on 19 September 2026.
   // Operations can amend this record in Staff Centre when BA changes the season.
   { id: "ba-s26-lhr-pdx-ba267", from: "LHR", to: "PDX", flightNumber: "BA267", callsign: "BAW267", departure: "15:40", arrival: "17:40", duration: "10h 00m", aircraft: "Boeing 787-10", aircraftOptions: ["Boeing 787-10"], slots: 12, active: true, validFrom: "2026-09-01", validUntil: "2026-09-30", operatingDays: [0, 1, 2, 3, 4, 5, 6], sourceUrl: sources.portland, validatedAt: checked },
@@ -199,4 +204,3 @@ export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...virtualOperationalRoutes,
   ...verifiedSchedules,
 ];
-import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
