@@ -9,6 +9,7 @@ import { applyApprovedPirepStats, claimMentorPirepReward, createPilotNotificatio
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 import { creditAcceptedPirepSalary } from "@/lib/pilot-career";
+import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
@@ -59,6 +60,8 @@ export type PilotBooking = {
   pilotId: string;
   routeId: string | null;
   flightNumber: string;
+  /** Checked route-level ICAO identifier captured when the assignment is made. */
+  callsign: string | null;
   from: string;
   to: string;
   aircraft: string;
@@ -205,6 +208,7 @@ type OperationsState = {
 function normalizeBooking(booking: PilotBooking): PilotBooking {
   return {
     ...booking,
+    callsign: normaliseApprovedBaGroupCallsign(booking.callsign),
     routeId: booking.routeId ?? null,
     fleetAircraftId: typeof booking.fleetAircraftId === "string" && booking.fleetAircraftId.trim() ? booking.fleetAircraftId.trim() : null,
     registration: typeof booking.registration === "string" && booking.registration.trim() ? booking.registration.trim().toUpperCase() : null,

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PilotBooking, SimbriefBriefing, SimbriefRoutePoint } from "@/lib/pilot-operations-store";
 import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
+import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 
 const airportIcao: Record<string, string> = {
   ...BAV_NETWORK_ICAO_BY_IATA,
@@ -49,10 +50,11 @@ function buildSimbriefDispatchFields(booking: PilotBooking, pilotName: string, s
   const departure = departureParts(booking.departure);
   const duration = durationParts(booking.duration);
   const flightNumber = booking.flightNumber.replace(/^(?:BAV|BAW|BA)/i, "");
+  const callsign = resolveBritishAirwaysCallsign(booking.flightNumber, booking.callsign);
   return {
-    airline: "BAW",
+    airline: callsign.slice(0, 3),
     fltnum: flightNumber,
-    callsign: `BAW${flightNumber}`,
+    callsign,
     type: codes.aircraft,
     orig: codes.origin,
     dest: codes.destination,

@@ -1,5 +1,5 @@
 import { listLiveAcarsSessions } from "@/lib/acars-store";
-import { toBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
+import { resolveBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
 import { getPilotBooking, getPilotFlightPlan } from "@/lib/pilot-operations-store";
 
 export type CurrentFlightStatus = {
@@ -56,7 +56,7 @@ export async function listCurrentFlightStatuses(): Promise<CurrentFlightStatus[]
       pilotName: session.pilotName,
       pilotNumber: session.pilotNumber,
       flightNumber: toBritishAirwaysFlightNumber(session.flightNumber),
-      callsign: toBritishAirwaysCallsign(session.flightNumber),
+      callsign: resolveBritishAirwaysCallsign(session.flightNumber, booking?.callsign),
       from: session.from,
       to: session.to,
       aircraft: session.aircraft,

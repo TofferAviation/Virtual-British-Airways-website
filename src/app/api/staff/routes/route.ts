@@ -10,6 +10,7 @@ import {
 import type { PermissionId } from "@/lib/permissions";
 import { getStaffSession } from "@/lib/staff-auth";
 import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
+import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
 
 function text(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
@@ -45,10 +46,7 @@ function bavVirtualFlightNumber(value: unknown) {
 }
 
 function callsign(value: unknown) {
-  const candidate = text(value).toUpperCase().replace(/\s+/g, "");
-  // BAW is BA's ICAO designator.  A small alpha suffix is allowed for a
-  // tracker-confirmed operational callsign such as BAW26PV.
-  return /^BAW\d{1,4}[A-Z]{0,2}$/.test(candidate) ? candidate : undefined;
+  return normaliseApprovedBaGroupCallsign(text(value)) ?? undefined;
 }
 
 function aircraftList(value: unknown) {
@@ -91,7 +89,10 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   const suppliedCallsign = text(raw.callsign);
   const verifiedCallsign = suppliedCallsign ? callsign(suppliedCallsign) : undefined;
   if (suppliedCallsign && !verifiedCallsign) {
-    throw new Error("Use a BAW callsign in the format BAW267.");
+    throw new Error("Use a checked BA Group ICAO identifier, for example BAW267, CFE123 or BAW26PV.");
+  }
+  if (!virtualTimetable && !verifiedCallsign) {
+    throw new Error("A verified ICAO callsign is required for a published BA timetable.");
   }
   return {
     id,
@@ -191,7 +192,7 @@ function parseTimetableImport(csv: string) {
   return rows.slice(1).map((row, rowIndex) => {
     try {
       const realCallsign = csvValue(row, headers, "callsign");
-      if (!callsign(realCallsign)) throw new Error("Callsign must be a verified BAW identifier, for example BAW267.");
+      if (!callsign(realCallsign)) throw new Error("Callsign must be a checked BA Group ICAO identifier, for example BAW267 or CFE123.");
       const route = normalizeRoute({
         from: csvValue(row, headers, "from"),
         to: csvValue(row, headers, "to"),

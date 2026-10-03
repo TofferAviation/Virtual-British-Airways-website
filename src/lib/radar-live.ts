@@ -1,9 +1,9 @@
 import { listLiveAcarsSessionTrackSnapshots, listLiveAcarsSessions } from "@/lib/acars-store";
 import type { SupportedSimulator } from "@/lib/acars-contract";
-import { toBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
+import { resolveBritishAirwaysCallsign, toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
 import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
 import { listFleetAircraft, type FleetAircraftImage } from "@/lib/fleet-service";
-import { getPilotFlightPlan, type SimbriefBriefing } from "@/lib/pilot-operations-store";
+import { getPilotBooking, getPilotFlightPlan, type SimbriefBriefing } from "@/lib/pilot-operations-store";
 
 export type PublicRadarSnapshot = {
   timestamp: string;
@@ -236,13 +236,15 @@ export async function listPublicRadarFlights(): Promise<PublicRadarFlight[]> {
     Promise.all(sessions.map(async (session) => {
       try {
         const plan = await getPilotFlightPlan(session.bookingId, session.pilotId);
+        const booking = await getPilotBooking(session.bookingId, session.pilotId);
         return [session.id, {
           plannedRoute: plannedRouteFromBriefing(plan?.simbriefBriefing ?? null),
           alternate: plan?.alternate ?? null,
+          callsign: booking?.callsign ?? null,
         }] as const;
       } catch (error) {
         console.error(`[radar] Could not load the planned route for ${session.id}.`, error);
-        return [session.id, { plannedRoute: null, alternate: null }] as const;
+        return [session.id, { plannedRoute: null, alternate: null, callsign: null }] as const;
       }
     })),
   ]);
@@ -262,7 +264,7 @@ export async function listPublicRadarFlights(): Promise<PublicRadarFlight[]> {
     return {
       id: session.id,
       flightNumber: toBritishAirwaysFlightNumber(session.flightNumber),
-      callsign: toBritishAirwaysCallsign(session.flightNumber),
+      callsign: resolveBritishAirwaysCallsign(session.flightNumber, flightPlansBySession.get(session.id)?.callsign),
       from: session.from,
       to: session.to,
       aircraft: session.aircraft,

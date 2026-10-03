@@ -9,7 +9,7 @@ import { airportByCode } from "@/data/airports";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getPilotById } from "@/lib/pilot-store";
 import { BAV_NETWORK_ROUTE_COUNTS } from "@/data/bav-network-2026";
-import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 import { fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, isFleetAircraftBookable, listFleetAircraft } from "@/lib/fleet-service";
 import { bookFlight } from "./actions";
 import { BookingAssignmentControls } from "./BookingAssignmentControls";
@@ -26,10 +26,8 @@ function airportName(code: string) {
 
 function callsignLabel(flightNumber: string, callsign?: string) {
   const virtualNumber = /^BAV(\d{1,5})$/i.exec(flightNumber.trim())?.[1];
-  if (virtualNumber) return `${toBritishAirwaysCallsign(callsign ?? flightNumber)} · BAV virtual service`;
-  const number = /^BA(\d{1,4})$/i.exec(flightNumber.trim())?.[1];
-  if (!number) return callsign ?? null;
-  return `${callsign ?? `BAW${number}`} · SPEEDBIRD ${number}`;
+  const identifier = resolveBritishAirwaysCallsign(flightNumber, callsign);
+  return virtualNumber ? `${identifier} · BAV virtual service` : `${identifier} · checked ICAO identifier`;
 }
 
 function durationToMinutes(value: string) {

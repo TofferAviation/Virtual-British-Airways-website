@@ -84,6 +84,7 @@ export async function bookFlight(formData: FormData) {
       pilotId: session.pilotId,
       routeId: flight.routeId,
       flightNumber: flight.number,
+      callsign: flight.callsign ?? null,
       from,
       to,
       aircraft: selectedAircraft,

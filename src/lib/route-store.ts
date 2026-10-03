@@ -1,5 +1,5 @@
 import { countActiveScheduleBookings } from "@/lib/pilot-operations-store";
-import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { normaliseApprovedBaGroupCallsign, toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 import { getStaffState, saveStaffState } from "@/lib/staff-store";
 import { BAV_NETWORK_2026, BAV_NETWORK_SCHEDULE_VERSION } from "@/data/bav-network-2026";
 
@@ -8,7 +8,7 @@ export type ManagedRoute = {
   from: string;
   to: string;
   flightNumber: string;
-  /** ICAO flight identifier, for example BAW267.  Voice callsign is SPEEDBIRD. */
+  /** Checked ICAO flight identifier, for example BAW267 or CFE123. */
   callsign?: string;
   departure: string;
   arrival: string;
@@ -47,7 +47,7 @@ function normalizedRoutes(routes: unknown[]) {
     ...route,
     id: route.id.trim(), from: route.from.trim().toUpperCase(), to: route.to.trim().toUpperCase(),
     flightNumber: route.flightNumber.trim().toUpperCase(),
-    callsign: typeof route.callsign === "string" && route.callsign.trim() ? toBritishAirwaysCallsign(route.callsign) : undefined,
+    callsign: normaliseApprovedBaGroupCallsign(route.callsign) ?? undefined,
     departure: route.departure.trim(), arrival: route.arrival.trim(),
     duration: route.duration.trim(), aircraft: route.aircraft.trim(), slots: Math.max(0, Math.round(route.slots)),
     validFrom: typeof route.validFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validFrom) ? route.validFrom : undefined,

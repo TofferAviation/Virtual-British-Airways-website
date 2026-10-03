@@ -1,5 +1,5 @@
 import type { SimbriefBriefing } from "@/lib/pilot-operations-store";
-import { toBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 import { RouteWindBriefing } from "./RouteWindBriefing";
 
 type Detail = { label: string; value: string | null };
@@ -30,7 +30,7 @@ function formatKg(value: string | null) {
   return Number.isFinite(amount) ? `${amount.toLocaleString("en-GB")} kg` : value;
 }
 
-export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate, ofpUrl, originIcao, destinationIcao, date, departure, duration }: {
+export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate, ofpUrl, originIcao, destinationIcao, date, departure, duration, callsign }: {
   briefing: SimbriefBriefing;
   route: string | null;
   cruiseAltitude: string | null;
@@ -41,6 +41,7 @@ export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate,
   date: string;
   departure: string;
   duration: string;
+  callsign: string | null;
 }) {
   const title = [briefing.airline, briefing.flightNumber].filter(Boolean).join(" ") || "SimBrief operational briefing";
 
@@ -50,7 +51,7 @@ export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate,
     <p className="briefing-intro">This briefing was copied to your BAV assignment when the OFP was synced. It remains available here while you prepare and fly the service.</p>
     <div className="briefing-grid">
       <section><h3>Flight & timing</h3><DetailList items={[
-        { label: "Callsign", value: briefing.callsign ? toBritishAirwaysCallsign(briefing.callsign) : null }, { label: "Aircraft", value: [briefing.aircraft, briefing.aircraftIcao].filter(Boolean).join(" · ") || null },
+        { label: "Callsign", value: resolveBritishAirwaysCallsign(briefing.flightNumber ?? "", callsign ?? briefing.callsign) }, { label: "Aircraft", value: [briefing.aircraft, briefing.aircraftIcao].filter(Boolean).join(" · ") || null },
         { label: "AIRAC", value: briefing.airac }, { label: "Scheduled off-block", value: formatTime(briefing.scheduledOut) },
         { label: "Scheduled in-block", value: formatTime(briefing.scheduledIn) }, { label: "Estimated off-block", value: formatTime(briefing.estimatedOut) },
         { label: "Estimated in-block", value: formatTime(briefing.estimatedIn) }, { label: "Block time", value: formatDuration(briefing.blockTime) },
