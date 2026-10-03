@@ -19,6 +19,7 @@ export type FleetAircraftSummary = {
   lastFlightAt: string | null;
   nextAssignedFlightReference: string | null;
   statusVersion: number;
+  currentLivery: string | null;
   image: FleetAircraftImage | null;
 };
 
@@ -113,6 +114,7 @@ export type FleetAircraftDetail = FleetAircraftSummary & {
   currentLivery: string | null;
   configurationId: string | null;
   entryIntoServiceDate: string | null;
+  deliveryDate: string | null;
   engineData: unknown;
   apuData: unknown;
 };
@@ -341,7 +343,9 @@ export type FleetMaintenanceEvent = {
   reference: string;
   maintenance_type: string;
   planned_start_at: string | null;
+  actual_start_at: string | null;
   estimated_completion_at: string | null;
+  actual_completion_at: string | null;
   location: string | null;
   provider: string | null;
   reason: string;
@@ -383,6 +387,62 @@ export type FleetAircraftRecord = FleetAircraftDetail & {
   logbook: FleetLogEntry[];
 };
 
+export const FLEET_AIRFRAME_FAMILIARITY_LEVELS = [
+  { key: "new", label: "New", minimumFlights: 0 },
+  { key: "familiar", label: "Familiar", minimumFlights: 1 },
+  { key: "bronze", label: "Bronze", minimumFlights: 5 },
+  { key: "silver", label: "Silver", minimumFlights: 15 },
+  { key: "gold", label: "Gold", minimumFlights: 30 },
+  { key: "master", label: "Master", minimumFlights: 50 },
+] as const;
+
+export type FleetPublicFlight = {
+  id: string;
+  flightReference: string;
+  departureStation: string | null;
+  arrivalStation: string | null;
+  offBlockAt: string | null;
+  onBlockAt: string | null;
+  blockMinutes: number;
+  flightCycles: number;
+  pilotName: string | null;
+};
+
+export type FleetAircraftProfile = {
+  aircraft: FleetAircraftDetail;
+  configuration: { code: string; name: string; cabinLayoutId: string | null; cabinDefinition: unknown } | null;
+  statistics: { sectors: number; distanceNm: number | null; flightHoursMinutes: number; cycles: number; reliability: null };
+  operation: {
+    state: "airborne" | "operating" | "assigned" | "maintenance" | "unavailable" | "turnaround" | "parked";
+    airport: string | null;
+    updatedAt: string | null;
+    liveTelemetry: { latitude: number; longitude: number; altitudeFt: number; groundSpeedKt: number } | null;
+    previousFlight: FleetPublicFlight | null;
+    nextAssignment: FleetFlightAssignment | null;
+  };
+  maintenance: {
+    serviceability: "serviceable" | "limited_service" | "maintenance_due" | "in_maintenance" | "aog" | "out_of_service";
+    openDefects: number;
+    deferredDefects: Array<{ reference: string; category: string; status: string; restriction: string | null }>;
+    nextDue: FleetMaintenanceDue | null;
+    lastMaintenanceAt: string | null;
+  };
+  recentFlights: FleetPublicFlight[];
+  logbook: Array<{ id: string; occurredAt: string; category: "flight" | "maintenance" | "technical" | "livery" | "status"; title: string; detail: string; station: string | null }>;
+  pilotHistory: {
+    flights: number;
+    blockMinutes: number;
+    distanceNm: number;
+    destinations: number;
+    firstFlightAt: string | null;
+    latestFlightAt: string | null;
+    longestFlight: { flightReference: string; route: string; distanceNm: number } | null;
+    mostCommonRoute: string | null;
+    percentageOfPilotFlights: number | null;
+    familiarity: (typeof FLEET_AIRFRAME_FAMILIARITY_LEVELS)[number];
+  } | null;
+};
+
 type AircraftRow = {
   id: string;
   registration: string;
@@ -407,8 +467,43 @@ type AircraftRow = {
   current_livery: string | null;
   configuration_id: string | null;
   entry_into_service_date: string | null;
+  delivery_date: string | null;
   engine_data: unknown;
   apu_data: unknown;
+};
+
+type AircraftFlightRow = {
+  id: string;
+  external_event_id: string;
+  flight_reference: string;
+  departure_station: string | null;
+  arrival_station: string | null;
+  off_block_at: string | null;
+  on_block_at: string | null;
+  block_minutes: number;
+  flight_cycles: number;
+};
+
+type AcarsProfileSessionRow = {
+  id: string;
+  flight_number: string;
+  departure_station: string;
+  arrival_station: string;
+  started_at: string;
+  completed_at: string | null;
+  distance_nm: number;
+  updated_at: string;
+  last_snapshot: unknown;
+};
+
+type PirepMetricRow = {
+  acars_session_id: string | null;
+  flight_number: string;
+  departure_station: string;
+  arrival_station: string;
+  completed_at: string;
+  block_minutes: number;
+  distance_nm: number;
 };
 
 type AircraftImageRow = {
@@ -490,6 +585,7 @@ function asSummary(row: AircraftRow, image?: AircraftImageRow | null): FleetAirc
     lastFlightAt: row.last_flight_at,
     nextAssignedFlightReference: row.next_assigned_flight_reference,
     statusVersion: row.status_version,
+    currentLivery: row.current_livery,
     image: asImage(image),
   };
 }
@@ -505,6 +601,7 @@ function asDetail(row: AircraftRow, image?: AircraftImageRow | null): FleetAircr
     currentLivery: row.current_livery,
     configurationId: row.configuration_id,
     entryIntoServiceDate: row.entry_into_service_date,
+    deliveryDate: row.delivery_date,
     engineData: row.engine_data,
     apuData: row.apu_data,
   };
@@ -564,8 +661,8 @@ export function fleetRoleCodeForWebsiteRole(websiteRole: string) {
   return "viewer";
 }
 
-const summaryFields = "id, registration, aircraft_model, variant, icao_type, subfleet, current_station, operational_status, technical_status, dispatch_status, airframe_hours_minutes, airframe_cycles, last_flight_at, next_assigned_flight_reference, status_version";
-const detailFields = `${summaryFields}, fleet_number, aircraft_family, manufacturer, msn, home_base, current_livery, configuration_id, entry_into_service_date, engine_data, apu_data`;
+const summaryFields = "id, registration, aircraft_model, variant, icao_type, subfleet, current_station, operational_status, technical_status, dispatch_status, airframe_hours_minutes, airframe_cycles, last_flight_at, next_assigned_flight_reference, status_version, current_livery";
+const detailFields = `${summaryFields}, fleet_number, aircraft_family, manufacturer, msn, home_base, current_livery, configuration_id, entry_into_service_date, delivery_date, engine_data, apu_data`;
 
 async function fleetImagesByAircraft(client: SupabaseClient, organization: string, aircraftIds?: string[]) {
   let query = client
@@ -605,6 +702,25 @@ export async function getFleetAircraft(aircraftId: string): Promise<FleetAircraf
   if (!data) return null;
   const images = await fleetImagesByAircraft(client, organization, [aircraftId]);
   return asDetail(data as AircraftRow, images.get(aircraftId));
+}
+
+/** Looks up an individual airframe by its public registration, never by a browser-supplied database ID. */
+export async function getFleetAircraftByRegistration(registrationInput: string): Promise<FleetAircraftDetail | null> {
+  const registration = registrationInput.trim().toUpperCase();
+  if (!/^[A-Z0-9-]{2,16}$/.test(registration)) return null;
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const { data, error } = await client
+    .from("aircraft")
+    .select(detailFields)
+    .eq("organization_id", organization)
+    .eq("registration", registration)
+    .maybeSingle();
+  if (error) throw new FleetServiceError(`Could not load aircraft: ${error.message}`);
+  if (!data) return null;
+  const row = data as AircraftRow;
+  const images = await fleetImagesByAircraft(client, organization, [row.id]);
+  return asDetail(row, images.get(row.id));
 }
 
 function requestId() {
@@ -1171,7 +1287,7 @@ export async function getFleetAircraftRecord(aircraftId: string): Promise<FleetA
     client.rpc("fleet_aircraft_availability", { p_aircraft_id: aircraftId }),
     client.from("aircraft_defects").select("id, reference, reported_at, reporting_station, category, seat_number, description, severity, dispatch_impact, status, version, deferred_defects(id, deferral_kind, reference, restriction, operational_procedure, maintenance_procedure, due_at, due_cycles, due_hours_minutes)").eq("organization_id", organization).eq("aircraft_id", aircraftId).order("reported_at", { ascending: false }),
     client.rpc("fleet_maintenance_due", { p_aircraft_id: aircraftId }),
-    client.from("maintenance_events").select("id, reference, maintenance_type, planned_start_at, estimated_completion_at, location, provider, reason, status, blocking, version").eq("organization_id", organization).eq("aircraft_id", aircraftId).order("created_at", { ascending: false }),
+    client.from("maintenance_events").select("id, reference, maintenance_type, planned_start_at, actual_start_at, estimated_completion_at, actual_completion_at, location, provider, reason, status, blocking, version").eq("organization_id", organization).eq("aircraft_id", aircraftId).order("created_at", { ascending: false }),
     client.from("aircraft_damage_records").select("id, reference, reported_at, station, location, damage_type, description, severity, status, version").eq("organization_id", organization).eq("aircraft_id", aircraftId).order("reported_at", { ascending: false }),
     client.from("aircraft_repaints").select("id, reference, new_livery, paint_facility, status, estimated_completion_at").eq("organization_id", organization).eq("aircraft_id", aircraftId).order("created_at", { ascending: false }),
     client.from("aircraft_status_history").select("id, operational_status, technical_status, dispatch_status, reason, remarks, station, effective_at, source, changed_by_subject").eq("organization_id", organization).eq("aircraft_id", aircraftId).order("effective_at", { ascending: false }).limit(50),
@@ -1205,6 +1321,164 @@ export async function getFleetAircraftRecord(aircraftId: string): Promise<FleetA
     repaints: (repaintResult.data ?? []) as FleetRepaint[],
     statusHistory: (historyResult.data ?? []) as FleetStatusHistoryEntry[],
     logbook: (logbookResult.data ?? []) as FleetLogEntry[],
+  };
+}
+
+function publicFlight(row: AircraftFlightRow, assignment?: FlightAssignmentRow): FleetPublicFlight {
+  return {
+    id: row.id,
+    flightReference: row.flight_reference,
+    departureStation: row.departure_station,
+    arrivalStation: row.arrival_station,
+    offBlockAt: row.off_block_at,
+    onBlockAt: row.on_block_at,
+    blockMinutes: row.block_minutes,
+    flightCycles: row.flight_cycles,
+    pilotName: assignment?.pilot_display_name ?? null,
+  };
+}
+
+function profileTelemetry(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = value as Record<string, unknown>;
+  const number = (field: string) => typeof snapshot[field] === "number" && Number.isFinite(snapshot[field]) ? snapshot[field] : null;
+  const latitude = number("latitude");
+  const longitude = number("longitude");
+  const altitudeFt = number("altitudeFt");
+  const groundSpeedKt = number("groundSpeedKt");
+  if (latitude == null || longitude == null || altitudeFt == null || groundSpeedKt == null) return null;
+  return { latitude, longitude, altitudeFt, groundSpeedKt, onGround: snapshot.onGround === true };
+}
+
+function familiarityForFlights(flights: number) {
+  return [...FLEET_AIRFRAME_FAMILIARITY_LEVELS].reverse().find((level) => flights >= level.minimumFlights) ?? FLEET_AIRFRAME_FAMILIARITY_LEVELS[0];
+}
+
+function publicServiceability(record: FleetAircraftRecord): FleetAircraftProfile["maintenance"]["serviceability"] {
+  if (["aog", "grounded"].includes(record.technicalStatus)) return "aog";
+  if (["in_maintenance", "scheduled_maintenance", "awaiting_parts", "awaiting_engineering", "damage_inspection", "repaint"].includes(record.technicalStatus)) return "in_maintenance";
+  if (record.dispatchStatus === "not_dispatchable" || record.operationalStatus === "retired") return "out_of_service";
+  if (record.maintenanceDue.some((item) => item.due_status === "overdue")) return "maintenance_due";
+  if (record.technicalStatus === "serviceable_with_deferred_defects" || record.dispatchStatus === "dispatchable_with_restrictions") return "limited_service";
+  return "serviceable";
+}
+
+async function pilotHistoryForAircraft(client: SupabaseClient, registration: string, pilotId: string): Promise<FleetAircraftProfile["pilotHistory"]> {
+  const [sessionsResult, totalPirepsResult] = await Promise.all([
+    client.from("acars_sessions")
+      .select("id, flight_number, departure_station, arrival_station, started_at, completed_at, distance_nm, updated_at, last_snapshot")
+      .eq("pilot_id", pilotId)
+      .eq("status", "completed")
+      .contains("last_snapshot", { registration })
+      .order("completed_at", { ascending: true }),
+    client.from("pilot_pireps").select("id", { count: "exact", head: true }).eq("pilot_id", pilotId).eq("status", "accepted"),
+  ]);
+  if (sessionsResult.error) throw new FleetServiceError(`Could not load pilot airframe history: ${sessionsResult.error.message}`);
+  if (totalPirepsResult.error) throw new FleetServiceError(`Could not load pilot career totals: ${totalPirepsResult.error.message}`);
+  const sessions = (sessionsResult.data ?? []) as AcarsProfileSessionRow[];
+  if (!sessions.length) return { flights: 0, blockMinutes: 0, distanceNm: 0, destinations: 0, firstFlightAt: null, latestFlightAt: null, longestFlight: null, mostCommonRoute: null, percentageOfPilotFlights: totalPirepsResult.count ? 0 : null, familiarity: familiarityForFlights(0) };
+
+  const { data: pirepData, error: pirepError } = await client.from("pilot_pireps")
+    .select("acars_session_id, flight_number, departure_station, arrival_station, completed_at, block_minutes, distance_nm")
+    .eq("pilot_id", pilotId)
+    .eq("status", "accepted")
+    .in("acars_session_id", sessions.map((session) => session.id));
+  if (pirepError) throw new FleetServiceError(`Could not load accepted pilot airframe history: ${pirepError.message}`);
+  const flights = (pirepData ?? []) as PirepMetricRow[];
+  const routeCounts = new Map<string, number>();
+  const destinations = new Set<string>();
+  let longestFlight: { flightReference: string; route: string; distanceNm: number } | null = null;
+  for (const flight of flights) {
+    const route = `${flight.departure_station} → ${flight.arrival_station}`;
+    routeCounts.set(route, (routeCounts.get(route) ?? 0) + 1);
+    destinations.add(flight.arrival_station);
+    if (!longestFlight || flight.distance_nm > longestFlight.distanceNm) longestFlight = { flightReference: flight.flight_number, route, distanceNm: flight.distance_nm };
+  }
+  const mostCommonRoute = [...routeCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null;
+  const totalPireps = totalPirepsResult.count ?? 0;
+  return {
+    flights: flights.length,
+    blockMinutes: flights.reduce((total, flight) => total + Math.max(0, flight.block_minutes), 0),
+    distanceNm: flights.reduce((total, flight) => total + Math.max(0, flight.distance_nm), 0),
+    destinations: destinations.size,
+    firstFlightAt: flights[0]?.completed_at ?? null,
+    latestFlightAt: flights.at(-1)?.completed_at ?? null,
+    longestFlight,
+    mostCommonRoute,
+    percentageOfPilotFlights: totalPireps ? Math.round((flights.length / totalPireps) * 1000) / 10 : null,
+    familiarity: familiarityForFlights(flights.length),
+  };
+}
+
+/**
+ * The pilot-safe aircraft read model. It composes existing Fleet, ACARS and
+ * PIREP records without adding a second source of truth for an airframe.
+ */
+export async function getFleetAircraftProfile(registrationInput: string, pilotId?: string | null): Promise<FleetAircraftProfile | null> {
+  const aircraft = await getFleetAircraftByRegistration(registrationInput);
+  if (!aircraft) return null;
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const [record, configurationResult, sectorCountResult, recentFlightsResult, activeAssignmentResult, liveSessionResult, telemetryDistanceResult, pilotHistory] = await Promise.all([
+    getFleetAircraftRecord(aircraft.id),
+    aircraft.configurationId ? client.from("aircraft_configurations").select("code, name, cabin_layout_id, cabin_definition").eq("organization_id", organization).eq("id", aircraft.configurationId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    client.from("aircraft_flights").select("id", { count: "exact", head: true }).eq("organization_id", organization).eq("aircraft_id", aircraft.id),
+    client.from("aircraft_flights").select("id, external_event_id, flight_reference, departure_station, arrival_station, off_block_at, on_block_at, block_minutes, flight_cycles").eq("organization_id", organization).eq("aircraft_id", aircraft.id).order("on_block_at", { ascending: false }).range(0, 29),
+    client.from("aircraft_flight_assignments").select("id, aircraft_id, pilot_subject, pilot_display_name, flight_reference, departure_station, arrival_station, status, reserved_at, off_block_at, on_block_at, block_minutes").eq("organization_id", organization).eq("aircraft_id", aircraft.id).in("status", ["reserved", "operating"]).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    client.from("acars_sessions").select("id, flight_number, departure_station, arrival_station, started_at, completed_at, distance_nm, updated_at, last_snapshot").eq("status", "active").contains("last_snapshot", { registration: aircraft.registration }).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    client.from("acars_sessions").select("distance_nm").eq("status", "completed").contains("last_snapshot", { registration: aircraft.registration }),
+    pilotId ? pilotHistoryForAircraft(client, aircraft.registration, pilotId) : Promise.resolve(null),
+  ]);
+  if (!record) return null;
+  if (configurationResult.error) throw new FleetServiceError(`Could not load aircraft configuration: ${configurationResult.error.message}`);
+  if (sectorCountResult.error) throw new FleetServiceError(`Could not count BAV sectors: ${sectorCountResult.error.message}`);
+  if (recentFlightsResult.error) throw new FleetServiceError(`Could not load recent aircraft flights: ${recentFlightsResult.error.message}`);
+  if (activeAssignmentResult.error) throw new FleetServiceError(`Could not load aircraft assignment: ${activeAssignmentResult.error.message}`);
+  if (liveSessionResult.error) throw new FleetServiceError(`Could not load live aircraft telemetry: ${liveSessionResult.error.message}`);
+  if (telemetryDistanceResult.error) throw new FleetServiceError(`Could not load aircraft telemetry distance: ${telemetryDistanceResult.error.message}`);
+
+  const recentRows = (recentFlightsResult.data ?? []) as AircraftFlightRow[];
+  const flightEventIds = recentRows.map((flight) => flight.external_event_id);
+  const assignmentResult = flightEventIds.length
+    ? await client.from("aircraft_flight_assignments").select("id, aircraft_id, pilot_subject, pilot_display_name, flight_reference, departure_station, arrival_station, status, reserved_at, off_block_at, on_block_at, block_minutes").eq("organization_id", organization).in("id", flightEventIds)
+    : { data: [], error: null };
+  if (assignmentResult.error) throw new FleetServiceError(`Could not load flight crews: ${assignmentResult.error.message}`);
+  const assignmentsById = new Map(((assignmentResult.data ?? []) as FlightAssignmentRow[]).map((assignment) => [assignment.id, assignment]));
+  const recentFlights = recentRows.map((flight) => publicFlight(flight, assignmentsById.get(flight.external_event_id)));
+  const activeAssignment = activeAssignmentResult.data ? asFlightAssignment(activeAssignmentResult.data as FlightAssignmentRow) : null;
+  const liveSession = liveSessionResult.data as AcarsProfileSessionRow | null;
+  const telemetry = profileTelemetry(liveSession?.last_snapshot);
+  const serviceability = publicServiceability(record);
+  const activeMaintenance = record.maintenanceEvents.some((event) => !["completed", "released", "cancelled"].includes(event.status));
+  const state = telemetry && !telemetry.onGround ? "airborne" as const
+    : activeAssignment?.status === "operating" ? "operating" as const
+      : activeAssignment?.status === "reserved" ? "assigned" as const
+        : activeMaintenance ? "maintenance" as const
+          : !record.availability.available ? "unavailable" as const
+            : record.operationalStatus === "turnaround" ? "turnaround" as const
+              : "parked" as const;
+  const openDefects = record.defects.filter((defect) => !["closed", "voided", "rectified"].includes(defect.status));
+  const nextDue = [...record.maintenanceDue].sort((left, right) => (left.due_status === "overdue" ? -1 : right.due_status === "overdue" ? 1 : left.due_status === "due_soon" ? -1 : right.due_status === "due_soon" ? 1 : left.task_code.localeCompare(right.task_code)))[0] ?? null;
+  const lastMaintenance = record.maintenanceEvents.find((event) => ["completed", "released"].includes(event.status));
+  const telemetryDistance = ((telemetryDistanceResult.data ?? []) as Array<{ distance_nm: number | null }>).reduce((total, session) => total + Math.max(0, Number(session.distance_nm) || 0), 0);
+  const logbook = [
+    ...recentFlights.map((flight) => ({ id: `flight-${flight.id}`, occurredAt: flight.onBlockAt ?? flight.offBlockAt ?? new Date(0).toISOString(), category: "flight" as const, title: `${flight.flightReference} completed`, detail: `${flight.departureStation ?? "—"} → ${flight.arrivalStation ?? "—"}${flight.pilotName ? ` · ${flight.pilotName}` : ""}`, station: flight.arrivalStation })),
+    ...record.maintenanceEvents.slice(0, 10).map((event) => ({ id: `maintenance-${event.id}`, occurredAt: event.actual_completion_at ?? event.actual_start_at ?? event.planned_start_at ?? new Date(0).toISOString(), category: "maintenance" as const, title: `${event.maintenance_type} maintenance`, detail: event.status.replaceAll("_", " "), station: event.location })),
+    ...openDefects.slice(0, 10).map((defect) => ({ id: `defect-${defect.id}`, occurredAt: defect.reported_at, category: "technical" as const, title: `${defect.category} technical record`, detail: defect.status.replaceAll("_", " "), station: defect.reporting_station })),
+    ...record.repaints.slice(0, 5).map((repaint) => ({ id: `repaint-${repaint.id}`, occurredAt: repaint.estimated_completion_at ?? new Date(0).toISOString(), category: "livery" as const, title: `Livery: ${repaint.new_livery}`, detail: repaint.status.replaceAll("_", " "), station: repaint.paint_facility })),
+    ...record.statusHistory.slice(0, 10).map((entry) => ({ id: `status-${entry.id}`, occurredAt: entry.effective_at, category: "status" as const, title: "Operational status updated", detail: `${entry.operational_status.replaceAll("_", " ")} · ${entry.technical_status.replaceAll("_", " ")}`, station: entry.station })),
+  ].sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)).slice(0, 30);
+
+  const configuration = configurationResult.data as { code: string; name: string; cabin_layout_id: string | null; cabin_definition: unknown } | null;
+  return {
+    aircraft,
+    configuration: configuration ? { code: configuration.code, name: configuration.name, cabinLayoutId: configuration.cabin_layout_id, cabinDefinition: configuration.cabin_definition } : null,
+    statistics: { sectors: sectorCountResult.count ?? 0, distanceNm: telemetryDistance || null, flightHoursMinutes: aircraft.airframeHoursMinutes, cycles: aircraft.airframeCycles, reliability: null },
+    operation: { state, airport: state === "airborne" && liveSession ? `${liveSession.departure_station} → ${liveSession.arrival_station}` : aircraft.currentStation, updatedAt: liveSession?.updated_at ?? activeAssignment?.offBlockAt ?? activeAssignment?.reservedAt ?? aircraft.lastFlightAt, liveTelemetry: telemetry ? { latitude: telemetry.latitude, longitude: telemetry.longitude, altitudeFt: telemetry.altitudeFt, groundSpeedKt: telemetry.groundSpeedKt } : null, previousFlight: recentFlights[0] ?? null, nextAssignment: activeAssignment },
+    maintenance: { serviceability, openDefects: openDefects.length, deferredDefects: openDefects.filter((defect) => defect.deferral).map((defect) => ({ reference: defect.reference, category: defect.category, status: defect.status, restriction: defect.deferral?.restriction ?? null })), nextDue, lastMaintenanceAt: lastMaintenance?.actual_completion_at ?? lastMaintenance?.actual_start_at ?? lastMaintenance?.planned_start_at ?? null },
+    recentFlights,
+    logbook,
+    pilotHistory,
   };
 }
 

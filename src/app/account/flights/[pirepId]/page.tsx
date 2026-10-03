@@ -105,7 +105,7 @@ export default async function FlightDebriefPage({ params }: { params: Promise<{ 
       </ol></section>
 
       <section className="debrief-card"><span className="debrief-label">TELEMETRY RECORD</span><h2>Simulator capture</h2><dl className="debrief-data">
-        <div><dt>Aircraft registration</dt><dd>{registration ?? "Not reported"}</dd></div>
+        <div><dt>Aircraft registration</dt><dd>{registration ? <Link href={`/fleet/${encodeURIComponent(registration)}`}>{registration}</Link> : "Not reported"}</dd></div>
         <div><dt>Highest observed altitude</dt><dd>{maxAltitude == null ? "Not recorded" : `${maxAltitude.toLocaleString()} ft`}</dd></div>
         <div><dt>Highest observed ground speed</dt><dd>{maxGroundSpeed == null ? "Not recorded" : `${maxGroundSpeed.toLocaleString()} kt`}</dd></div>
         <div><dt>Telemetry reports</dt><dd>{reportCount ? reportCount.toLocaleString() : "No live reports"}</dd></div>

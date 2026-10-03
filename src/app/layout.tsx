@@ -16,6 +16,7 @@ import "./ba-reference-header.css";
 import "./oneworld.css";
 import "./fleet-v2.css";
 import "./fleet-banner-fix.css";
+import "./fleet-profiles.css";
 import "./about-va.css";
 import "./va-points.css";
 import "./tier-points.css";
