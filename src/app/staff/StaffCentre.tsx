@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { EventCategoryId, VirtualEvent } from "@/data/events";
 import type { ManagedRoute } from "@/lib/route-store";
 
@@ -9,6 +9,7 @@ type Props = {
   initialEvents: VirtualEvent[];
   initialRoutes: ManagedRoute[];
   staffName: string;
+  operationsQueue?: ReactNode;
 };
 
 function isoToday() {
@@ -73,7 +74,7 @@ function eventStatus(event: VirtualEvent) {
   return { label: "Published", className: "published" };
 }
 
-export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) {
+export function StaffCentre({ initialEvents, initialRoutes, staffName, operationsQueue }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [routes, setRoutes] = useState(initialRoutes);
   const [eventDraft, setEventDraft] = useState<VirtualEvent | null>(null);
@@ -285,6 +286,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName }: Props) 
               </tbody>
             </table>
           </div>
+          {operationsQueue}
         </div>
 
         <div className="staff-panel" id="route-tools">

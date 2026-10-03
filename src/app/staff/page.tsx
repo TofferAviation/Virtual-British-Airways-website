@@ -29,6 +29,7 @@ export default async function StaffPage() {
   const canViewSupport = Boolean(account && hasPermission(state, account, "support.view"));
   const canViewPermissions = Boolean(account && hasPermission(state, account, "users.view"));
   const canEditPilots = Boolean(account && hasPermission(state, account, "users.edit"));
+  const canManageClosedBeta = Boolean(account && hasPermission(state, account, "users.roles"));
   const canViewServiceStatus = Boolean(account && hasPermission(state, account, "status.view"));
   const canViewFleet = Boolean(account && hasPermission(state, account, "fleet.view"));
   const canViewTraffic = Boolean(account && hasPermission(state, account, "settings.view"));
@@ -36,6 +37,7 @@ export default async function StaffPage() {
   const canAccessServiceSettings = Boolean(account && hasPermission(state, account, SERVICE_SOURCE_PERMISSION));
   const preferences = await getStaffPreferences(session.userId);
   const staffBackground = preferences.staffPageBackground;
+  const activeStaffCount = state.users.filter((user) => user.status === "active").length;
   const [events, routes] = await Promise.all([
     canViewEvents ? getEvents() : Promise.resolve([]),
     canViewRoutes ? getManagedRoutes() : Promise.resolve([]),
@@ -69,11 +71,6 @@ export default async function StaffPage() {
               {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
             </div>
           </div>
-          <StaffOperationsInbox
-            canReviewPireps={canViewRoutes}
-            canReviewTransfers={canEditPilots}
-            canViewSupport={canViewSupport}
-          />
           <div className="staff-shell staff-permissions-launch-wrap">
             <Link className="staff-permissions-launch" href="/staff/sop">
               <span className="staff-permissions-launch-icon" aria-hidden="true">▤</span>
@@ -109,7 +106,23 @@ export default async function StaffPage() {
           {canEditSettings ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/rewards"><span className="staff-permissions-launch-icon" aria-hidden="true">★</span><span><strong>Reward settings</strong><small>Configure future PIREP VA Points, Tier Points and membership thresholds.</small></span><b aria-hidden="true">→</b></Link></div> : null}
           {canAccessServiceSettings ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings"><span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span><span><strong>Service settings</strong><small>Open the protected website source workspace for maintenance and direct code changes.</small></span><b aria-hidden="true">→</b></Link></div> : null}
           <StaffBackgroundControl initialBackground={staffBackground} />
-          <StaffCentre initialEvents={events} initialRoutes={routes} staffName={session.name} />
+          <StaffCentre
+            initialEvents={events}
+            initialRoutes={routes}
+            staffName={session.name}
+            operationsQueue={
+              <StaffOperationsInbox
+                canReviewPireps={canViewRoutes}
+                canManageMentoring={canEditPilots}
+                canViewSupport={canViewSupport}
+                canViewFleet={canViewFleet}
+                canViewLiveOperations={canViewRoutes}
+                canManageClosedBeta={canManageClosedBeta}
+                canViewServiceStatus={canViewServiceStatus}
+                activeStaffCount={activeStaffCount}
+              />
+            }
+          />
         </div>
       </main>
       <SiteFooter />

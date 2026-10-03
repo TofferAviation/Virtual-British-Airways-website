@@ -1,12 +1,20 @@
 import Link from "next/link";
+import { listLiveAcarsSessions } from "@/lib/acars-store";
+import { isFleetAircraftBookable, listFleetAircraft } from "@/lib/fleet-service";
 import { listAllPireps } from "@/lib/pilot-operations-store";
-import { listAllPilotHourTransferRequests } from "@/lib/pilot-store";
+import { listMentorApplications, listMentoringFlightReviews, listPilots } from "@/lib/pilot-store";
+import { overallServiceStatus, getServiceStatusState, serviceStateLabel } from "@/lib/service-status-store";
 import { listAllTickets } from "@/lib/ticket-store";
 
 type StaffOperationsInboxProps = {
   canReviewPireps: boolean;
-  canReviewTransfers: boolean;
+  canManageMentoring: boolean;
   canViewSupport: boolean;
+  canViewFleet: boolean;
+  canViewLiveOperations: boolean;
+  canManageClosedBeta: boolean;
+  canViewServiceStatus: boolean;
+  activeStaffCount: number;
 };
 
 type InboxItem = {
@@ -20,18 +28,29 @@ type InboxItem = {
 };
 
 /**
- * A permission-aware operational inbox for the Staff Centre landing page.
- * Each staff member sees only queues they are already permitted to open.
+ * Permission-aware work queue for the Staff Centre landing page. The count is
+ * calculated when the page opens, and a staff member only sees queues they
+ * already have permission to open.
  */
 export async function StaffOperationsInbox({
   canReviewPireps,
-  canReviewTransfers,
+  canManageMentoring,
   canViewSupport,
+  canViewFleet,
+  canViewLiveOperations,
+  canManageClosedBeta,
+  canViewServiceStatus,
+  activeStaffCount,
 }: StaffOperationsInboxProps) {
-  const [pireps, transferRequests, tickets] = await Promise.all([
+  const [pireps, tickets, mentorApplications, mentoringReviews, fleet, sessions, pilots, serviceStatus] = await Promise.all([
     canReviewPireps ? listAllPireps().catch(() => null) : Promise.resolve(null),
-    canReviewTransfers ? listAllPilotHourTransferRequests().catch(() => null) : Promise.resolve(null),
     canViewSupport ? listAllTickets().catch(() => null) : Promise.resolve(null),
+    canManageMentoring ? listMentorApplications().catch(() => null) : Promise.resolve(null),
+    canManageMentoring ? listMentoringFlightReviews().catch(() => null) : Promise.resolve(null),
+    canViewFleet ? listFleetAircraft().catch(() => null) : Promise.resolve(null),
+    canViewLiveOperations ? listLiveAcarsSessions().catch(() => null) : Promise.resolve(null),
+    canManageClosedBeta ? listPilots().catch(() => null) : Promise.resolve(null),
+    canViewServiceStatus ? getServiceStatusState().catch(() => null) : Promise.resolve(null),
   ]);
 
   const items: InboxItem[] = [];
@@ -45,26 +64,9 @@ export async function StaffOperationsInbox({
       count: pending,
       title: "PIREP reviews",
       detail: pending
-        ? `${pending} flight ${pending === 1 ? "report" : "reports"} ready for review${awaitingPilot ? ` · ${awaitingPilot} awaiting pilot response` : ""}`
-        : awaitingPilot
-          ? `No reviews due · ${awaitingPilot} awaiting pilot response`
-          : "No flight reports waiting for review",
+        ? `${pending} ready for review${awaitingPilot ? ` · ${awaitingPilot} with pilots` : ""}`
+        : awaitingPilot ? `${awaitingPilot} awaiting pilot response` : "No reports waiting",
       href: "/staff/pireps",
-      tone: pending ? "attention" : "clear",
-    });
-  }
-
-  if (transferRequests) {
-    const pending = transferRequests.filter((request) => request.status === "pending").length;
-    items.push({
-      id: "transfers",
-      icon: "↟",
-      count: pending,
-      title: "Transfer credit",
-      detail: pending
-        ? `${pending} former-VA ${pending === 1 ? "request" : "requests"} awaiting a decision`
-        : "No transfer-credit requests waiting",
-      href: "/staff/hour-transfers",
       tone: pending ? "attention" : "clear",
     });
   }
@@ -77,28 +79,80 @@ export async function StaffOperationsInbox({
       id: "tickets",
       icon: "✉",
       count: active.length,
-      title: "Support inbox",
-      detail: active.length
-        ? `${active.length} active · ${unassigned} unassigned${urgent ? ` · ${urgent} urgent` : ""}`
-        : "No active support tickets",
+      title: "Pilot support",
+      detail: active.length ? `${unassigned} unassigned${urgent ? ` · ${urgent} urgent` : ""}` : "No active tickets",
       href: "/staff/tickets?status=open",
       tone: urgent ? "urgent" : active.length ? "attention" : "clear",
+    });
+  }
+
+  if (mentorApplications && mentoringReviews) {
+    const applications = mentorApplications.filter((application) => application.status === "pending").length;
+    const reviews = mentoringReviews.filter((review) => review.staffReviewedAt === null).length;
+    const total = applications + reviews;
+    items.push({
+      id: "mentoring",
+      icon: "◎",
+      count: total,
+      title: "Mentoring review",
+      detail: total ? `${applications} applications · ${reviews} flight reviews` : "No mentoring actions due",
+      href: "/staff/mentoring",
+      tone: total ? "attention" : "clear",
+    });
+  }
+
+  if (fleet) {
+    const notDispatchable = fleet.filter((aircraft) => !isFleetAircraftBookable(aircraft));
+    const grounded = notDispatchable.filter((aircraft) => aircraft.dispatchStatus === "grounded" || aircraft.operationalStatus === "grounded").length;
+    items.push({
+      id: "fleet",
+      icon: "▤",
+      count: notDispatchable.length,
+      title: "Fleet control",
+      detail: notDispatchable.length ? `${grounded} grounded · check technical records` : "All aircraft dispatchable",
+      href: "/staff/fleet",
+      tone: grounded ? "urgent" : notDispatchable.length ? "attention" : "clear",
+    });
+  }
+
+  if (sessions) {
+    const stale = sessions.filter((session) => !session.connectionHealthy).length;
+    items.push({
+      id: "ember",
+      icon: "◉",
+      count: sessions.length,
+      title: "Ember live flights",
+      detail: sessions.length ? `${sessions.length - stale} healthy${stale ? ` · ${stale} stale` : ""}` : "No live Ember flights",
+      href: "/staff/live-operations",
+      tone: stale ? "attention" : "clear",
+    });
+  }
+
+  if (pilots) {
+    const waitingForActivation = pilots.filter((pilot) => pilot.betaAccess && pilot.mustChangePassword).length;
+    items.push({
+      id: "beta",
+      icon: "◇",
+      count: waitingForActivation,
+      title: "Beta access",
+      detail: waitingForActivation ? "Invited pilots have not changed their temporary password" : "All invited pilots activated",
+      href: "/staff/permissions",
+      tone: waitingForActivation ? "attention" : "clear",
     });
   }
 
   if (!items.length) return null;
 
   const outstanding = items.reduce((total, item) => total + item.count, 0);
+  const overall = serviceStatus ? overallServiceStatus(serviceStatus) : null;
 
   return (
-    <section className="staff-shell staff-operations-inbox" aria-labelledby="staff-operations-inbox-title">
+    <section className="staff-operations-inbox staff-operations-inbox-embedded" aria-labelledby="staff-operations-inbox-title">
       <div className="staff-operations-inbox-heading">
         <span className="staff-operations-inbox-icon" aria-hidden="true">◉</span>
         <div>
-          <span>Staff operations inbox</span>
-          <h2 id="staff-operations-inbox-title">
-            {outstanding ? `${outstanding} ${outstanding === 1 ? "item needs" : "items need"} attention` : "All caught up"}
-          </h2>
+          <span>Today&apos;s operations queue</span>
+          <h2 id="staff-operations-inbox-title">{outstanding ? `${outstanding} ${outstanding === 1 ? "item needs" : "items need"} attention` : "All caught up"}</h2>
         </div>
         <small>Live when you open Staff Centre</small>
       </div>
@@ -112,6 +166,10 @@ export async function StaffOperationsInbox({
           </Link>
         ))}
       </div>
+      <footer className="staff-operations-inbox-footer">
+        <span><b>●</b> {activeStaffCount} authorised staff account{activeStaffCount === 1 ? "" : "s"}</span>
+        {overall ? <Link className={overall.state === "operational" ? "clear" : "attention"} href="/staff/service-status"><b>●</b> {serviceStateLabel(overall.state)}</Link> : <span><b>○</b> System status restricted</span>}
+      </footer>
     </section>
   );
 }
