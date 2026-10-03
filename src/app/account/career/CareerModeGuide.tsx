@@ -4,7 +4,7 @@ import type { CareerExperiencePreferences } from "@/lib/career-experience";
 const COPY = {
   fly: { title: "Fly freely", text: "Your flights, rank, finances and qualifications continue as normal. Career recommendations stay out of the way until you choose a deeper experience.", action: "Find a flight →", href: "/book" },
   career: { title: "Build your progression", text: "Career Dispatcher and performance guidance use the live BAV schedule and your accepted flight history to suggest optional next steps.", action: "Explore qualifications →", href: "/account/qualifications" },
-  realistic_operations: { title: "Operate with more context", text: "The test bed adds operational readiness and performance guidance around your existing booking, SimBrief and Ember workflow. It never blocks a flight or changes BAV operational rules.", action: "Open flight desk →", href: "/manage-assignment" },
+  realistic_operations: { title: "Operate with more context", text: "Career experience adds operational readiness and performance guidance around your existing booking, SimBrief and Ember workflow. It never blocks a flight or changes BAV operational rules.", action: "Open flight desk →", href: "/manage-assignment" },
 } as const;
 
 export function CareerModeGuide({ preferences }: { preferences: CareerExperiencePreferences }) {

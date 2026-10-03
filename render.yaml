@@ -59,6 +59,16 @@ services:
       # never make a booking, assign a registration or change a pilot record.
       - key: BAV_FEATURE_CAREER_DISPATCHER
         value: "enabled"
+      # Informational summaries of a pilot's existing accepted flight records.
+      # They never alter PIREP status, scoring, points or rank.
+      - key: BAV_FEATURE_CAREER_DEBRIEF
+        value: "enabled"
+      # A pilot-owned aircraft history and a read-only career timeline.
+      # The authoritative Fleet service and accepted PIREPs remain unchanged.
+      - key: BAV_FEATURE_CAREER_FLEET
+        value: "enabled"
+      - key: BAV_FEATURE_CAREER_PASSPORT
+        value: "enabled"
       # Private availability preferences used only to choose planning dates in
       # the Dispatcher. A saved day never creates a rostered duty or booking.
       - key: BAV_FEATURE_CAREER_ROSTERS
