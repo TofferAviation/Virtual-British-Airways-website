@@ -437,6 +437,24 @@ html[data-theme="dark"] .news-side-heading,
 html[data-theme="dark"] .news-announcement-list article,
 html[data-theme="dark"] .news-quick-links>a{border-color:#26394f!important}
 
+/* Newsroom staff editor: its overview and tab controls are structural UI,
+   so they need explicit dark surfaces rather than the public-news treatment. */
+html[data-theme="dark"] .news-admin-page{background:#07111d!important}
+html[data-theme="dark"] .news-admin-hero{background:radial-gradient(circle at 88% 4%,rgba(45,121,202,.32),transparent 27%),linear-gradient(118deg,#0d1d31,#112b4a)!important;border-color:#294864!important}
+html[data-theme="dark"] .news-admin-hero p{color:#afc2d8!important}
+html[data-theme="dark"] .news-admin-overview>div{background:linear-gradient(145deg,#101f31,#0c1929)!important;border-color:#29435d!important}
+html[data-theme="dark"] .news-admin-overview span{color:#72baff!important}
+html[data-theme="dark"] .news-admin-overview strong{color:#f4f8ff!important}
+html[data-theme="dark"] .news-admin-overview small{color:#9fb1c5!important}
+html[data-theme="dark"] .news-admin-workspace-tabs{background:#0d1a2a!important;border-color:#29435d!important}
+html[data-theme="dark"] .news-admin-workspace-tabs button,
+html[data-theme="dark"] .news-admin-workspace-tabs a{background:#0d1a2a!important;color:#a9c0db!important}
+html[data-theme="dark"] .news-admin-workspace-tabs button.active{background:#142942!important;color:#f4f8ff!important;border-bottom-color:#e1345e!important}
+html[data-theme="dark"] .news-admin-workspace-tabs a{color:#77bdff!important}
+html[data-theme="dark"] .news-admin-secondary{background:#102239!important;color:#89c8ff!important;border-color:#4b7096!important}
+html[data-theme="dark"] .news-admin-secondary:hover{background:#173451!important;color:#fff!important}
+html[data-theme="dark"] .news-builder-savebar .news-admin-secondary{background:#102239!important}
+
 /* Staff source editor / newsroom builder / access pages use several independent
    class namespaces. These catch the remaining white administrative surfaces. */
 html[data-theme="dark"] :where(
