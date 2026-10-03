@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Pilot account service is temporarily unavailable. Please try again shortly." }, { status: 503 });
   }
   const response = NextResponse.json({ ok: true, pilotNumber: account.pilotNumber, mustChangePassword: account.mustChangePassword });
-  issuePilotSession(response, request, account);
+  issuePilotSession(response, request, account, { betaAccess: !closedBetaEnabled() || account.betaAccess || staffBetaAccess });
   if (account.betaAccess || staffBetaAccess) await issueClosedBetaAccess(response, request, { pilotId: account.id, authVersion: account.authVersion });
   return response;
 }

@@ -6,11 +6,12 @@ import { getPilotById, type PilotAccount } from "@/lib/pilot-store";
 import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 import { closedBetaEnabled } from "@/lib/closed-beta";
 
-// v6 replaces earlier releases. Cookies issued before the custom-domain scope
+// v7 adds a signed beta-authorisation marker. Cookies issued before the custom-domain scope
 // was stable can coexist as host-only and domain-scoped copies, causing the
 // browser to send an unpredictable stale value after navigation.
-export const PILOT_COOKIE_NAME = "bav_pilot_session_v6";
+export const PILOT_COOKIE_NAME = "bav_pilot_session_v7";
 const LEGACY_PILOT_COOKIE_NAMES = [
+  "bav_pilot_session_v6",
   "bav_pilot_session_v5",
   "bav_pilot_session_v4",
   "bav_pilot_session_v3",
@@ -27,6 +28,7 @@ export type PilotSession = {
   name: string;
   profileImage?: string | null;
   authVersion?: number;
+  betaAccess?: boolean;
   exp: number;
 };
 
@@ -61,13 +63,14 @@ export function isPilotAuthConfigured() {
   return Boolean(secret && secret.length >= 24);
 }
 
-export function createPilotSessionToken(account: PilotAccount) {
+export function createPilotSessionToken(account: PilotAccount, options?: { betaAccess?: boolean }) {
   const session: PilotSession = {
     pilotId: account.id,
     pilotNumber: account.pilotNumber,
     email: account.email,
     name: account.name,
     authVersion: account.authVersion,
+    betaAccess: options?.betaAccess === true,
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
   const payload = encode(JSON.stringify(session));
@@ -86,9 +89,9 @@ function expireCookie(response: NextResponse, name: string, request: NextRequest
 }
 
 /** Issue one domain-wide pilot session and remove all older cookie variants. */
-export function issuePilotSession(response: NextResponse, request: NextRequest, account: PilotAccount) {
+export function issuePilotSession(response: NextResponse, request: NextRequest, account: PilotAccount, options?: { betaAccess?: boolean }) {
   const domain = pilotSessionCookieDomain(request);
-  response.cookies.set(PILOT_COOKIE_NAME, createPilotSessionToken(account), {
+  response.cookies.set(PILOT_COOKIE_NAME, createPilotSessionToken(account, options), {
     ...pilotSessionCookieOptions,
     secure: requestUsesHttps(request),
     domain,
@@ -143,7 +146,7 @@ export async function getPilotSession() {
     pilotActive: account?.status === "active",
   });
   if (!account || account.status !== "active" || (session.authVersion ?? 1) !== account.authVersion) return null;
-  if (closedBetaEnabled() && !account.betaAccess) return null;
+  if (closedBetaEnabled() && session.betaAccess !== true) return null;
   return {
     ...session,
     pilotNumber: account.pilotNumber,

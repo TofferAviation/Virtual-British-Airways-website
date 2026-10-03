@@ -4,7 +4,13 @@ import {
   getPreviewAccessToken,
   previewProtectionEnabled,
 } from "./lib/preview-access";
-import { CLOSED_BETA_COOKIE_NAME, closedBetaEnabled, hasClosedBetaAccess } from "./lib/closed-beta";
+import {
+  CLOSED_BETA_COOKIE_NAME,
+  CLOSED_BETA_PILOT_SESSION_COOKIE_NAME,
+  closedBetaEnabled,
+  hasClosedBetaAccess,
+  hasClosedBetaPilotSession,
+} from "./lib/closed-beta";
 import { isDirectLocalRequest } from "./lib/request-context";
 
 const ACCESS_PAGE = "/preview-access";
@@ -35,13 +41,18 @@ export async function proxy(request: NextRequest) {
   if (closedBetaEnabled()) {
     const { pathname } = request.nextUrl;
     const betaCookie = request.cookies.get(CLOSED_BETA_COOKIE_NAME)?.value;
-    const betaAccess = await hasClosedBetaAccess(betaCookie);
+    const pilotCookie = request.cookies.get(CLOSED_BETA_PILOT_SESSION_COOKIE_NAME)?.value;
+    const betaCookieAccess = await hasClosedBetaAccess(betaCookie);
+    const pilotSessionAccess = await hasClosedBetaPilotSession(pilotCookie);
+    const betaAccess = betaCookieAccess || pilotSessionAccess;
 
     // Records anonymous gate health only: no token, email address, or pilot ID.
     console.info("[closed-beta-gate-diag]", {
       cookiePresent: Boolean(betaCookie),
       cookieLength: betaCookie?.length ?? 0,
-      accessValid: betaAccess,
+      betaCookieAccess,
+      pilotSessionPresent: Boolean(pilotCookie),
+      pilotSessionAccess,
       secretConfigured: Boolean(process.env.BAV_CLOSED_BETA_GATE_SECRET?.trim()),
       requestHost: request.nextUrl.hostname,
     });

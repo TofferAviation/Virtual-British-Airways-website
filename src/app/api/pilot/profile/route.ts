@@ -16,7 +16,7 @@ export async function PATCH(request: NextRequest) {
       const response = NextResponse.json({ ok: true, message: "Password updated." });
       // The password change invalidates other sessions while keeping this
       // authenticated browser signed in with a freshly issued session.
-      issuePilotSession(response, request, account);
+      issuePilotSession(response, request, account, { betaAccess: session.betaAccess === true });
       return response;
     }
 
