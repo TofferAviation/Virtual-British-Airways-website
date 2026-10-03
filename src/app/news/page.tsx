@@ -151,7 +151,7 @@ export default async function NewsPage() {
       );
     }
     return (
-      <section className="news-promo-card" key="promo" style={{ backgroundImage: `linear-gradient(90deg,rgba(4,25,57,.96),rgba(4,25,57,.58)),url("${settings.promoImage}")`, backgroundPosition: settings.promoImagePosition }}>
+      <section className="news-promo-card" key="promo" style={settings.promoImage ? { backgroundImage: `linear-gradient(90deg,rgba(4,25,57,.96),rgba(4,25,57,.58)),url("${settings.promoImage}")`, backgroundPosition: settings.promoImagePosition } : undefined}>
         <div><strong>{settings.promoTitle.split("\n").map((line, index) => <span key={`${line}-${index}`}>{line}{index < settings.promoTitle.split("\n").length - 1 ? <br /> : null}</span>)}</strong><i /></div>
         <img src="/branding/ba-virtual-logo-white.svg" alt="British Airways Virtual" />
       </section>

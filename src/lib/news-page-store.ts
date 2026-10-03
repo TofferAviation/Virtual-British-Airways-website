@@ -42,7 +42,7 @@ export type NewsPageSettings = {
 
 export const defaultNewsPageSettings: NewsPageSettings = {
   heroMode: "editable",
-  heroImage: "/images/news/dispatch-blue-hour-v1.png",
+  heroImage: "/branding/news-announcements-hero.png",
   heroImagePosition: "center 55%",
   heroKicker: "BAV Dispatch",
   heroTitle: "News & announcements",
@@ -76,7 +76,7 @@ export const defaultNewsPageSettings: NewsPageSettings = {
     { id: "about", label: "About the VA", description: "Learn more about our community", href: "/about", icon: "♟" },
   ],
   promoTitle: "A global community.\nOne shared virtual sky.",
-  promoImage: "/images/news/community-lounge-v1.png",
+  promoImage: "",
   promoImagePosition: "center 54%",
 };
 

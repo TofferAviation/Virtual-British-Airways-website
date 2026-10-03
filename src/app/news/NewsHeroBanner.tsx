@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-const DEFAULT_NEWS_HERO = "/images/news/dispatch-blue-hour-v1.png";
+const DEFAULT_NEWS_HERO = "/branding/news-announcements-hero.png";
 
 type Props = {
   mode: "image" | "editable";
@@ -51,7 +51,6 @@ export function NewsHeroBanner({ mode, image, imagePosition, kicker, title, desc
 
   return (
     <section className={`news-hero${mode === "image" ? " news-hero-fallback" : ""}`}>
-      {activeImage ? <div className="news-hero-backdrop" aria-hidden="true" style={{ backgroundImage: `url("${activeImage}")`, backgroundPosition: effectivePosition }} /> : null}
       <div className="news-shell news-hero-inner">
         <div className="news-hero-copy">
           <span className="news-kicker">{kicker}</span>
