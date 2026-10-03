@@ -408,6 +408,40 @@ export type FleetPublicFlight = {
   pilotName: string | null;
 };
 
+export type FleetAircraftTimelineEvent = {
+  id: string;
+  occurredAt: string;
+  kind: "fleet" | "flight" | "milestone" | "maintenance" | "livery" | "status";
+  title: string;
+  detail: string;
+};
+
+export type FleetAircraftSectorMilestone = {
+  target: number;
+  label: string;
+  achievedAt: string | null;
+  flightReference: string | null;
+};
+
+export type PilotAircraftPassport = {
+  registrations: Array<{
+    registration: string;
+    aircraftModel: string | null;
+    flights: number;
+    blockMinutes: number;
+    distanceNm: number;
+    firstFlightAt: string | null;
+    latestFlightAt: string | null;
+    activeFleetRecord: boolean;
+    currentStation: string | null;
+  }>;
+  collections: Array<{
+    aircraftModel: string;
+    collected: number;
+    fleetTotal: number;
+  }>;
+};
+
 export type FleetAircraftProfile = {
   aircraft: FleetAircraftDetail;
   configuration: { code: string; name: string; cabinLayoutId: string | null; cabinDefinition: unknown } | null;
@@ -428,6 +462,8 @@ export type FleetAircraftProfile = {
     lastMaintenanceAt: string | null;
   };
   recentFlights: FleetPublicFlight[];
+  timeline: FleetAircraftTimelineEvent[];
+  sectorMilestones: FleetAircraftSectorMilestone[];
   logbook: Array<{ id: string; occurredAt: string; category: "flight" | "maintenance" | "technical" | "livery" | "status"; title: string; detail: string; station: string | null }>;
   pilotHistory: {
     flights: number;
@@ -1350,6 +1386,14 @@ function profileTelemetry(value: unknown) {
   return { latitude, longitude, altitudeFt, groundSpeedKt, onGround: snapshot.onGround === true };
 }
 
+function registrationFromSnapshot(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const registration = (value as Record<string, unknown>).registration;
+  if (typeof registration !== "string") return null;
+  const normalized = registration.trim().toUpperCase();
+  return /^[A-Z0-9-]{2,16}$/.test(normalized) ? normalized : null;
+}
+
 function familiarityForFlights(flights: number) {
   return [...FLEET_AIRFRAME_FAMILIARITY_LEVELS].reverse().find((level) => flights >= level.minimumFlights) ?? FLEET_AIRFRAME_FAMILIARITY_LEVELS[0];
 }
@@ -1411,6 +1455,68 @@ async function pilotHistoryForAircraft(client: SupabaseClient, registration: str
 }
 
 /**
+ * Derives a pilot's registration collection from accepted PIREPs and their
+ * matching completed ACARS sessions. There is deliberately no second passport
+ * table to keep in sync with flight records.
+ */
+export async function getPilotAircraftPassport(pilotId: string): Promise<PilotAircraftPassport> {
+  const client = getServerClient();
+  const sessionsResult = await client.from("acars_sessions")
+    .select("id, completed_at, last_snapshot")
+    .eq("pilot_id", pilotId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: true });
+  if (sessionsResult.error) throw new FleetServiceError(`Could not load Aircraft Passport sessions: ${sessionsResult.error.message}`);
+  const sessions = (sessionsResult.data ?? []) as Array<Pick<AcarsProfileSessionRow, "id" | "completed_at" | "last_snapshot">>;
+  if (!sessions.length) return { registrations: [], collections: [] };
+
+  const pirepsResult = await client.from("pilot_pireps")
+    .select("acars_session_id, flight_number, departure_station, arrival_station, completed_at, block_minutes, distance_nm")
+    .eq("pilot_id", pilotId)
+    .eq("status", "accepted")
+    .in("acars_session_id", sessions.map((session) => session.id));
+  if (pirepsResult.error) throw new FleetServiceError(`Could not load accepted Aircraft Passport flights: ${pirepsResult.error.message}`);
+  const pirepsBySession = new Map<string, PirepMetricRow>();
+  for (const pirep of (pirepsResult.data ?? []) as PirepMetricRow[]) {
+    if (pirep.acars_session_id) pirepsBySession.set(pirep.acars_session_id, pirep);
+  }
+
+  const grouped = new Map<string, { registration: string; flights: number; blockMinutes: number; distanceNm: number; firstFlightAt: string | null; latestFlightAt: string | null }>();
+  for (const session of sessions) {
+    const registration = registrationFromSnapshot(session.last_snapshot);
+    const pirep = pirepsBySession.get(session.id);
+    if (!registration || !pirep) continue;
+    const existing = grouped.get(registration) ?? { registration, flights: 0, blockMinutes: 0, distanceNm: 0, firstFlightAt: null, latestFlightAt: null };
+    const completedAt = pirep.completed_at || session.completed_at;
+    existing.flights += 1;
+    existing.blockMinutes += Math.max(0, pirep.block_minutes);
+    existing.distanceNm += Math.max(0, pirep.distance_nm);
+    if (completedAt && (!existing.firstFlightAt || completedAt < existing.firstFlightAt)) existing.firstFlightAt = completedAt;
+    if (completedAt && (!existing.latestFlightAt || completedAt > existing.latestFlightAt)) existing.latestFlightAt = completedAt;
+    grouped.set(registration, existing);
+  }
+
+  const fleet = await listFleetAircraft();
+  const aircraftByRegistration = new Map(fleet.map((aircraft) => [aircraft.registration.toUpperCase(), aircraft]));
+  const fleetTotals = new Map<string, number>();
+  for (const aircraft of fleet) fleetTotals.set(aircraft.aircraftModel, (fleetTotals.get(aircraft.aircraftModel) ?? 0) + 1);
+  const collectedByModel = new Map<string, Set<string>>();
+  const registrations = [...grouped.values()].map((entry) => {
+    const aircraft = aircraftByRegistration.get(entry.registration);
+    if (aircraft) {
+      const collected = collectedByModel.get(aircraft.aircraftModel) ?? new Set<string>();
+      collected.add(entry.registration);
+      collectedByModel.set(aircraft.aircraftModel, collected);
+    }
+    return { ...entry, aircraftModel: aircraft?.aircraftModel ?? null, activeFleetRecord: Boolean(aircraft), currentStation: aircraft?.currentStation ?? null };
+  }).sort((left, right) => (right.latestFlightAt ?? "").localeCompare(left.latestFlightAt ?? "") || left.registration.localeCompare(right.registration));
+  const collections = [...collectedByModel.entries()]
+    .map(([aircraftModel, collected]) => ({ aircraftModel, collected: collected.size, fleetTotal: fleetTotals.get(aircraftModel) ?? collected.size }))
+    .sort((left, right) => left.aircraftModel.localeCompare(right.aircraftModel));
+  return { registrations, collections };
+}
+
+/**
  * The pilot-safe aircraft read model. It composes existing Fleet, ACARS and
  * PIREP records without adding a second source of truth for an airframe.
  */
@@ -1461,6 +1567,29 @@ export async function getFleetAircraftProfile(registrationInput: string, pilotId
   const nextDue = [...record.maintenanceDue].sort((left, right) => (left.due_status === "overdue" ? -1 : right.due_status === "overdue" ? 1 : left.due_status === "due_soon" ? -1 : right.due_status === "due_soon" ? 1 : left.task_code.localeCompare(right.task_code)))[0] ?? null;
   const lastMaintenance = record.maintenanceEvents.find((event) => ["completed", "released"].includes(event.status));
   const telemetryDistance = ((telemetryDistanceResult.data ?? []) as Array<{ distance_nm: number | null }>).reduce((total, session) => total + Math.max(0, Number(session.distance_nm) || 0), 0);
+  const sectorCount = sectorCountResult.count ?? 0;
+  const milestoneDefinitions = [
+    { target: 1, label: "First BAV sector" },
+    { target: 100, label: "100 BAV sectors" },
+    { target: 500, label: "500 BAV sectors" },
+    { target: 1000, label: "1,000 BAV sectors" },
+  ] as const;
+  const milestoneResults = await Promise.all(milestoneDefinitions.map((milestone) => sectorCount >= milestone.target
+    ? client.from("aircraft_flights").select("flight_reference, off_block_at, on_block_at").eq("organization_id", organization).eq("aircraft_id", aircraft.id).order("on_block_at", { ascending: true }).range(milestone.target - 1, milestone.target - 1).maybeSingle()
+    : Promise.resolve({ data: null, error: null }),
+  ));
+  if (milestoneResults.some((result) => result.error)) throw new FleetServiceError("Could not calculate aircraft sector milestones.");
+  const sectorMilestones = milestoneDefinitions.map((milestone, index) => {
+    const flight = milestoneResults[index].data as Pick<AircraftFlightRow, "flight_reference" | "off_block_at" | "on_block_at"> | null;
+    return { target: milestone.target, label: milestone.label, achievedAt: flight?.on_block_at ?? flight?.off_block_at ?? null, flightReference: flight?.flight_reference ?? null };
+  });
+  const timeline: FleetAircraftTimelineEvent[] = [
+    ...(aircraft.entryIntoServiceDate ? [{ id: "fleet-entry", occurredAt: aircraft.entryIntoServiceDate, kind: "fleet" as const, title: "Entered the BAV Fleet", detail: "Fleet entry recorded for this simulated airframe." }] : []),
+    ...sectorMilestones.filter((milestone) => milestone.achievedAt).map((milestone) => ({ id: `sector-${milestone.target}`, occurredAt: milestone.achievedAt!, kind: milestone.target === 1 ? "flight" as const : "milestone" as const, title: milestone.label, detail: milestone.flightReference ? `${milestone.flightReference} recorded this fleet milestone.` : "Fleet flight record reached this milestone." })),
+    ...record.maintenanceEvents.filter((event) => ["completed", "released"].includes(event.status)).map((event) => ({ id: `maintenance-${event.id}`, occurredAt: event.actual_completion_at ?? event.actual_start_at ?? event.planned_start_at ?? "", kind: "maintenance" as const, title: `${event.maintenance_type} maintenance completed`, detail: event.location ? `Completed at ${event.location}.` : "Maintenance completion recorded." })).filter((event) => event.occurredAt),
+    ...record.repaints.filter((repaint) => ["completed", "released"].includes(repaint.status)).map((repaint) => ({ id: `repaint-${repaint.id}`, occurredAt: repaint.estimated_completion_at ?? "", kind: "livery" as const, title: `Livery applied: ${repaint.new_livery}`, detail: repaint.paint_facility ? `Completed at ${repaint.paint_facility}.` : "Livery change recorded." })).filter((event) => event.occurredAt),
+    ...record.statusHistory.filter((entry) => entry.technical_status === "serviceable" && entry.dispatch_status !== "not_dispatchable").map((entry) => ({ id: `return-${entry.id}`, occurredAt: entry.effective_at, kind: "status" as const, title: "Returned to service", detail: entry.station ? `Serviceable at ${entry.station}.` : "Serviceable status recorded." })),
+  ].sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)).slice(0, 18);
   const logbook = [
     ...recentFlights.map((flight) => ({ id: `flight-${flight.id}`, occurredAt: flight.onBlockAt ?? flight.offBlockAt ?? new Date(0).toISOString(), category: "flight" as const, title: `${flight.flightReference} completed`, detail: `${flight.departureStation ?? "—"} → ${flight.arrivalStation ?? "—"}${flight.pilotName ? ` · ${flight.pilotName}` : ""}`, station: flight.arrivalStation })),
     ...record.maintenanceEvents.slice(0, 10).map((event) => ({ id: `maintenance-${event.id}`, occurredAt: event.actual_completion_at ?? event.actual_start_at ?? event.planned_start_at ?? new Date(0).toISOString(), category: "maintenance" as const, title: `${event.maintenance_type} maintenance`, detail: event.status.replaceAll("_", " "), station: event.location })),
@@ -1473,10 +1602,12 @@ export async function getFleetAircraftProfile(registrationInput: string, pilotId
   return {
     aircraft,
     configuration: configuration ? { code: configuration.code, name: configuration.name, cabinLayoutId: configuration.cabin_layout_id, cabinDefinition: configuration.cabin_definition } : null,
-    statistics: { sectors: sectorCountResult.count ?? 0, distanceNm: telemetryDistance || null, flightHoursMinutes: aircraft.airframeHoursMinutes, cycles: aircraft.airframeCycles, reliability: null },
+    statistics: { sectors: sectorCount, distanceNm: telemetryDistance || null, flightHoursMinutes: aircraft.airframeHoursMinutes, cycles: aircraft.airframeCycles, reliability: null },
     operation: { state, airport: state === "airborne" && liveSession ? `${liveSession.departure_station} → ${liveSession.arrival_station}` : aircraft.currentStation, updatedAt: liveSession?.updated_at ?? activeAssignment?.offBlockAt ?? activeAssignment?.reservedAt ?? aircraft.lastFlightAt, liveTelemetry: telemetry ? { latitude: telemetry.latitude, longitude: telemetry.longitude, altitudeFt: telemetry.altitudeFt, groundSpeedKt: telemetry.groundSpeedKt } : null, previousFlight: recentFlights[0] ?? null, nextAssignment: activeAssignment },
     maintenance: { serviceability, openDefects: openDefects.length, deferredDefects: openDefects.filter((defect) => defect.deferral).map((defect) => ({ reference: defect.reference, category: defect.category, status: defect.status, restriction: defect.deferral?.restriction ?? null })), nextDue, lastMaintenanceAt: lastMaintenance?.actual_completion_at ?? lastMaintenance?.actual_start_at ?? lastMaintenance?.planned_start_at ?? null },
     recentFlights,
+    timeline,
+    sectorMilestones,
     logbook,
     pilotHistory,
   };
