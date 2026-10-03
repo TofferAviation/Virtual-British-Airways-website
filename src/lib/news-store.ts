@@ -1,9 +1,23 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { seedNewsArticles, type NewsArticle } from "@/data/news";
+import type { NewsArticle } from "@/data/news";
 
 const dataDir = path.join(process.cwd(), ".bav-data");
 const newsFile = path.join(dataDir, "news.json");
+
+// These were bundled demonstration articles. Keep the filter while old local
+// data files exist, so deploying this change cannot leave mock headlines live.
+const legacyDemoArticleIds = new Set([
+  "news-summer-network-expansion-2026",
+  "news-new-pilot-onboarding-2026",
+  "news-operations-dashboard-2026",
+  "news-community-event-schedule-2026",
+  "news-route-nice-2026",
+  "news-a350-fleet-2026",
+  "news-spring-flyin-recap-2026",
+  "news-website-updates-2026",
+  "news-maintenance-notice-2026",
+]);
 
 function normalizeNewsMediaUrl(value: string) {
   const legacyPrefix = "/uploads/news/";
@@ -30,10 +44,12 @@ export async function getNewsArticles(): Promise<NewsArticle[]> {
   try {
     const raw = await readFile(newsFile, "utf8");
     const parsed = JSON.parse(raw) as NewsArticle[];
-    if (!Array.isArray(parsed)) return sortNews(seedNewsArticles);
-    return sortNews(parsed);
+    if (!Array.isArray(parsed)) return [];
+    return sortNews(parsed.filter((article) => !legacyDemoArticleIds.has(article.id)));
   } catch {
-    return sortNews(seedNewsArticles);
+    // Stories are editorial content. Never display source-controlled demo articles
+    // if the staff-managed record has not been created yet.
+    return [];
   }
 }
 

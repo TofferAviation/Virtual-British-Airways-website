@@ -42,13 +42,13 @@ export type NewsPageSettings = {
 
 export const defaultNewsPageSettings: NewsPageSettings = {
   heroMode: "editable",
-  heroImage: "/branding/news-announcements-hero.png",
+  heroImage: "/images/news/dispatch-blue-hour-v1.png",
   heroImagePosition: "center 55%",
-  heroKicker: "Newsroom",
+  heroKicker: "BAV Dispatch",
   heroTitle: "News & announcements",
-  heroDescription: "The latest virtual airline updates, service announcements, event news, route releases and community information from British Airways Virtual.",
-  heroSideTitle: "Latest update",
-  heroSideText: "Stay informed across the network.",
+  heroDescription: "Verified community, operational and service updates from the British Airways Virtual team.",
+  heroSideTitle: "From the newsroom",
+  heroSideText: "Published updates appear here once they are ready to share.",
   heroTagline: "A global community · A brighter tomorrow",
   navLabels: {
     overview: "Overview",
@@ -75,8 +75,8 @@ export const defaultNewsPageSettings: NewsPageSettings = {
     { id: "points", label: "VA Points", description: "Your balance and programme details", href: "/va-points", icon: "◇" },
     { id: "about", label: "About the VA", description: "Learn more about our community", href: "/about", icon: "♟" },
   ],
-  promoTitle: "More than a simulation.\nA global community.",
-  promoImage: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1200&q=84",
+  promoTitle: "A global community.\nOne shared virtual sky.",
+  promoImage: "/images/news/community-lounge-v1.png",
   promoImagePosition: "center 54%",
 };
 

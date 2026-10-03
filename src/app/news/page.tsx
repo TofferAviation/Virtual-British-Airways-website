@@ -31,6 +31,14 @@ function articleHref(article: NewsArticle) {
   return `/news/${article.slug}`;
 }
 
+function ArticleImage({ article, className }: { article: NewsArticle; className: string }) {
+  return (
+    <Link className={`${className}${article.image ? "" : " news-card-image-fallback"}`} href={articleHref(article)} aria-label={`Read ${article.title}`}>
+      {article.image ? <img src={article.image} alt="" style={{ objectPosition: article.imagePosition ?? "center center" }} /> : <span aria-hidden="true">BAV dispatch</span>}
+    </Link>
+  );
+}
+
 export default async function NewsPage() {
   const [allArticles, statusState, settings] = await Promise.all([
     getNewsArticles(),
@@ -77,7 +85,7 @@ export default async function NewsPage() {
     if (section === "featured") {
       return featured ? (
         <article className="news-featured-card" key="featured">
-          <div className="news-featured-image"><img src={featured.image} alt="" style={{ objectPosition: featured.imagePosition ?? "center center" }} /></div>
+          <ArticleImage article={featured} className="news-featured-image" />
           <div className="news-featured-copy">
             <span className="news-card-kicker">{newsCategoryLabels[featured.category]}</span>
             <h2>{featured.title}</h2>
@@ -85,27 +93,29 @@ export default async function NewsPage() {
             <div><time>▣&nbsp; {formatDate(featured.date)}</time><Link className="news-read-button" href={articleHref(featured)}>Read update <span>→</span></Link></div>
           </div>
         </article>
-      ) : <div className="news-empty" key="featured-empty">No published news yet.</div>;
+      ) : <section className="news-empty news-empty-editorial" key="featured-empty"><span>Newsroom status</span><h2>The dispatch is preparing its first briefing.</h2><p>Only verified updates that the BAV team has chosen to publish will appear here.</p></section>;
     }
     if (section === "secondary") {
+      if (!secondary.length) return null;
       return (
         <section className="news-secondary-grid" id="community" key="secondary">
           {secondary.map((article) => (
             <article className="news-secondary-card" key={article.id}>
-              <Link className="news-card-image" href={articleHref(article)}><img src={article.image} alt="" style={{ objectPosition: article.imagePosition ?? "center center" }} /></Link>
+              <ArticleImage article={article} className="news-card-image" />
               <div className="news-card-copy"><span className="news-card-kicker">{newsCategoryLabels[article.category]}</span><h3><Link href={articleHref(article)}>{article.title}</Link></h3><p>{article.excerpt}</p><footer><time>▣&nbsp; {formatDate(article.date)}</time><Link href={articleHref(article)}>→</Link></footer></div>
             </article>
           ))}
         </section>
       );
     }
+    if (!latest.length) return null;
     return (
       <section className="news-latest-panel" id="latest" key="latest">
         <div className="news-panel-heading"><h2>{settings.navLabels.latest}</h2><a href="#overview">View all news →</a></div>
         <div className="news-latest-grid">
           {latest.map((article) => (
             <article key={article.id}>
-              <Link className="news-latest-image" href={articleHref(article)}><img src={article.image} alt="" /></Link>
+              <ArticleImage article={article} className="news-latest-image" />
               <span className="news-card-kicker">{newsCategoryLabels[article.category]}</span>
               <h3><Link href={articleHref(article)}>{article.title}</Link></h3>
               <p>{article.excerpt}</p>
