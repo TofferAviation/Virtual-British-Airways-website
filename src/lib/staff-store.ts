@@ -14,6 +14,7 @@ import { getMasterAdminEmail } from "@/lib/staff-owner";
 import { normaliseStoredProfileImage, validateProfileImage } from "@/lib/profile-image";
 import type { ManagedRoute } from "@/lib/route-store";
 import { normalizeSiteTraffic, type SiteTrafficState } from "@/lib/site-traffic-types";
+import { BAV_HISTORICAL_CALLSIGN_DATASET_VERSION, historicalCallsignObservations } from "@/data/ba-callsign-history-2026";
 
 export type FlightCallsignMapping = {
   id: string;
@@ -89,6 +90,8 @@ export type StaffState = {
   routeScheduleVersion?: string;
   /** Versioned operational callsigns, deliberately separate from route records. */
   flightCallsignMappings: FlightCallsignMapping[];
+  /** Tracks one-way imports of bundled historical callsign evidence. */
+  callsignEvidenceVersion?: string;
   /** Aggregate first-party traffic only; no visitor identity or IP address is stored. */
   siteTraffic?: SiteTrafficState;
 };
@@ -147,7 +150,70 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
   const audit = Array.isArray(input?.audit) ? input!.audit! : [];
   const routeSchedule = Array.isArray(input?.routeSchedule) ? input!.routeSchedule! : [];
   const routeScheduleVersion = typeof input?.routeScheduleVersion === "string" ? input.routeScheduleVersion : undefined;
-  const flightCallsignMappings = Array.isArray(input?.flightCallsignMappings) ? input.flightCallsignMappings! : [];
+  const flightCallsignMappings = Array.isArray(input?.flightCallsignMappings) ? input.flightCallsignMappings!.map((mapping) => ({ ...mapping })) : [];
+  let callsignEvidenceVersion = typeof input?.callsignEvidenceVersion === "string" ? input.callsignEvidenceVersion : undefined;
+
+  // The workbook is an observed history, not an official schedule. Preserve
+  // each observation as a one-day mapping so no identifier is silently
+  // projected into another operating date. This is additive: staff-created
+  // mappings and later source imports always remain intact.
+  if (callsignEvidenceVersion !== BAV_HISTORICAL_CALLSIGN_DATASET_VERSION) {
+    const existingKeys = new Set(flightCallsignMappings.map((mapping) => [
+      mapping.commercialFlightNumber,
+      mapping.operationalCallsign,
+      mapping.departureIata,
+      mapping.arrivalIata,
+      mapping.validFrom ?? "",
+      mapping.validTo ?? "",
+    ].join("|")));
+    const telephonyByOperator = {
+      BAW: "SPEEDBIRD",
+      SHT: "SHUTTLE",
+      CFE: "FLYER",
+      EFW: "EUROFLYER",
+    } as const;
+    const carrierByOperator = {
+      BAW: "British Airways",
+      SHT: "British Airways Shuttle",
+      CFE: "BA CityFlyer",
+      EFW: "BA Euroflyer",
+    } as const;
+
+    for (const observation of historicalCallsignObservations) {
+      const operatorIcao = observation.operationalCallsign.slice(0, 3) as keyof typeof telephonyByOperator;
+      const key = [
+        observation.commercialFlightNumber,
+        observation.operationalCallsign,
+        observation.departureIata,
+        observation.arrivalIata,
+        observation.observedOn,
+        observation.observedOn,
+      ].join("|");
+      if (existingKeys.has(key)) continue;
+      const stamp = `${observation.observedOn}T00:00:00.000Z`;
+      flightCallsignMappings.push({
+        id: `history-${observation.observedOn}-${observation.commercialFlightNumber}-${observation.operationalCallsign}-${observation.departureIata}-${observation.arrivalIata}`.toLowerCase(),
+        commercialFlightNumber: observation.commercialFlightNumber,
+        flightNumberNumeric: observation.commercialFlightNumber.slice(2),
+        operatingCarrier: carrierByOperator[operatorIcao],
+        operatorIata: "BA",
+        operatorIcao,
+        operationalCallsign: observation.operationalCallsign,
+        telephony: telephonyByOperator[operatorIcao],
+        departureIata: observation.departureIata,
+        arrivalIata: observation.arrivalIata,
+        validFrom: observation.observedOn,
+        validTo: observation.observedOn,
+        source: "historical_db",
+        confidence: "historical",
+        callsignLastVerifiedAt: observation.observedOn,
+        lastSeenAt: stamp,
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+    }
+    callsignEvidenceVersion = BAV_HISTORICAL_CALLSIGN_DATASET_VERSION;
+  }
   const siteTraffic = normalizeSiteTraffic(input?.siteTraffic);
 
   const admin = envAdmin();
@@ -177,7 +243,7 @@ function normalizeState(input?: Partial<StaffState>): StaffState {
     }
   }
 
-  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion, flightCallsignMappings, siteTraffic };
+  return { users, roles, invitations, audit: audit.slice(0, 300), routeSchedule, routeScheduleVersion, flightCallsignMappings, callsignEvidenceVersion, siteTraffic };
 }
 
 async function ensureDataDir() {
