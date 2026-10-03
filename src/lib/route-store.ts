@@ -24,6 +24,10 @@ export type ManagedRoute = {
   validatedAt?: string;
   /** A researched BA flight reference, not an exact date-specific timetable. */
   referenceOnly?: boolean;
+  /** The same flight number continues from this route's arrival airport. */
+  continuesTo?: string;
+  /** A downline sector of a through service, rather than a London-originating route. */
+  connectionSegment?: boolean;
   /** Timetables are references by default; Operations may opt a service into late-start scoring. */
   scheduleScoringEnabled?: boolean;
   /** Published BA airport pair with detailed BA service data still pending. */
@@ -63,6 +67,8 @@ function normalizedRoutes(routes: unknown[]) {
     sourceUrl: typeof route.sourceUrl === "string" && /^https:\/\//.test(route.sourceUrl) ? route.sourceUrl : undefined,
     validatedAt: typeof route.validatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(route.validatedAt) ? route.validatedAt : undefined,
     referenceOnly: route.referenceOnly === true,
+    continuesTo: typeof route.continuesTo === "string" && /^[A-Z]{3}$/.test(route.continuesTo.trim().toUpperCase()) ? route.continuesTo.trim().toUpperCase() : undefined,
+    connectionSegment: route.connectionSegment === true,
     scheduleScoringEnabled: route.scheduleScoringEnabled === true,
     catalogueOnly: route.catalogueOnly === true,
     virtualTimetable: route.virtualTimetable === true,
@@ -104,6 +110,10 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
     // records. Replace only those placeholders with the new, bookable BAV
     // virtual schedule; preserve every staff-created or staff-edited record.
     if (shipped?.virtualTimetable && route.catalogueOnly) continue;
+    // r10 corrects the original BA15 reference to model both legs of its
+    // LHR–SIN–SYD through service. Replace only the untouched r9 seed; any
+    // subsequent Staff Centre correction remains authoritative.
+    if (route.id === "ba-reference-lhr-sin-ba15" && route.sourceUrl === "https://planefinder.net/data/flight/BA15/history/5-52295037") continue;
     byId.set(route.id, route);
   }
   const migrated = normalizedRoutes([...byId.values()]);
@@ -238,6 +248,8 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       catalogueOnly: route.catalogueOnly === true,
       virtualTimetable: route.virtualTimetable === true,
       referenceOnly: route.referenceOnly === true,
+      continuesTo: route.continuesTo,
+      connectionSegment: route.connectionSegment === true,
       scheduledForSelectedDate: route.referenceOnly !== true && routeOperatesOn(route, date),
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),

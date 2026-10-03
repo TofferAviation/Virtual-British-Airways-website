@@ -64,6 +64,8 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   const to = text(raw.to).toUpperCase();
   const virtualTimetable = bool(raw.virtualTimetable, false);
   const referenceOnly = bool(raw.referenceOnly, false);
+  const connectionSegment = bool(raw.connectionSegment, false);
+  const continuesTo = text(raw.continuesTo).toUpperCase();
   if (virtualTimetable) {
     throw new Error("Virtual BAV service references cannot be published. Add a date-checked BA flight number and operational ICAO identifier instead.");
   }
@@ -74,8 +76,8 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
   const sourceUrl = text(raw.sourceUrl);
   const validatedAt = date(raw.validatedAt);
 
-  if (!/^(?:LHR|LGW|LCY)$/.test(from) || !/^[A-Z]{3}$/.test(to)) {
-    throw new Error("The departure hub must be LHR, LGW or LCY and the destination must be a three-letter IATA code.");
+  if ((!/^(?:LHR|LGW|LCY)$/.test(from) && !(connectionSegment && /^[A-Z]{3}$/.test(from))) || !/^[A-Z]{3}$/.test(to)) {
+    throw new Error("The departure hub must be LHR, LGW or LCY. A three-letter non-hub origin is allowed only for a marked through-service connection sector.");
   }
   if (!flightNumber) throw new Error("Use a real BA flight number in the format BA123.");
   if (!departure || !arrival || !aircraft) {
@@ -114,6 +116,8 @@ function normalizeRoute(input: unknown, existingId?: string): ManagedRoute {
     validatedAt,
     scheduleScoringEnabled: bool(raw.scheduleScoringEnabled, false),
     referenceOnly,
+    continuesTo: /^[A-Z]{3}$/.test(continuesTo) ? continuesTo : undefined,
+    connectionSegment,
     catalogueOnly: false,
     virtualTimetable: false,
   };
@@ -213,6 +217,8 @@ function parseTimetableImport(csv: string) {
         validatedAt: csvValue(row, headers, "validatedAt"),
         scheduleScoringEnabled: csvBoolean(csvValue(row, headers, "scheduleScoringEnabled"), false),
         referenceOnly: csvBoolean(csvValue(row, headers, "referenceOnly", "operationalReference"), false),
+        continuesTo: csvValue(row, headers, "continuesTo"),
+        connectionSegment: csvBoolean(csvValue(row, headers, "connectionSegment"), false),
       });
       const key = timetableKey(route);
       if (keys.has(key)) throw new Error("Duplicate service in this import.");

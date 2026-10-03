@@ -23,9 +23,9 @@ function airportName(code: string) {
   return airportByCode[code]?.name ?? airportNames[code] ?? code;
 }
 
-function callsignLabel(flightNumber: string, callsign?: string) {
+function callsignLabel(flightNumber: string, callsign?: string, referenceOnly = false) {
   const identifier = resolveBritishAirwaysCallsign(flightNumber, callsign);
-  return `${identifier} · checked ICAO identifier`;
+  return `${identifier} · ${referenceOnly ? "observed ICAO identifier" : "checked ICAO identifier"}`;
 }
 
 function durationToMinutes(value: string) {
@@ -155,7 +155,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                 .map((item) => ({ id: item.id, registration: item.registration, aircraft: item.aircraftModel, station: item.currentStation }))]));
               return <article className="result-flight card" key={flight.routeId}>
                 <div className="result-times"><div><strong>{flight.departure}</strong><span>{flight.from}</span></div><div className="result-line"><span>{flight.duration}</span><i /></div><div><strong>{flight.arrival}</strong><span>{flight.to}</span></div></div>
-                <div className="result-meta"><strong>{flight.number} · British Airways</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{callsignLabel(flight.number, flight.callsign)} · {flight.aircraft} · {flight.referenceOnly ? "2025–26 operational reference" : flight.scheduledForSelectedDate ? "Scheduled equipment" : "Checked flexible reference"}</span></div>
+                <div className="result-meta"><strong>{flight.number} · British Airways</strong><span>{airportName(flight.from)} → {airportName(flight.to)}</span><span>{callsignLabel(flight.number, flight.callsign, flight.referenceOnly)} · {flight.aircraft} · {flight.referenceOnly ? "2025–26 operational reference" : flight.scheduledForSelectedDate ? "Scheduled equipment" : "Checked flexible reference"}</span>{flight.continuesTo ? <span>Through service: continues to {airportName(flight.continuesTo)} ({flight.continuesTo}) on {flight.number}</span> : null}{flight.connectionSegment ? <span>Through-service connection sector</span> : null}</div>
                 <div className="result-availability"><strong>{flight.slots > 0 ? "● Available" : "● Full"}</strong><span>{flight.slots} of {flight.capacity} pilot slots open</span></div>
                 {pilotSession && pilot ? (
                   flight.slots > 0 && eligibleAircraft.length > 0 ? <form action={bookFlight}>

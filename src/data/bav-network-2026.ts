@@ -10,7 +10,7 @@
 
 export type BavNetworkRouteSeed = {
   id: string;
-  from: "LHR" | "LGW" | "LCY";
+  from: string;
   to: string;
   flightNumber: string;
   /** ICAO identifier used by trackers and SimBrief, e.g. BAW267. */
@@ -39,6 +39,10 @@ export type BavNetworkRouteSeed = {
    * checked. It must never be presented as an exact live timetable.
    */
   referenceOnly?: boolean;
+  /** The same flight number continues from the arrival station to this IATA airport. */
+  continuesTo?: string;
+  /** A downline sector of a through service, rather than a London-originating service. */
+  connectionSegment?: boolean;
   /** A published city pair without a verified individual BA timetable yet. */
   catalogueOnly?: boolean;
   /** A bookable BAV operational schedule, not a copied BA published timetable. */
@@ -46,7 +50,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-base-2026-10-03-r9";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-base-2026-10-03-r11";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -115,7 +119,9 @@ function toClock(totalMinutes: number) {
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 
-function virtualAircraft(from: BavNetworkRouteSeed["from"], to: string, sequence: number) {
+type BavHubCode = "LHR" | "LGW" | "LCY";
+
+function virtualAircraft(from: BavHubCode, to: string, sequence: number) {
   if (from === "LCY") return { aircraft: "Embraer E190", aircraftOptions: ["Embraer E190"] };
   if (longHaulDestinations.has(to)) {
     const aircraft = ["Boeing 787-9", "Boeing 777-200ER", "Airbus A350-1000", "Boeing 787-10"][sequence % 4];
@@ -125,12 +131,12 @@ function virtualAircraft(from: BavNetworkRouteSeed["from"], to: string, sequence
   return { aircraft, aircraftOptions: ["Airbus A320neo", "Airbus A320", "Airbus A319", "Airbus A321neo"] };
 }
 
-function bAVVirtualFlightNumber(from: BavNetworkRouteSeed["from"], sequence: number) {
+function bAVVirtualFlightNumber(from: BavHubCode, sequence: number) {
   const base = from === "LHR" ? 1000 : from === "LGW" ? 2000 : 3000;
   return `BAV${base + sequence + 1}`;
 }
 
-const virtualOperationalRoutes: BavNetworkRouteSeed[] = (Object.keys(destinationsByHub) as Array<BavNetworkRouteSeed["from"]>).flatMap((from) =>
+const virtualOperationalRoutes: BavNetworkRouteSeed[] = (Object.keys(destinationsByHub) as BavHubCode[]).flatMap((from) =>
   destinationsByHub[from].map((to, sequence) => {
     const flightNumber = bAVVirtualFlightNumber(from, sequence);
     const duration = durationPartsForVirtualService(to);
@@ -164,12 +170,13 @@ const sources = {
   jersey: "https://www.flightradar24.com/data/flights/ba1346",
   hannover: "https://www.flight.info/BA894",
   belfastCity: "https://www.flightconnections.com/flights-from-lhr-to-bhd",
+  copenhagen: "https://www.flight.info/BA812",
   newcastle: "https://www.directflights.com/LHR-NCL",
   portland: "https://www.flight.info/BA267",
   oslo: "https://planefinder.net/data/flight/BA784/history/5-83332140",
   miami: "https://planefinder.net/data/flight/BA207/history/5-49627838",
   singapore: "https://planefinder.net/data/flight/BA11/history/5-48737853",
-  sydneyViaSingapore: "https://planefinder.net/data/flight/BA15/history/5-52295037",
+  ba15ThroughService: "https://uk.flightaware.com/live/flight/BAW15/history",
   newYork: "https://planefinder.net/data/flight/BA183/history/5-57469201",
   madrid: "https://planefinder.net/data/flight/BA464/history/5-78114224",
 } as const;
@@ -184,9 +191,18 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
   // bookable for the VA, but are labelled as references rather than claiming
   // the selected booking date has an exact airline timetable check.
   { id: "ba-reference-lhr-sin-ba11", from: "LHR", to: "SIN", flightNumber: "BA11", callsign: "BAW11", departure: "19:25", arrival: "16:10", duration: "12h 45m", aircraft: "Airbus A380-800", aircraftOptions: ["Airbus A380-800"], slots: 12, active: true, sourceUrl: sources.singapore, validatedAt: "2026-10-03", referenceOnly: true },
-  { id: "ba-reference-lhr-sin-ba15", from: "LHR", to: "SIN", flightNumber: "BA15", callsign: "BAW15", departure: "22:00", arrival: "18:40", duration: "13h 40m", aircraft: "Boeing 787-9", aircraftOptions: ["Boeing 787-9"], slots: 12, active: true, sourceUrl: sources.sydneyViaSingapore, validatedAt: "2026-10-03", referenceOnly: true },
+  // BA15 is a through service, not an LHR–SIN-only service: the same BA15 /
+  // BAW15 continues from Singapore to Sydney. The sectors stay separate for
+  // flight logging and fleet location, but the connection is visible to pilots.
+  { id: "ba-reference-lhr-sin-ba15", from: "LHR", to: "SIN", flightNumber: "BA15", callsign: "BAW15", departure: "22:10", arrival: "18:30", duration: "13h 20m", aircraft: "Boeing 787-9", aircraftOptions: ["Boeing 787-9"], slots: 12, active: true, sourceUrl: sources.ba15ThroughService, validatedAt: "2026-10-03", referenceOnly: true, continuesTo: "SYD" },
+  { id: "ba-reference-sin-syd-ba15", from: "SIN", to: "SYD", flightNumber: "BA15", callsign: "BAW15", departure: "20:30", arrival: "06:35", duration: "7h 05m", aircraft: "Boeing 787-9", aircraftOptions: ["Boeing 787-9"], slots: 12, active: true, sourceUrl: sources.ba15ThroughService, validatedAt: "2026-10-03", referenceOnly: true, connectionSegment: true },
   { id: "ba-reference-lhr-jfk-ba183", from: "LHR", to: "JFK", flightNumber: "BA183", callsign: "BAW183", departure: "19:25", arrival: "22:25", duration: "8h 00m", aircraft: "Boeing 777-200ER", aircraftOptions: ["Boeing 777-200ER", "Boeing 777-300ER"], slots: 12, active: true, sourceUrl: sources.newYork, validatedAt: "2026-10-03", referenceOnly: true },
   { id: "ba-reference-lhr-mad-ba464", from: "LHR", to: "MAD", flightNumber: "BA464", callsign: "BAW46BL", departure: "16:30", arrival: "20:05", duration: "2h 35m", aircraft: "Airbus A320neo", aircraftOptions: ["Airbus A320neo", "Airbus A320", "Airbus A321neo"], slots: 12, active: true, sourceUrl: sources.madrid, validatedAt: "2026-10-03", referenceOnly: true },
+
+  // Copenhagen: Sunday BA812 operation verified against the public schedule.
+  // Equipment varies by day, so the published Sunday A319 remains the primary
+  // assignment and the other documented A320-family variants remain eligible.
+  { id: "ba-a26-lhr-cph-ba812-sun", from: "LHR", to: "CPH", flightNumber: "BA812", callsign: "BAW812", departure: "06:35", arrival: "09:25", duration: "1h 50m", aircraft: "Airbus A319", aircraftOptions: ["Airbus A319", "Airbus A320", "Airbus A320neo", "Airbus A321neo"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-18", operatingDays: [0], sourceUrl: sources.copenhagen, validatedAt: "2026-10-03" },
 
   // Miami: the flight number, local schedule, equipment and tracker
   // identifier were checked for the Sunday 4 October operation. The tracker
