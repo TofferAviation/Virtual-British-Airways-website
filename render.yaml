@@ -44,6 +44,9 @@ services:
         value: https://virtualairline.co.uk
       - key: BAV_PASSWORD_RESET_SECRET
         generateValue: true
+      # Dedicated signing key shared by the closed-beta issuer and request gate.
+      - key: BAV_CLOSED_BETA_GATE_SECRET
+        generateValue: true
       - key: BAV_CLOSED_BETA_ENABLED
         value: "enabled"
       # Optional, read-only duty/rest guidance. It is only shown when a pilot

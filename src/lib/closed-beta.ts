@@ -16,7 +16,14 @@ type ClosedBetaToken = {
 };
 
 function secret() {
-  return (process.env.BAV_PILOT_SESSION_SECRET ?? process.env.BAV_STAFF_SESSION_SECRET ?? "").trim();
+  // Keep the beta gate independent from the two account-session systems.
+  // Its issuer and request gate must always sign with the exact same key.
+  return (
+    process.env.BAV_CLOSED_BETA_GATE_SECRET ??
+    process.env.BAV_PILOT_SESSION_SECRET ??
+    process.env.BAV_STAFF_SESSION_SECRET ??
+    ""
+  ).trim();
 }
 
 function encode(value: string) {

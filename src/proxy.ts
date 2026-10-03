@@ -34,7 +34,19 @@ export async function proxy(request: NextRequest) {
   // a developer deliberately enables the flag.
   if (closedBetaEnabled()) {
     const { pathname } = request.nextUrl;
-    if (!isPublicClosedBetaPath(pathname) && !await hasClosedBetaAccess(request.cookies.get(CLOSED_BETA_COOKIE_NAME)?.value)) {
+    const betaCookie = request.cookies.get(CLOSED_BETA_COOKIE_NAME)?.value;
+    const betaAccess = await hasClosedBetaAccess(betaCookie);
+
+    // Records anonymous gate health only: no token, email address, or pilot ID.
+    console.info("[closed-beta-gate-diag]", {
+      cookiePresent: Boolean(betaCookie),
+      cookieLength: betaCookie?.length ?? 0,
+      accessValid: betaAccess,
+      secretConfigured: Boolean(process.env.BAV_CLOSED_BETA_GATE_SECRET?.trim()),
+      requestHost: request.nextUrl.hostname,
+    });
+
+    if (!isPublicClosedBetaPath(pathname) && !betaAccess) {
       const params = new URLSearchParams({ next: `${request.nextUrl.pathname}${request.nextUrl.search}` });
       return NextResponse.redirect(new URL(`${CLOSED_BETA_PAGE}?${params.toString()}`, request.url), 307);
     }
