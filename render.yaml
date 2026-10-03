@@ -55,6 +55,10 @@ services:
         value: "enabled"
       - key: BAV_FEATURE_CAREER_MENTORING
         value: "enabled"
+      # Read-only recommendations from the live booking schedule. Suggestions
+      # never make a booking, assign a registration or change a pilot record.
+      - key: BAV_FEATURE_CAREER_DISPATCHER
+        value: "enabled"
       - key: BAV_FEATURE_CAREER_PATHS
         value: "disabled"
       # Staged qualification rollout: only Realistic Operations pilots are
