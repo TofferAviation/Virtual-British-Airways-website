@@ -1,7 +1,11 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { pilotSessionCookieDomain, requestUsesHttps } from "@/lib/request-context";
 
-export const CLOSED_BETA_COOKIE_NAME = "bav_closed_beta_access_v1";
+// v2 replaces v1 because early closed-beta releases could leave both a
+// host-only and a domain-wide v1 cookie in a browser. Depending on cookie
+// ordering, the beta gate could then receive the stale value after sign-in.
+export const CLOSED_BETA_COOKIE_NAME = "bav_closed_beta_access_v2";
+const LEGACY_CLOSED_BETA_COOKIE_NAMES = ["bav_closed_beta_access_v1"];
 const TOKEN_VERSION = "bav-closed-beta-v1";
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 14;
 
@@ -63,18 +67,25 @@ export async function hasClosedBetaAccess(token?: string | null) {
 
 export async function issueClosedBetaAccess(response: NextResponse, request: NextRequest, input: { pilotId: string; authVersion: number }) {
   if (!closedBetaEnabled()) return;
+  const domain = pilotSessionCookieDomain(request);
   response.cookies.set(CLOSED_BETA_COOKIE_NAME, await createClosedBetaToken(input), {
     httpOnly: true,
     sameSite: "lax",
     secure: requestUsesHttps(request),
     path: "/",
     maxAge: TOKEN_TTL_SECONDS,
-    domain: pilotSessionCookieDomain(request),
+    domain,
   });
+  for (const name of LEGACY_CLOSED_BETA_COOKIE_NAMES) {
+    response.cookies.set(name, "", { httpOnly: true, sameSite: "lax", secure: requestUsesHttps(request), path: "/", maxAge: 0, domain });
+    if (domain) response.cookies.set(name, "", { httpOnly: true, sameSite: "lax", secure: requestUsesHttps(request), path: "/", maxAge: 0 });
+  }
 }
 
 export function clearClosedBetaAccess(response: NextResponse, request: NextRequest) {
   const domain = pilotSessionCookieDomain(request);
-  response.cookies.set(CLOSED_BETA_COOKIE_NAME, "", { httpOnly: true, sameSite: "lax", secure: requestUsesHttps(request), path: "/", maxAge: 0, domain });
-  if (domain) response.cookies.set(CLOSED_BETA_COOKIE_NAME, "", { httpOnly: true, sameSite: "lax", secure: requestUsesHttps(request), path: "/", maxAge: 0 });
+  for (const name of [CLOSED_BETA_COOKIE_NAME, ...LEGACY_CLOSED_BETA_COOKIE_NAMES]) {
+    response.cookies.set(name, "", { httpOnly: true, sameSite: "lax", secure: requestUsesHttps(request), path: "/", maxAge: 0, domain });
+    if (domain) response.cookies.set(name, "", { httpOnly: true, sameSite: "lax", secure: requestUsesHttps(request), path: "/", maxAge: 0 });
+  }
 }
