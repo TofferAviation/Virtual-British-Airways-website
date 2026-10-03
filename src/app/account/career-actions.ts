@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { applyForTypeRating, processRecurrentTrainingPayment, processTrainingPayment } from "@/lib/pilot-career";
+import { getCareerRotationChoices } from "@/lib/career-paths";
 import { requirePilotSession } from "@/lib/pilot-auth";
-import { getPilotById } from "@/lib/pilot-store";
+import { getPilotById, updatePilotCareerRotation } from "@/lib/pilot-store";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message.slice(0, 180) : "The career request could not be completed.";
@@ -55,4 +56,30 @@ export async function payForRecurrentTrainingAction(formData: FormData) {
   revalidatePath("/account/finances");
   revalidatePath("/account/qualifications");
   redirect("/account/qualifications?recurrent=1");
+}
+
+export async function startCareerRotationAction(formData: FormData) {
+  const session = await requirePilotSession();
+  const rotationId = String(formData.get("rotationId") ?? "").trim();
+  const pilot = await getPilotById(session.pilotId);
+  if (!pilot || !rotationId) redirect("/account/career");
+  try {
+    const choices = await getCareerRotationChoices(pilot);
+    const choice = choices.find((item) => item.id === rotationId);
+    if (!choice) throw new Error("That rotation is no longer available. Choose a current option from the live schedule.");
+    await updatePilotCareerRotation(pilot.id, { ...choice, startedAt: new Date().toISOString() });
+  } catch (error) {
+    redirect(`/account/career?rotationError=${encodeURIComponent(message(error))}`);
+  }
+  revalidatePath("/account/career");
+  redirect("/account/career?rotation=started");
+}
+
+export async function cancelCareerRotationAction() {
+  const session = await requirePilotSession();
+  const pilot = await getPilotById(session.pilotId);
+  if (!pilot) redirect("/login");
+  await updatePilotCareerRotation(pilot.id, null);
+  revalidatePath("/account/career");
+  redirect("/account/career?rotation=ended");
 }

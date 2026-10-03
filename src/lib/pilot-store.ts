@@ -8,7 +8,7 @@ import { normalizeBavHub } from "@/lib/hubs";
 import { PILOT_RULES_VERSION } from "@/lib/pilot-rules";
 import { DEFAULT_REWARD_SETTINGS, normalizeRewardSettings, validateRewardSettings, type RewardSettings } from "@/lib/reward-settings";
 import { awardsForAcceptedPirep, isHeathrowStation, isPilotCareerAwardId, type PilotCareerAwardId } from "@/lib/pilot-awards";
-import { createCareerExperiencePreferences, normalizeCareerExperiencePreferences, validateCareerExperiencePreferences, validateCareerRosterDays, validateMentoringInterest, type CareerExperiencePreferences } from "@/lib/career-experience";
+import { createCareerExperiencePreferences, normalizeCareerExperiencePreferences, validateActiveCareerRotation, validateCareerExperiencePreferences, validateCareerPath, validateCareerRosterDays, validateMentoringInterest, type ActiveCareerRotation, type CareerExperiencePreferences } from "@/lib/career-experience";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
@@ -1126,6 +1126,26 @@ export async function updatePilotCareerExperiencePreferences(id: string, input: 
   const account = state.pilots.find((pilot) => pilot.id === id);
   if (!account) throw new Error("Pilot account not found.");
   account.careerExperience = { ...account.careerExperience, ...values, updatedAt: new Date().toISOString() };
+  await writeState(state);
+  return account.careerExperience;
+}
+
+export async function updatePilotCareerPath(id: string, input: unknown) {
+  const careerPath = validateCareerPath(input);
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  account.careerExperience = { ...account.careerExperience, careerPath, updatedAt: new Date().toISOString() };
+  await writeState(state);
+  return account.careerExperience;
+}
+
+export async function updatePilotCareerRotation(id: string, rotation: ActiveCareerRotation | null) {
+  const activeRotation = validateActiveCareerRotation(rotation);
+  const state = await readState();
+  const account = state.pilots.find((pilot) => pilot.id === id);
+  if (!account) throw new Error("Pilot account not found.");
+  account.careerExperience = { ...account.careerExperience, activeRotation, updatedAt: new Date().toISOString() };
   await writeState(state);
   return account.careerExperience;
 }

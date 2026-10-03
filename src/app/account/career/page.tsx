@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getCareerDashboard } from "@/lib/pilot-career";
 import { isCareerFeatureEnabled } from "@/lib/career-experience";
 import { getCareerDispatchSuggestions } from "@/lib/career-dispatcher";
+import { getCareerPathProgress, getCareerRotationChoices, getCareerRotationProgress } from "@/lib/career-paths";
 import { nextPilotRank } from "@/lib/pilot-ranks";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById, getPilotMentoringExperience, getPilotMentoringStatus, listMentoringFlightReviews, MENTOR_MINIMUM_CAREER_HOURS } from "@/lib/pilot-store";
@@ -19,6 +20,8 @@ import { getActiveFleetFlightAssignmentForPilot, listFleetAircraft } from "@/lib
 import { getActivePilotBooking, getPirep, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { redirect } from "next/navigation";
 import { MentoringPortfolio } from "./MentoringPortfolio";
+import { CareerPathForm } from "./CareerPathForm";
+import { CareerRotation } from "./CareerRotation";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Career & Qualifications" };
@@ -38,14 +41,18 @@ export default async function CareerPage() {
   const passportPreview = isCareerFeatureEnabled("passport");
   const fleetPreview = isCareerFeatureEnabled("fleet");
   const mentoringPreview = isCareerFeatureEnabled("mentoring");
-  const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience, mentoringReviews] = await Promise.all([
+  const pathsPreview = guidedCareer && isCareerFeatureEnabled("paths");
+  const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience, mentoringReviews, rotationChoices] = await Promise.all([
     guidedCareer && isCareerFeatureEnabled("dispatcher") ? getCareerDispatchSuggestions(pilot) : Promise.resolve(null),
     advancedOperations ? getActivePilotBooking(pilot.id) : Promise.resolve(null),
-    advancedOperations || passportPreview || fleetPreview || (guidedCareer && isCareerFeatureEnabled("debrief")) ? listPilotPireps(pilot.id) : Promise.resolve([]),
+    advancedOperations || passportPreview || fleetPreview || pathsPreview || (guidedCareer && isCareerFeatureEnabled("debrief")) ? listPilotPireps(pilot.id) : Promise.resolve([]),
     mentoringPreview ? getPilotMentoringStatus(pilot.id) : Promise.resolve(null),
     mentoringPreview ? getPilotMentoringExperience(pilot.id) : Promise.resolve(null),
     mentoringPreview ? listMentoringFlightReviews({ mentorPilotId: pilot.id }) : Promise.resolve([]),
+    pathsPreview && !pilot.careerExperience.activeRotation ? getCareerRotationChoices(pilot) : Promise.resolve([]),
   ]);
+  const careerPathProgress = pathsPreview ? getCareerPathProgress(pilot.careerExperience.careerPath, recentPireps) : null;
+  const rotationProgress = pathsPreview && pilot.careerExperience.activeRotation ? getCareerRotationProgress(pilot.careerExperience.activeRotation, recentPireps) : null;
   const mentoringPortfolio = await Promise.all(mentoringReviews.map(async (review) => {
     const flight = await getPirep(review.pirepId);
     const learner = await getPilotById(review.learnerPilotId);
@@ -64,6 +71,8 @@ export default async function CareerPage() {
       {isCareerFeatureEnabled("experience") ? <CareerExperienceForm initialPreferences={pilot.careerExperience} /> : null}
       {isCareerFeatureEnabled("experience") ? <CareerModeGuide preferences={pilot.careerExperience} /> : null}
       {dispatchSuggestions ? <CareerDispatcher plan={dispatchSuggestions} hub={pilot.hub} /> : null}
+      {pathsPreview && careerPathProgress ? <CareerPathForm initialPath={pilot.careerExperience.careerPath} /> : null}
+      {pathsPreview ? <CareerRotation activeRotation={pilot.careerExperience.activeRotation} progress={rotationProgress} choices={rotationChoices} /> : null}
       {advancedOperations ? <CareerOperationsReadiness booking={activeBooking} flightPlan={activeFlightPlan} pireps={recentPireps} /> : null}
       {guidedCareer && isCareerFeatureEnabled("debrief") ? <CareerPerformance pireps={recentPireps} /> : null}
       {isCareerFeatureEnabled("rosters") ? <CareerRosterForm rosterDays={pilot.careerExperience.rosterDays} /> : null}

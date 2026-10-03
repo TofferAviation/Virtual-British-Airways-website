@@ -55,6 +55,8 @@ services:
         value: "enabled"
       - key: BAV_FEATURE_CAREER_MENTORING
         value: "enabled"
+      - key: BAV_FEATURE_CAREER_PATHS
+        value: "disabled"
       # Staged qualification rollout: only Realistic Operations pilots are
       # restricted once this is enabled. Keep disabled until staff approve the
       # live Type Rating Academy operating policy.
