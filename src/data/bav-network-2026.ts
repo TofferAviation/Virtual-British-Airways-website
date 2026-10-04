@@ -50,7 +50,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-base-2026-10-03-r13";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-gatwick-2026-10-04-r14";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -164,6 +164,189 @@ const virtualOperationalRoutes: BavNetworkRouteSeed[] = (Object.keys(destination
   }),
 );
 
+/**
+ * The supplied Gatwick timetable covers 1 January through 4 October 2026.
+ * The original 1,804 LGW departure rows are represented as exact weekly
+ * spans: a service is offered only when the source workbook lists it, while
+ * keeping the route catalogue compact enough for Operations to maintain.
+ * Times are the published local airport times from the supplied schedule.
+ */
+const GATWICK_TIMETABLE_VALIDATED_AT = "2026-10-04";
+
+const gatwickSourceUrls = {
+  AGA: "https://info.flightmapper.net/route/British_Airways_BA_LGW_AGA",
+  AGP: "https://info.flightmapper.net/route/British_Airways_BA_LGW_AGP",
+  ALC: "https://info.flightmapper.net/route/British_Airways_BA_LGW_ALC",
+  AYT: "https://info.flightmapper.net/route/British_Airways_BA_LGW_AYT",
+  BRI: "https://info.flightmapper.net/route/British_Airways_BA_LGW_BRI",
+  CAG: "https://info.flightmapper.net/route/British_Airways_BA_LGW_CAG",
+  DBV: "https://info.flightmapper.net/route/British_Airways_BA_LGW_DBV",
+  DLM: "https://info.flightmapper.net/route/British_Airways_BA_LGW_DLM",
+  GRZ: "https://info.flightmapper.net/route/British_Airways_BA_LGW_GRZ",
+  IBZ: "https://info.flightmapper.net/route/British_Airways_BA_LGW_IBZ",
+  MCO: "https://info.flightmapper.net/flight/British_Airways_BA_2037",
+  MLA: "https://info.flightmapper.net/route/British_Airways_BA_LGW_MLA",
+  RBA: "https://info.flightmapper.net/route/British_Airways_BA_LGW_RBA",
+} as const;
+
+const gatwickAircraftNames = {
+  A320: "Airbus A320",
+  A321: "Airbus A321",
+  B777: "Boeing 777",
+} as const;
+
+// Source times are airport-local; these are display block-time references.
+const gatwickBlockTimes: Record<keyof typeof gatwickSourceUrls, string> = {
+  AGA: "3h 50m", AGP: "2h 50m", ALC: "2h 40m", AYT: "4h 20m",
+  BRI: "2h 45m", CAG: "2h 40m", DBV: "2h 35m", DLM: "4h 10m",
+  GRZ: "2h 15m", IBZ: "2h 40m", MCO: "9h 40m", MLA: "3h 20m", RBA: "3h 10m",
+};
+
+// These ICAO identifiers are transcribed from the supplied schedule rather
+// than inferred from their IATA flight numbers.
+const gatwickObservedCallsigns = {
+  BA2037: "BAW2037", BA2602: "BAW2602", BA2604: "BAW2604", BA2606: "BAW2606",
+  BA2608: "BAW2608", BA2614: "BAW2614", BA2640: "BAW2640", BA2654: "BAW2654",
+  BA2656: "BAW2656", BA2680: "BAW2680", BA2720: "BAW2720", BA2790: "BAW2790",
+  BA2794: "BAW2794", BA2808: "BAW2808", BA2820: "BAW2820", BA2864: "BAW2864",
+} as const;
+
+type GatwickTimetableSpan = readonly [
+  flightNumber: keyof typeof gatwickObservedCallsigns,
+  to: keyof typeof gatwickSourceUrls,
+  departure: string,
+  arrival: string,
+  aircraft: keyof typeof gatwickAircraftNames,
+  validFrom: string,
+  validUntil: string,
+  operatingDay: number,
+];
+
+const gatwickTimetableSpans: readonly GatwickTimetableSpan[] = [
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-01", "2026-03-05", 4],
+  ["BA2654", "ALC", "06:45", "10:20", "A320", "2026-01-01", "2026-03-26", 4],
+  ["BA2808", "AGA", "07:15", "12:05", "A320", "2026-01-01", "2026-01-08", 4],
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-02", "2026-03-06", 5],
+  ["BA2640", "AGP", "06:15", "10:15", "A321", "2026-01-02", "2026-03-27", 5],
+  ["BA2864", "GRZ", "12:20", "15:40", "A320", "2026-01-02", "2026-01-02", 5],
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-03", "2026-03-07", 6],
+  ["BA2808", "AGA", "12:55", "17:35", "A320", "2026-01-03", "2026-01-31", 6],
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-04", "2026-03-01", 0],
+  ["BA2820", "RBA", "07:10", "11:25", "A320", "2026-01-04", "2026-03-22", 0],
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-05", "2026-03-02", 1],
+  ["BA2864", "GRZ", "08:10", "11:30", "A320", "2026-01-05", "2026-03-23", 1],
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-06", "2026-03-03", 2],
+  ["BA2808", "AGA", "07:45", "12:30", "A320", "2026-01-06", "2026-03-24", 2],
+  ["BA2037", "MCO", "11:20", "16:10", "B777", "2026-01-07", "2026-03-04", 3],
+  ["BA2820", "RBA", "07:50", "12:05", "A320", "2026-01-07", "2026-03-25", 3],
+  ["BA2864", "GRZ", "07:25", "10:45", "A320", "2026-01-07", "2026-03-25", 3],
+  ["BA2864", "GRZ", "12:50", "16:10", "A320", "2026-01-09", "2026-03-27", 5],
+  ["BA2656", "ALC", "15:45", "19:15", "A321", "2026-02-01", "2026-03-22", 0],
+  ["BA2808", "AGA", "07:15", "12:05", "A320", "2026-02-12", "2026-03-26", 4],
+  ["BA2808", "AGA", "12:55", "17:35", "A320", "2026-02-14", "2026-03-28", 6],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-08", "2026-03-22", 0],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-09", "2026-03-23", 1],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-10", "2026-03-24", 2],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-11", "2026-03-25", 3],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-12", "2026-03-26", 4],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-13", "2026-03-27", 5],
+  ["BA2037", "MCO", "11:20", "17:10", "B777", "2026-03-14", "2026-03-28", 6],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-03-29", "2026-10-04", 0],
+  ["BA2602", "BRI", "06:45", "10:40", "A320", "2026-03-29", "2026-10-04", 0],
+  ["BA2656", "ALC", "15:45", "19:20", "A320", "2026-03-29", "2026-10-04", 0],
+  ["BA2680", "IBZ", "08:00", "11:40", "A320", "2026-03-29", "2026-10-04", 0],
+  ["BA2808", "AGA", "08:00", "11:50", "A320", "2026-03-29", "2026-10-04", 0],
+  ["BA2820", "RBA", "07:25", "10:45", "A320", "2026-03-29", "2026-10-04", 0],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-03-30", "2026-09-28", 1],
+  ["BA2614", "MLA", "06:10", "10:30", "A320", "2026-03-30", "2026-09-28", 1],
+  ["BA2640", "AGP", "06:10", "10:10", "A320", "2026-03-30", "2026-09-28", 1],
+  ["BA2654", "ALC", "06:35", "10:15", "A320", "2026-03-30", "2026-09-28", 1],
+  ["BA2680", "IBZ", "08:50", "12:40", "A320", "2026-03-30", "2026-09-28", 1],
+  ["BA2720", "DBV", "07:10", "10:55", "A320", "2026-03-30", "2026-09-28", 1],
+  ["BA2864", "GRZ", "17:10", "20:20", "A320", "2026-03-30", "2026-09-28", 1],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-03-31", "2026-09-29", 2],
+  ["BA2602", "BRI", "07:40", "11:30", "A320", "2026-03-31", "2026-09-29", 2],
+  ["BA2654", "ALC", "06:25", "10:05", "A320", "2026-03-31", "2026-09-29", 2],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-04-01", "2026-09-30", 3],
+  ["BA2602", "BRI", "07:25", "11:20", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2614", "MLA", "06:40", "11:00", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2654", "ALC", "06:40", "10:20", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2656", "ALC", "17:05", "20:40", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2808", "AGA", "07:35", "11:25", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2820", "RBA", "14:50", "18:10", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2864", "GRZ", "07:40", "10:50", "A320", "2026-04-01", "2026-09-30", 3],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-04-02", "2026-10-01", 4],
+  ["BA2606", "BRI", "16:10", "20:00", "A320", "2026-04-02", "2026-10-01", 4],
+  ["BA2614", "MLA", "06:50", "11:10", "A320", "2026-04-02", "2026-10-01", 4],
+  ["BA2654", "ALC", "06:30", "10:10", "A320", "2026-04-02", "2026-10-01", 4],
+  ["BA2680", "IBZ", "09:15", "12:55", "A320", "2026-04-02", "2026-10-01", 4],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-04-03", "2026-10-02", 5],
+  ["BA2640", "AGP", "06:15", "10:15", "A320", "2026-04-03", "2026-10-02", 5],
+  ["BA2656", "ALC", "17:25", "21:00", "A320", "2026-04-03", "2026-10-02", 5],
+  ["BA2680", "IBZ", "08:50", "12:30", "A320", "2026-04-03", "2026-10-02", 5],
+  ["BA2808", "AGA", "08:25", "12:15", "A320", "2026-04-03", "2026-10-02", 5],
+  ["BA2864", "GRZ", "16:00", "19:10", "A320", "2026-04-03", "2026-10-02", 5],
+  ["BA2037", "MCO", "10:45", "15:15", "B777", "2026-04-04", "2026-10-03", 6],
+  ["BA2614", "MLA", "06:25", "10:45", "A320", "2026-04-04", "2026-10-03", 6],
+  ["BA2640", "AGP", "06:40", "10:40", "A320", "2026-04-04", "2026-10-03", 6],
+  ["BA2654", "ALC", "06:25", "10:05", "A320", "2026-04-04", "2026-10-03", 6],
+  ["BA2656", "ALC", "17:40", "21:15", "A320", "2026-04-04", "2026-10-03", 6],
+  ["BA2680", "IBZ", "09:25", "13:05", "A320", "2026-04-04", "2026-10-03", 6],
+  ["BA2794", "AYT", "13:10", "19:55", "A320", "2026-04-30", "2026-10-01", 4],
+  ["BA2790", "DLM", "08:05", "14:15", "A320", "2026-05-01", "2026-10-02", 5],
+  ["BA2790", "DLM", "06:15", "12:25", "A320", "2026-05-03", "2026-10-04", 0],
+  ["BA2794", "AYT", "08:25", "15:05", "A320", "2026-05-03", "2026-10-04", 0],
+  ["BA2794", "AYT", "10:50", "17:35", "A320", "2026-05-05", "2026-09-29", 2],
+  ["BA2790", "DLM", "06:15", "12:25", "A320", "2026-05-06", "2026-09-30", 3],
+  ["BA2604", "CAG", "07:10", "10:50", "A320", "2026-05-21", "2026-10-01", 4],
+  ["BA2790", "DLM", "06:25", "12:35", "A320", "2026-05-21", "2026-10-01", 4],
+  ["BA2608", "CAG", "16:00", "19:35", "A320", "2026-05-22", "2026-10-02", 5],
+  ["BA2604", "CAG", "07:10", "10:50", "A320", "2026-05-23", "2026-10-03", 6],
+  ["BA2720", "DBV", "06:45", "10:30", "A320", "2026-05-23", "2026-10-03", 6],
+  ["BA2790", "DLM", "13:40", "19:45", "A320", "2026-05-23", "2026-10-03", 6],
+  ["BA2604", "CAG", "08:50", "12:30", "A320", "2026-05-24", "2026-09-27", 0],
+  ["BA2720", "DBV", "06:20", "10:10", "A320", "2026-05-24", "2026-10-04", 0],
+  ["BA2602", "BRI", "07:20", "11:15", "A320", "2026-05-25", "2026-09-28", 1],
+  ["BA2606", "BRI", "16:55", "20:45", "A320", "2026-05-25", "2026-09-28", 1],
+  ["BA2608", "CAG", "15:35", "19:10", "A320", "2026-05-25", "2026-09-28", 1],
+  ["BA2604", "CAG", "10:25", "14:05", "A320", "2026-05-26", "2026-09-29", 2],
+  ["BA2606", "BRI", "16:35", "20:25", "A320", "2026-05-26", "2026-09-29", 2],
+  ["BA2680", "IBZ", "07:35", "11:15", "A320", "2026-05-26", "2026-09-29", 2],
+  ["BA2720", "DBV", "07:00", "10:35", "A320", "2026-05-26", "2026-09-29", 2],
+  ["BA2608", "CAG", "15:45", "19:20", "A320", "2026-05-27", "2026-09-30", 3],
+  ["BA2794", "AYT", "06:40", "13:20", "A320", "2026-05-27", "2026-09-30", 3],
+  ["BA2604", "CAG", "06:10", "09:50", "A320", "2026-06-29", "2026-08-31", 1],
+];
+
+const gatwickTimetableServices: BavNetworkRouteSeed[] = gatwickTimetableSpans.map(([
+  flightNumber,
+  to,
+  departure,
+  arrival,
+  aircraft,
+  validFrom,
+  validUntil,
+  operatingDay,
+]) => ({
+  id: `ba-gatwick-2026-${flightNumber.toLowerCase()}-${to.toLowerCase()}-${validFrom.replaceAll("-", "")}-${departure.replace(":", "")}`,
+  from: "LGW",
+  to,
+  flightNumber,
+  callsign: gatwickObservedCallsigns[flightNumber],
+  departure,
+  arrival,
+  duration: gatwickBlockTimes[to],
+  aircraft: gatwickAircraftNames[aircraft],
+  aircraftOptions: [gatwickAircraftNames[aircraft]],
+  slots: 12,
+  active: true,
+  validFrom,
+  validUntil,
+  operatingDays: [operatingDay],
+  sourceUrl: gatwickSourceUrls[to],
+  validatedAt: GATWICK_TIMETABLE_VALIDATED_AT,
+}));
+
 const checked = BAV_NETWORK_VALIDATED_AT;
 const sources = {
   lux: "https://www.flight.info/BA416",
@@ -255,5 +438,6 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
  */
 export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...virtualOperationalRoutes,
+  ...gatwickTimetableServices,
   ...verifiedSchedules,
 ];
