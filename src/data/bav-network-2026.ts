@@ -50,7 +50,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-gatwick-2026-10-04-r15";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-gatwick-2026-10-04-r16";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -360,6 +360,113 @@ for (const span of gatwickTimetableSpans) {
 const gatwickReferenceServices: BavNetworkRouteSeed[] = [...latestGatwickReferenceSpans.values()]
   .map((span) => gatwickServiceFromSpan(span, true));
 
+type GatwickReturnReference = {
+  from: keyof typeof gatwickSourceUrls;
+  flightNumber: string;
+  departure: string;
+  arrival: string;
+  duration: string;
+  aircraft: keyof typeof gatwickAircraftNames;
+  sourceUrl: string;
+};
+
+/**
+ * Every sourced LGW departure needs a way back to Gatwick. The supplied
+ * workbook contains only LGW-originating rows, so these are deliberately
+ * reference services: each pairing, BA flight number and BAW ICAO callsign
+ * has been independently checked, but is not claimed to be a date-specific
+ * timetable entry until Operations has the corresponding inbound schedule.
+ */
+const gatwickReturnReferences = {
+  BA2037: {
+    from: "MCO", flightNumber: "BA2036", departure: "17:15", arrival: "06:50", duration: "8h 35m", aircraft: "B777",
+    sourceUrl: "https://www.flightaware.com/live/flight/BAW2036/history",
+  },
+  BA2602: {
+    from: "BRI", flightNumber: "BA2603", departure: "12:00", arrival: "14:05", duration: "3h 05m", aircraft: "A321",
+    sourceUrl: "https://www.flight.info/BA2603",
+  },
+  BA2604: {
+    from: "CAG", flightNumber: "BA2605", departure: "14:00", arrival: "15:50", duration: "2h 50m", aircraft: "A320",
+    sourceUrl: "https://www.flight.info/BA2605",
+  },
+  BA2606: {
+    from: "BRI", flightNumber: "BA2607", departure: "18:20", arrival: "20:25", duration: "3h 05m", aircraft: "A321",
+    sourceUrl: "https://www.flightstats.com/v2/flight-details/BA/2607",
+  },
+  BA2608: {
+    from: "CAG", flightNumber: "BA2609", departure: "20:00", arrival: "21:45", duration: "2h 45m", aircraft: "A320",
+    sourceUrl: "https://info.flightmapper.net/flight/British_Airways_BA_2609",
+  },
+  BA2614: {
+    from: "MLA", flightNumber: "BA2615", departure: "11:25", arrival: "13:40", duration: "3h 15m", aircraft: "A321",
+    sourceUrl: "https://www.flight.info/BA2615",
+  },
+  BA2640: {
+    from: "AGP", flightNumber: "BA2641", departure: "12:00", arrival: "13:55", duration: "2h 55m", aircraft: "A320",
+    sourceUrl: "https://www.airportia.com/flights/ba2641/malaga/london/",
+  },
+  BA2654: {
+    from: "ALC", flightNumber: "BA2655", departure: "11:10", arrival: "12:50", duration: "2h 40m", aircraft: "A320",
+    sourceUrl: "https://info.flightmapper.net/flight/British_Airways_BA_2655",
+  },
+  BA2656: {
+    from: "ALC", flightNumber: "BA2657", departure: "21:35", arrival: "23:20", duration: "2h 45m", aircraft: "A320",
+    sourceUrl: "https://www.planemapper.com/flights/BA2657",
+  },
+  BA2680: {
+    from: "IBZ", flightNumber: "BA2681", departure: "12:30", arrival: "13:50", duration: "2h 20m", aircraft: "A320",
+    sourceUrl: "https://info.flightmapper.net/flight/British_Airways_BA_2681",
+  },
+  BA2720: {
+    from: "DBV", flightNumber: "BA2721", departure: "11:20", arrival: "13:20", duration: "3h 00m", aircraft: "A320",
+    sourceUrl: "https://info.flightmapper.net/flight/British_Airways_BA_2721",
+  },
+  BA2790: {
+    from: "DLM", flightNumber: "BA2791", departure: "16:35", arrival: "19:05", duration: "4h 30m", aircraft: "A320",
+    sourceUrl: "https://www.planemapper.com/flights/BA2791",
+  },
+  BA2794: {
+    from: "AYT", flightNumber: "BA2795", departure: "14:20", arrival: "17:05", duration: "4h 45m", aircraft: "A320",
+    sourceUrl: "https://info.flightmapper.net/flight/British_Airways_BA_2795",
+  },
+  BA2808: {
+    from: "AGA", flightNumber: "BA2809", departure: "15:00", arrival: "18:40", duration: "3h 40m", aircraft: "A320",
+    sourceUrl: "https://www.flight.info/BA2809",
+  },
+  BA2820: {
+    from: "RBA", flightNumber: "BA2821", departure: "19:15", arrival: "22:20", duration: "3h 05m", aircraft: "A320",
+    sourceUrl: "https://www.flight.info/BA2821",
+  },
+  BA2864: {
+    from: "GRZ", flightNumber: "BA2865", departure: "11:45", arrival: "13:05", duration: "2h 20m", aircraft: "A320",
+    sourceUrl: "https://graz-airport.at/en/london-with-british-airways/",
+  },
+} as const satisfies Record<keyof typeof gatwickObservedCallsigns, GatwickReturnReference>;
+
+const gatwickReturnReferenceServices: BavNetworkRouteSeed[] = (
+  Object.keys(gatwickReturnReferences) as Array<keyof typeof gatwickObservedCallsigns>
+).map((outboundFlightNumber) => {
+  const returnReference = gatwickReturnReferences[outboundFlightNumber];
+  return {
+    id: `ba-gatwick-return-reference-${outboundFlightNumber.toLowerCase()}-${returnReference.flightNumber.toLowerCase()}`,
+    from: returnReference.from,
+    to: "LGW",
+    flightNumber: returnReference.flightNumber,
+    callsign: `BAW${returnReference.flightNumber.slice(2)}`,
+    departure: returnReference.departure,
+    arrival: returnReference.arrival,
+    duration: returnReference.duration,
+    aircraft: gatwickAircraftNames[returnReference.aircraft],
+    aircraftOptions: [gatwickAircraftNames[returnReference.aircraft]],
+    slots: 12,
+    active: true,
+    referenceOnly: true,
+    sourceUrl: returnReference.sourceUrl,
+    validatedAt: GATWICK_TIMETABLE_VALIDATED_AT,
+  };
+});
+
 const checked = BAV_NETWORK_VALIDATED_AT;
 const sources = {
   lux: "https://www.flight.info/BA416",
@@ -453,5 +560,6 @@ export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...virtualOperationalRoutes,
   ...gatwickTimetableServices,
   ...gatwickReferenceServices,
+  ...gatwickReturnReferenceServices,
   ...verifiedSchedules,
 ];
