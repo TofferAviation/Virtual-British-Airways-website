@@ -50,7 +50,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-gatwick-2026-10-04-r14";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-gatwick-2026-10-04-r15";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -318,7 +318,7 @@ const gatwickTimetableSpans: readonly GatwickTimetableSpan[] = [
   ["BA2604", "CAG", "06:10", "09:50", "A320", "2026-06-29", "2026-08-31", 1],
 ];
 
-const gatwickTimetableServices: BavNetworkRouteSeed[] = gatwickTimetableSpans.map(([
+function gatwickServiceFromSpan([
   flightNumber,
   to,
   departure,
@@ -327,8 +327,9 @@ const gatwickTimetableServices: BavNetworkRouteSeed[] = gatwickTimetableSpans.ma
   validFrom,
   validUntil,
   operatingDay,
-]) => ({
-  id: `ba-gatwick-2026-${flightNumber.toLowerCase()}-${to.toLowerCase()}-${validFrom.replaceAll("-", "")}-${departure.replace(":", "")}`,
+]: GatwickTimetableSpan, referenceOnly = false): BavNetworkRouteSeed {
+  return {
+  id: `ba-gatwick-${referenceOnly ? "reference" : "2026"}-${flightNumber.toLowerCase()}-${to.toLowerCase()}-${validFrom.replaceAll("-", "")}-${departure.replace(":", "")}`,
   from: "LGW",
   to,
   flightNumber,
@@ -340,12 +341,24 @@ const gatwickTimetableServices: BavNetworkRouteSeed[] = gatwickTimetableSpans.ma
   aircraftOptions: [gatwickAircraftNames[aircraft]],
   slots: 12,
   active: true,
-  validFrom,
-  validUntil,
-  operatingDays: [operatingDay],
+  ...(referenceOnly ? { referenceOnly: true } : { validFrom, validUntil, operatingDays: [operatingDay] }),
   sourceUrl: gatwickSourceUrls[to],
   validatedAt: GATWICK_TIMETABLE_VALIDATED_AT,
-}));
+  };
+}
+
+const gatwickTimetableServices: BavNetworkRouteSeed[] = gatwickTimetableSpans.map((span) => gatwickServiceFromSpan(span));
+
+// A selected simulator date can sit just beyond the supplied timetable
+// window. Keep the latest checked service for each Gatwick flight bookable as
+// a clearly labelled operational reference instead of hiding the route.
+const latestGatwickReferenceSpans = new Map<keyof typeof gatwickObservedCallsigns, GatwickTimetableSpan>();
+for (const span of gatwickTimetableSpans) {
+  const existing = latestGatwickReferenceSpans.get(span[0]);
+  if (!existing || span[6] > existing[6]) latestGatwickReferenceSpans.set(span[0], span);
+}
+const gatwickReferenceServices: BavNetworkRouteSeed[] = [...latestGatwickReferenceSpans.values()]
+  .map((span) => gatwickServiceFromSpan(span, true));
 
 const checked = BAV_NETWORK_VALIDATED_AT;
 const sources = {
@@ -439,5 +452,6 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
 export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...virtualOperationalRoutes,
   ...gatwickTimetableServices,
+  ...gatwickReferenceServices,
   ...verifiedSchedules,
 ];

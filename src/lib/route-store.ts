@@ -285,15 +285,31 @@ function isPublishedOperationalService(route: ManagedRoute, date?: string, inclu
     (route.referenceOnly === true || includeFlexible || routeOperatesOn(route, date));
 }
 
+function publishedOperationalServices(routes: ManagedRoute[], date?: string, options: FlightSearchOptions = {}) {
+  const exact = routes.filter((route) =>
+    route.referenceOnly !== true && isPublishedOperationalService(route, date, false),
+  );
+  const flexible = options.includeVirtualFlexible
+    ? routes.filter((route) => route.referenceOnly !== true && !routeOperatesOn(route, date) && isPublishedOperationalService(route, date, true))
+    : [];
+  const scheduledPairs = new Set([...exact, ...flexible].map((route) => `${route.from}-${route.to}`));
+  const references = routes.filter((route) =>
+    route.referenceOnly === true &&
+    isPublishedOperationalService(route, date, false) &&
+    !scheduledPairs.has(`${route.from}-${route.to}`),
+  );
+  return [...exact, ...flexible, ...references];
+}
+
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from && route.to === to);
-  return withAvailability(matching.filter((route) => isPublishedOperationalService(route, date, options.includeVirtualFlexible)), date);
+  return withAvailability(publishedOperationalServices(matching, date, options), date);
 }
 
 /** Lists every published, operationally checked service from the station. */
 export async function getFlightsFromStation(from: string, date?: string, options: FlightSearchOptions = {}) {
   const matching = (await getBookableRoutes()).filter((route) => route.active && route.from === from);
-  return withAvailability(matching.filter((route) => isPublishedOperationalService(route, date, options.includeVirtualFlexible)), date);
+  return withAvailability(publishedOperationalServices(matching, date, options), date);
 }
 
 /** @deprecated Use getFlightsFromStation; retained for hub links. */
@@ -302,6 +318,7 @@ export async function getFlightsFromHub(from: string, date?: string, options: Fl
 }
 
 export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = (await getBookableRoutes()).filter((route) => isPublishedOperationalService(route, date) && (route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft)));
+  const managed = publishedOperationalServices(await getBookableRoutes(), date)
+    .filter((route) => route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft));
   return withAvailability(managed, date);
 }
