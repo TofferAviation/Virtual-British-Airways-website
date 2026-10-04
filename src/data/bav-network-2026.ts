@@ -8,6 +8,8 @@
  * only once Operations has verified that individual service.
  */
 
+import { heathrowCallsignReferences } from "./ba-heathrow-callsign-reference-2026";
+
 export type BavNetworkRouteSeed = {
   id: string;
   from: string;
@@ -50,7 +52,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-gatwick-2026-10-04-r16";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-2026-10-04-r17";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -58,6 +60,7 @@ export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/londoncity",
   "https://www.britishairways.com/content/information/flight-information/our-route-network",
   "https://www.flightconnections.com/route-map-british-airways-ba",
+  "https://speedbird.online/flightnumbers.php/airport_detail.php?iata=LHR",
   "https://mediacentre.britishairways.com/news/21112025/british-airways-expands-its-heathrow-network-with-two-new-short-haul-destinations-for-summer-2026",
   "https://mediacentre.britishairways.com/news/16032026/british-airways-announces-major-winter-2026-expansion-1",
 ] as const;
@@ -65,8 +68,23 @@ export const BAV_NETWORK_SOURCES = [
 // SimBrief needs ICAO, not IATA. Keeping the mapping next to the validated
 // network means every published BAV route can open a dispatch without a
 // second, incomplete airport list.
-export const BAV_NETWORK_ICAO_BY_IATA: Record<string, string> = {
+const BAV_NETWORK_ICAO_BASE_BY_IATA: Record<string, string> = {
   ABV: "DNAA", ABZ: "EGPD", ACC: "DGAA", ACE: "GCRR", AGA: "GMAD", AGP: "LEMG", ALC: "LEAL", ALG: "DAAG", AMM: "OJAI", AMS: "EHAM", ANU: "TAPA", ATH: "LGAV", ATL: "KATL", AUH: "OMAA", AUS: "KAUS", AYT: "LTAI", BAH: "OBBI", BCN: "LEBL", BDA: "TXKF", BDS: "LIBR", BER: "EDDB", BEY: "OLBA", BGI: "TBPB", BHD: "EGAC", BJV: "LTFE", BKK: "VTBS", BLL: "EKBI", BLQ: "LIPE", BLR: "VOBL", BNA: "KBNA", BOD: "LFBD", BOM: "VABB", BOS: "KBOS", BRI: "LIBD", BRU: "EBBR", BSL: "LFSB", BUD: "LHBP", BWI: "KBWI", CAG: "LIEE", CAI: "HECA", CDG: "LFPG", CFU: "LGKR", CHQ: "LGSA", CMB: "VCBI", CMF: "LFLB", CPH: "EKCH", CPT: "FACT", CTA: "LICC", CUN: "MMUN", DBV: "LDDU", DEL: "VIDP", DEN: "KDEN", DFW: "KDFW", DLM: "LTBS", DOH: "OTHH", DUB: "EIDW", DUS: "EDDL", DXB: "OMDB", EAS: "LESO", EDI: "EGPH", EFL: "LGKF", EGC: "LFBE", EWR: "KEWR", EZE: "SAEZ", FAO: "LPFR", FCO: "LIRF", FLR: "LIRQ", FNC: "LPMA", FRA: "EDDF", FUE: "GCFV", GCI: "EGJB", GLA: "EGPF", GNB: "LFLS", GND: "TGPY", GRZ: "LOWG", GVA: "LSGG", HAJ: "EDDV", HAM: "EDDH", HER: "LGIR", HKG: "VHHH", HND: "RJTT", HYD: "VOHS", IAD: "KIAD", IAH: "KIAH", IBZ: "LEIB", INN: "LOWI", INV: "EGPE", ISB: "OPIS", IST: "LTFM", IVL: "EFIV", JER: "EGJJ", JFK: "KJFK", JNB: "FAOR", JRO: "HTKJ", JSI: "LGSK", JTR: "LGSR", KEF: "BIKF", KGS: "LGKO", KIN: "MKJP", KLX: "LGKL", KUL: "WMKK", KWI: "OKBK", LAS: "KLAS", LAX: "KLAX", LCA: "LCLK", LIN: "LIML", LIS: "LPPT", LOS: "DNMM", LPA: "GCLP", LUX: "ELLX", LYS: "LFLL", MAA: "VOMM", MAD: "LEMD", MAH: "LEMH", MAN: "EGCC", MCO: "KMCO", MCT: "OOMS", MEX: "MMMX", MIA: "KMIA", MLA: "LMML", MPL: "LFMT", MRS: "LFML", MRU: "FIMP", MSY: "KMSY", MUC: "EDDM", MXP: "LIMC", NAP: "LIRN", NBO: "HKJK", NCE: "LFMN", NCL: "EGNT", NUE: "EDDN", OLB: "LIEO", OPO: "LPPR", ORD: "KORD", OSL: "ENGM", PFO: "LCPH", PHL: "KPHL", PHX: "KPHX", PIT: "KPIT", PLS: "MBPV", PMI: "LEPA", POS: "TTPP", PRG: "LKPR", PSA: "LIRP", PUJ: "MDPC", PVG: "ZSPD", PVK: "LGPZ", RAK: "GMMX", RBA: "GMME", RHO: "LGRP", RTM: "EHRD", RVN: "EFRO", SAN: "KSAN", SEA: "KSEA", SEZ: "FSIA", SFO: "KSFO", SIN: "WSSS", SJO: "MROC", SKB: "TKPK", SKG: "LGTS", SOF: "LBSF", SPU: "LDSP", SSH: "HESH", STL: "KSTL", SVQ: "LEZL", SZG: "LOWS", TFS: "GCTS", TIA: "LATI", TIV: "LYTV", TLN: "LFTH", TLS: "LFBO", TLV: "LLBG", TPA: "KTPA", TRN: "LIMF", UVF: "TLPL", VCE: "LIPZ", VIE: "LOWW", VRN: "LIPX", WAW: "EPWA", YUL: "CYUL", YVR: "CYVR", YYZ: "CYYZ", ZAG: "LDZA", ZNZ: "HTZA", ZRH: "LSZH", ZTH: "LGZA",
+};
+
+// Heathrow reference services add stations that were not part of the original
+// BAV hub catalogue. Keep this separate from the baseline so the timetable
+// import's dispatch coverage remains easy to audit.
+const heathrowAdditionalIcaoByIata: Record<string, string> = {
+  ARN: "ESSA", CGN: "EDDK", CVG: "KCVG", FSC: "LFKF", GIB: "LXGB", GOT: "ESGG",
+  GRU: "SBGR", JMK: "LGMK", KRK: "EPKK", LJU: "LJLJ", NAS: "MYNN", OTP: "LROP",
+  PDL: "LPPD", PEG: "LIRZ", PMO: "LICJ", RIX: "EVRA", RMI: "LIPR", SAW: "LTFJ",
+  STR: "EDDS", TBS: "UGTB", VLC: "LEVC",
+};
+
+export const BAV_NETWORK_ICAO_BY_IATA: Record<string, string> = {
+  ...BAV_NETWORK_ICAO_BASE_BY_IATA,
+  ...heathrowAdditionalIcaoByIata,
 };
 
 /**
@@ -552,6 +570,52 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
 ];
 
 /**
+ * The supplied Heathrow workbook is a route-and-callsign reference, not a
+ * dated day-by-day timetable. Preserve all of its commercial BA numbers and
+ * BAW/SHT identifiers without pretending that its current timing samples are
+ * historic schedule facts. The booking UI already describes reference-only
+ * services as flight-simulation planning times.
+ */
+const HEATHROW_CALLSIGN_REFERENCE_VALIDATED_AT = "2026-10-04";
+const HEATHROW_CALLSIGN_REFERENCE_SOURCE = "https://speedbird.online/flightnumbers.php/airport_detail.php?iata=LHR";
+
+function heathrowReferencePlanningValues(from: string, to: string, sequence: number) {
+  const otherStation = from === "LHR" ? to : from;
+  const duration = durationPartsForVirtualService(otherStation);
+  const departureMinutes = 5 * 60 + ((sequence * 43 + (from === "LHR" ? 0 : 23)) % (16 * 60));
+  const equipment = virtualAircraft("LHR", otherStation, sequence);
+  return {
+    departure: toClock(departureMinutes),
+    arrival: toClock(departureMinutes + duration.hours * 60 + duration.minutes),
+    duration: `${duration.hours}h ${String(duration.minutes).padStart(2, "0")}m`,
+    aircraft: equipment.aircraft,
+    aircraftOptions: equipment.aircraftOptions,
+  };
+}
+
+const detailedReferenceKeys = new Set(
+  verifiedSchedules
+    .filter((route) => route.referenceOnly)
+    .map((route) => `${route.flightNumber}-${route.from}-${route.to}`),
+);
+
+const heathrowCallsignReferenceServices: BavNetworkRouteSeed[] = heathrowCallsignReferences
+  .filter((reference) => !detailedReferenceKeys.has(`${reference.flightNumber}-${reference.from}-${reference.to}`))
+  .map((reference, sequence) => ({
+    id: `ba-heathrow-reference-${reference.flightNumber.toLowerCase()}-${reference.from.toLowerCase()}-${reference.to.toLowerCase()}`,
+    from: reference.from,
+    to: reference.to,
+    flightNumber: reference.flightNumber,
+    callsign: reference.callsign,
+    ...heathrowReferencePlanningValues(reference.from, reference.to, sequence),
+    slots: 12,
+    active: true,
+    referenceOnly: true,
+    sourceUrl: HEATHROW_CALLSIGN_REFERENCE_SOURCE,
+    validatedAt: HEATHROW_CALLSIGN_REFERENCE_VALIDATED_AT,
+  }));
+
+/**
  * The persistent route store migrates this complete set as one baseline. The
  * number of records is greater than 221 because several published airport
  * pairs have multiple independently verified departures.
@@ -562,4 +626,5 @@ export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...gatwickReferenceServices,
   ...gatwickReturnReferenceServices,
   ...verifiedSchedules,
+  ...heathrowCallsignReferenceServices,
 ];
