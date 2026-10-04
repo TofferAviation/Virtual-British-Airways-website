@@ -52,7 +52,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-2026-10-04-r17";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-2026-10-04-r18";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -599,7 +599,22 @@ const detailedReferenceKeys = new Set(
     .map((route) => `${route.flightNumber}-${route.from}-${route.to}`),
 );
 
-const heathrowCallsignReferenceServices: BavNetworkRouteSeed[] = heathrowCallsignReferences
+// The supplied workbook has no inbound row for these three outbound airport
+// pairs. Their returns are added as separately sourced operational references
+// so no Heathrow service leaves a pilot without a route back to base.
+const heathrowSupplementalReturnReferences = [
+  { flightNumber: "BA807", from: "BLL", to: "LHR", callsign: "BAW807K", sourceUrl: "https://speedbird.online/flightnumbers.php/airport_detail.php?iata=LHR" },
+  { flightNumber: "BA246", from: "GRU", to: "LHR", callsign: "BAW246", sourceUrl: "https://www.flight.info/BA246" },
+  { flightNumber: "BA54", from: "JNB", to: "LHR", callsign: "BAW54", sourceUrl: "https://www.flightaware.com/live/flight/BAW54/history" },
+  { flightNumber: "BA56", from: "JNB", to: "LHR", callsign: "BAW56", sourceUrl: "https://www.flightaware.com/live/flight/BAW56/history" },
+] as const;
+
+const allHeathrowCallsignReferences = [
+  ...heathrowCallsignReferences.map((reference) => ({ ...reference, sourceUrl: HEATHROW_CALLSIGN_REFERENCE_SOURCE })),
+  ...heathrowSupplementalReturnReferences,
+];
+
+const heathrowCallsignReferenceServices: BavNetworkRouteSeed[] = allHeathrowCallsignReferences
   .filter((reference) => !detailedReferenceKeys.has(`${reference.flightNumber}-${reference.from}-${reference.to}`))
   .map((reference, sequence) => ({
     id: `ba-heathrow-reference-${reference.flightNumber.toLowerCase()}-${reference.from.toLowerCase()}-${reference.to.toLowerCase()}`,
@@ -611,7 +626,7 @@ const heathrowCallsignReferenceServices: BavNetworkRouteSeed[] = heathrowCallsig
     slots: 12,
     active: true,
     referenceOnly: true,
-    sourceUrl: HEATHROW_CALLSIGN_REFERENCE_SOURCE,
+    sourceUrl: reference.sourceUrl,
     validatedAt: HEATHROW_CALLSIGN_REFERENCE_VALIDATED_AT,
   }));
 
