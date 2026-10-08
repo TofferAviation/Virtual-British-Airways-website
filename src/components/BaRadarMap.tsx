@@ -30,6 +30,16 @@ function aircraftIcon(flight: PublicRadarFlight, selected: boolean) {
   });
 }
 
+function replayIcon(headingDeg: number) {
+  const heading = Math.round(normaliseHeading(headingDeg));
+  return L.divIcon({
+    className: "ba-radar-replay-icon-shell",
+    html: `<span class="ba-radar-replay-icon" title="Replay position"><b style="--aircraft-heading:${heading}deg"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.1 1.4c.5-.7 1.3-.7 1.8 0L15.1 9l6.3 2.5v2l-6.2-.7-1.2 4.4 2.5 1.5v1.6L12 19.4l-4.5.9v-1.6l2.5-1.5-1.2-4.4-6.2.7v-2L8.9 9l2.2-7.6Z" /></svg></b></span>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
 function controllerIcon(controller: VatsimStation, selected: boolean) {
   const isAtis = controller.kind === "atis";
   return L.divIcon({
@@ -122,6 +132,7 @@ export function BaRadarMap({
   layers,
   selectedController,
   onSelectController,
+  replay,
 }: {
   flights: PublicRadarFlight[];
   selectedId: string;
@@ -133,6 +144,7 @@ export function BaRadarMap({
   layers: RadarLayers;
   selectedController: string;
   onSelectController: (callsign: string) => void;
+  replay: { id: string; points: Array<{ latitude: number; longitude: number; headingDeg: number }>; activeIndex: number } | null;
 }) {
   const positioned = flights.filter((flight) => flight.lastSnapshot);
   const selected = positioned.find((flight) => flight.id === selectedId) ?? null;
@@ -142,6 +154,12 @@ export function BaRadarMap({
   const track: Position[] = (selected?.trackSnapshots?.length ? selected.trackSnapshots : selected?.recentSnapshots ?? [])
     .filter((snapshot) => Number.isFinite(snapshot.latitude) && Number.isFinite(snapshot.longitude))
     .map((snapshot) => [snapshot.latitude, snapshot.longitude]);
+  const replayTrack: Position[] = (replay?.points ?? [])
+    .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+    .map((point) => [point.latitude, point.longitude]);
+  const replayPoint = replay && replay.points.length
+    ? replay.points[Math.max(0, Math.min(replay.activeIndex, replay.points.length - 1))]
+    : null;
 
   return <MapContainer className="ba-radar-leaflet-map" center={[27, -13]} zoom={2} minZoom={2} maxZoom={19} worldCopyJump scrollWheelZoom>
     <TileLayer
@@ -154,6 +172,8 @@ export function BaRadarMap({
     <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
     {plannedRoute.length > 1 ? <Polyline positions={plannedRoute} pathOptions={{ color: "#73bdf1", weight: 2.5, opacity: 0.8, dashArray: "7 10", lineCap: "round", lineJoin: "round", className: "ba-radar-planned-route" }} /> : null}
     {track.length > 1 ? <Polyline positions={track} pathOptions={{ color: "#f1c84c", weight: 3.5, opacity: 0.96, lineCap: "round", lineJoin: "round", className: "ba-radar-recorded-track" }} /> : null}
+    {replayTrack.length > 1 ? <Polyline positions={replayTrack} pathOptions={{ color: "#d91e45", weight: 3.5, opacity: 0.92, lineCap: "round", lineJoin: "round", className: "ba-radar-replay-track" }} /> : null}
+    {replayPoint ? <Marker position={[replayPoint.latitude, replayPoint.longitude]} icon={replayIcon(replayPoint.headingDeg)} zIndexOffset={900} /> : null}
     {positioned.map((flight) => <Marker key={flight.id} position={[flight.lastSnapshot!.latitude, flight.lastSnapshot!.longitude]} icon={aircraftIcon(flight, flight.id === selectedId)} eventHandlers={{ click: () => onSelect(flight.id) }} />)}
   </MapContainer>;
 }

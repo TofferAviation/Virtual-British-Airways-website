@@ -153,6 +153,13 @@ async function completeLocalAcarsSession(id: string, pilotId: string, landingFpm
   session.status = "completed"; session.completedAt = new Date().toISOString(); session.updatedAt = session.completedAt; if (landingFpm != null && Number.isFinite(landingFpm)) session.landingFpm = Math.round(landingFpm); await writeState(state); return session;
 }
 async function listLocalLiveAcarsSessions() { const state = await readState(); const cutoff = Date.now() - 90_000; return state.sessions.filter((session) => session.status === "active").map((session) => ({ ...session, connectionHealthy: new Date(session.updatedAt).getTime() >= cutoff })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
+async function listLocalCompletedAcarsSessionsForPilot(pilotId: string, limit: number) {
+  const state = await readState();
+  return state.sessions
+    .filter((session) => session.pilotId === pilotId && session.status === "completed" && session.completedAt)
+    .sort((left, right) => (right.completedAt ?? "").localeCompare(left.completedAt ?? ""))
+    .slice(0, limit);
+}
 
 async function startPersistentAcarsSession(client: SupabaseClient, input: NewSessionInput) {
   const now = new Date().toISOString(); const { error: disconnectError } = await client.from("acars_sessions").update({ status: "disconnected", updated_at: now }).eq("pilot_id", input.pilotId).eq("status", "active"); if (disconnectError) throw disconnectError;
@@ -170,6 +177,13 @@ async function appendPersistentAcarsSnapshot(client: SupabaseClient, id: string,
 }
 async function completePersistentAcarsSession(client: SupabaseClient, id: string, pilotId: string, landingFpm?: number | null) { const completedAt = new Date().toISOString(); const update: Record<string, unknown> = { status: "completed", completed_at: completedAt, updated_at: completedAt }; if (landingFpm != null && Number.isFinite(landingFpm)) update.landing_fpm = Math.round(landingFpm); const { data, error } = await client.from("acars_sessions").update(update).eq("id", id).eq("pilot_id", pilotId).eq("status", "active").select("*").maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null; }
 async function listPersistentLiveAcarsSessions(client: SupabaseClient) { const { data, error } = await client.from("acars_sessions").select("*").eq("status", "active").order("updated_at", { ascending: false }); if (error) throw error; const cutoff = Date.now() - 90_000; return (data as AcarsSessionRow[]).map(sessionFromRow).map((session) => ({ ...session, connectionHealthy: new Date(session.updatedAt).getTime() >= cutoff })); }
+async function listPersistentCompletedAcarsSessionsForPilot(client: SupabaseClient, pilotId: string, limit: number) {
+  const { data, error } = await client.from("acars_sessions")
+    .select("*").eq("pilot_id", pilotId).eq("status", "completed")
+    .order("completed_at", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return (data as AcarsSessionRow[]).map(sessionFromRow);
+}
 async function listPersistentAcarsSessionSnapshots(client: SupabaseClient, id: string, pilotId: string) {
   const session = await getPersistentAcarsSession(client, id);
   if (!session || session.pilotId !== pilotId) return [];
@@ -202,6 +216,12 @@ async function listPersistentPublicTrackSnapshots(client: SupabaseClient, sessio
 export async function startAcarsSession(input: NewSessionInput) { const client = requirePersistentClient(); return client ? startPersistentAcarsSession(client, input) : startLocalAcarsSession(input); }
 export async function getAcarsSession(id: string) { const client = requirePersistentClient(); return client ? getPersistentAcarsSession(client, id) : getLocalAcarsSession(id); }
 export async function getActiveAcarsSessionForPilot(pilotId: string) { const client = requirePersistentClient(); return client ? getPersistentActiveAcarsSessionForPilot(client, pilotId) : getActiveLocalAcarsSessionForPilot(pilotId); }
+/** Lists a pilot's own completed Ember flights for the private BA-Radar replay library. */
+export async function listCompletedAcarsSessionsForPilot(pilotId: string, requestedLimit = 12) {
+  const limit = Math.max(1, Math.min(30, Math.round(requestedLimit)));
+  const client = requirePersistentClient();
+  return client ? listPersistentCompletedAcarsSessionsForPilot(client, pilotId, limit) : listLocalCompletedAcarsSessionsForPilot(pilotId, limit);
+}
 export async function appendAcarsSnapshot(id: string, pilotId: string, snapshot: AcarsFlightSnapshot) { const client = requirePersistentClient(); return client ? appendPersistentAcarsSnapshot(client, id, pilotId, snapshot) : appendLocalAcarsSnapshot(id, pilotId, snapshot); }
 export async function completeAcarsSession(id: string, pilotId: string, landingFpm?: number | null) { const client = requirePersistentClient(); return client ? completePersistentAcarsSession(client, id, pilotId, landingFpm) : completeLocalAcarsSession(id, pilotId, landingFpm); }
 /** Retrieves a pilot's own telemetry history for their private flight debrief. */
