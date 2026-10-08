@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { AcarsFlightSnapshot, SupportedSimulator } from "@/lib/acars-contract";
+import type { AcarsCabinStatus, AcarsConnectivityStatus, AcarsFlightSnapshot, SupportedSimulator } from "@/lib/acars-contract";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "acars-sessions.json");
@@ -49,6 +49,38 @@ function isSupportedSimulator(value: unknown): value is SupportedSimulator {
   return value === "xplane12" || value === "msfs2020" || value === "msfs2024";
 }
 function asNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function asRecord(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
+function asBoundedWhole(value: unknown, maximum: number) { return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= maximum ? value : null; }
+function asShortLabel(value: unknown, maximum = 48) { const label = typeof value === "string" ? value.trim() : ""; return label && label.length <= maximum ? label : null; }
+function cabinStatusFromStorage(value: unknown): AcarsCabinStatus | null {
+  const cabin = asRecord(value);
+  if (!cabin) return null;
+  const flightPhase = asShortLabel(cabin.flightPhase, 32);
+  const boardedPassengerCount = asBoundedWhole(cabin.boardedPassengerCount, 900);
+  const serviceState = cabin.serviceState;
+  const technicalEventState = cabin.technicalEventState;
+  if (!flightPhase || boardedPassengerCount == null || typeof cabin.seatbeltSignOn !== "boolean" ||
+      (serviceState !== "preparing" && serviceState !== "boarding" && serviceState !== "ground_operations" && serviceState !== "in_service" && serviceState !== "arrival_preparation") ||
+      (technicalEventState !== "disabled" && technicalEventState !== "monitoring" && technicalEventState !== "event_filed" && technicalEventState !== "held" && technicalEventState !== "unavailable")) return null;
+  return { flightPhase, seatbeltSignOn: cabin.seatbeltSignOn, boardedPassengerCount, serviceState, technicalEventState };
+}
+function connectivityStatusFromStorage(value: unknown): AcarsConnectivityStatus | null {
+  const connectivity = asRecord(value);
+  if (!connectivity) return null;
+  const provider = asShortLabel(connectivity.provider, 48);
+  const onlinePassengerCount = asBoundedWhole(connectivity.onlinePassengerCount, 900);
+  const connectedDeviceCount = asBoundedWhole(connectivity.connectedDeviceCount, 1_800);
+  const rawDownlink = asNumber(connectivity.downlinkMbps);
+  const rawUplink = asNumber(connectivity.uplinkMbps);
+  const latencyMs = asBoundedWhole(connectivity.latencyMs, 5_000);
+  const rawLinkQuality = asNumber(connectivity.linkQualityPercent);
+  const downlinkMbps = rawDownlink != null && rawDownlink >= 0 && rawDownlink <= 10_000 ? rawDownlink : null;
+  const uplinkMbps = rawUplink != null && rawUplink >= 0 && rawUplink <= 10_000 ? rawUplink : null;
+  const linkQualityPercent = rawLinkQuality != null && rawLinkQuality >= 0 && rawLinkQuality <= 100 ? rawLinkQuality : null;
+  if (!provider || onlinePassengerCount == null || connectedDeviceCount == null || downlinkMbps == null || uplinkMbps == null || latencyMs == null || linkQualityPercent == null ||
+      typeof connectivity.enabled !== "boolean" || typeof connectivity.isModelled !== "boolean") return null;
+  return { provider, enabled: connectivity.enabled, onlinePassengerCount, connectedDeviceCount, downlinkMbps, uplinkMbps, latencyMs, linkQualityPercent, isModelled: connectivity.isModelled };
+}
 function snapshotFromStorage(value: unknown, session: Pick<AcarsSession, "id" | "pilotId" | "bookingId" | "simulator">): AcarsFlightSnapshot | null {
   if (!value || typeof value !== "object") return null;
   const snapshot = value as Partial<AcarsFlightSnapshot>;
@@ -67,7 +99,7 @@ function snapshotFromStorage(value: unknown, session: Pick<AcarsSession, "id" | 
   const diversionAirport = typeof snapshot.diversionAirport === "string" && /^[A-Z0-9]{3,4}$/i.test(snapshot.diversionAirport.trim())
     ? snapshot.diversionAirport.trim().toUpperCase()
     : null;
-  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration, detectedAirport, diversionAirport };
+  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration, detectedAirport, diversionAirport, cabin: cabinStatusFromStorage(snapshot.cabin), connectivity: connectivityStatusFromStorage(snapshot.connectivity) };
 }
 function sessionFromRow(row: AcarsSessionRow): AcarsSession {
   if (!isSupportedSimulator(row.simulator)) throw new Error(`Unsupported ACARS simulator returned from storage: ${row.simulator}`);
@@ -84,7 +116,7 @@ function snapshotFromPositionRow(row: AcarsPositionReportRow, session: Pick<Acar
     beaconOn: false, fuelKg: asNumber(row.fuel_kg), enginesRunning: row.engines_running,
     parkingBrakeSet: row.parking_brake_set, onGround: row.on_ground,
     verticalSpeedFpm: asNumber(row.vertical_speed_fpm), flightStarted: !row.on_ground, registration: null,
-    detectedAirport: null, diversionAirport: null,
+    detectedAirport: null, diversionAirport: null, cabin: null, connectivity: null,
   };
 }
 

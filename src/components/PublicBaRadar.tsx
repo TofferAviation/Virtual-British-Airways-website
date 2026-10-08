@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { AcarsCabinStatus, AcarsConnectivityStatus } from "@/lib/acars-contract";
 import { RADAR_WIND_LAYERS, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 
@@ -44,6 +45,17 @@ type RadarReplaySnapshot = {
 };
 
 type RadarReplay = RadarReplaySummary & { snapshots: RadarReplaySnapshot[] };
+
+type PrivateOperationPulse = {
+  id: string;
+  flightNumber: string;
+  from: string;
+  to: string;
+  aircraft: string;
+  updatedAt: string;
+  cabin: AcarsCabinStatus | null;
+  connectivity: AcarsConnectivityStatus | null;
+};
 
 export type RadarLayers = {
   vatsim: boolean;
@@ -211,6 +223,27 @@ function ReplayDetail({ replay, activeIndex, playing, onChangeIndex, onTogglePla
   </div>;
 }
 
+function sentenceCase(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function PrivateOnboardPulse({ operation }: { operation: PrivateOperationPulse | null }) {
+  if (!operation) return null;
+  const cabin = operation.cabin;
+  const connectivity = operation.connectivity;
+  const technicalLabel = cabin?.technicalEventState === "event_filed" ? "Fleet event filed" : cabin?.technicalEventState === "held" ? "Event held" : cabin?.technicalEventState === "unavailable" ? "Monitor unavailable" : cabin?.technicalEventState === "disabled" ? "Monitor off" : "Monitoring";
+  return <section className="ba-radar-onboard-pulse" aria-label="My Ember cabin and connectivity pulse">
+    <header><div><span>My Ember operation</span><strong>Cabin & connectivity pulse</strong><small>{operation.flightNumber} · {operation.from} → {operation.to} · {operation.aircraft}</small></div><time>{telemetryTime(operation.updatedAt)}</time></header>
+    {cabin || connectivity ? <div className="ba-radar-onboard-grid">
+      <article><span>Cabin</span><strong>{cabin ? sentenceCase(cabin.flightPhase) : "Awaiting Ember"}</strong><small>{cabin ? `${cabin.boardedPassengerCount} on board · seat belts ${cabin.seatbeltSignOn ? "on" : "off"}` : "Install the current Ember update to send cabin status."}</small></article>
+      <article><span>Service</span><strong>{cabin ? sentenceCase(cabin.serviceState) : "Pending"}</strong><small>{cabin ? technicalLabel : "No technical state received."}</small></article>
+      <article><span>Cabin Wi-Fi</span><strong>{connectivity ? connectivity.enabled ? "Available" : "Paused" : "Awaiting Ember"}</strong><small>{connectivity ? `${connectivity.onlinePassengerCount} online · ${connectivity.connectedDeviceCount} devices` : "No connectivity model received."}</small></article>
+      <article><span>Network demand</span><strong>{connectivity ? `${connectivity.downlinkMbps.toFixed(1)} ↓ · ${connectivity.uplinkMbps.toFixed(1)} ↑ Mbps` : "—"}</strong><small>{connectivity ? `${connectivity.latencyMs} ms · ${connectivity.linkQualityPercent.toFixed(0)}% link quality` : "Waiting for the next ACARS sample."}</small></article>
+    </div> : <p className="ba-radar-onboard-pending">Your active flight is connected. Cabin and connectivity status will appear after the current Ember update sends its first telemetry sample.</p>}
+    <p className="ba-radar-onboard-note">Private to your BAV account. Cabin Wi-Fi is Ember’s live passenger-demand model; it does not query Starlink, satellites or passenger devices. SayIntentions status never includes a key or transcript.</p>
+  </section>;
+}
+
 function FlightTrackerDetails({ flight, weatherReports, layers, vatsimOnline, following, onToggleFollow }: { flight: PublicRadarFlight; weatherReports: FlightWeatherReport[]; layers: RadarLayers; vatsimOnline: number | null; following: boolean; onToggleFollow: () => void }) {
   const snapshot = flight.lastSnapshot;
   return <div className="ba-radar-selected-flight ba-radar-flight-tracker-detail">
@@ -305,6 +338,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [replayIndex, setReplayIndex] = useState(0);
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [replayLoadingId, setReplayLoadingId] = useState("");
+  const [onboardPulse, setOnboardPulse] = useState<PrivateOperationPulse | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -325,6 +359,23 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     };
     void refresh();
     const interval = window.setInterval(refresh, 5_000);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/radar/operations/active", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as { operation?: PrivateOperationPulse | null };
+        if (mounted) setOnboardPulse(payload.operation ?? null);
+      } catch {
+        // The public tracker is always usable even if a private session refresh fails.
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 8_000);
     return () => { mounted = false; window.clearInterval(interval); };
   }, []);
 
@@ -562,6 +613,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
         {replay ? <ReplayDetail replay={replay} activeIndex={replayIndex} playing={replayPlaying} onChangeIndex={(index) => { setReplayIndex(index); setReplayPlaying(false); }} onTogglePlayback={toggleReplayPlayback} /> : controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <FlightTrackerDetails flight={selected} weatherReports={flightWeather.stationKey === weatherStationKey ? flightWeather.reports : []} layers={layers} vatsimOnline={vatsim?.onlineCount ?? null} following={watchedFlightIds.includes(selected.id)} onToggleFollow={() => toggleFlightWatch(selected.id)} /> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
         <AirportOperations flights={flights} airport={airport} onAirportChange={setAirport} watched={Boolean(airport && watchedStations.includes(airport))} onToggleWatch={() => airport && toggleStationWatch(airport)} onSelectFlight={selectFlight} />
         {(watchedFlights.length || watchedStations.length) ? <section className="ba-radar-watchlist"><header><div><span>Your watchlist</span><small>Saved in this browser</small></div>{watchAlertsEnabled ? <button className="ba-radar-watch-alerts enabled" type="button" onClick={() => setWatchAlertsEnabled(false)}>Alerts on</button> : <button className="ba-radar-watch-alerts" type="button" onClick={() => void enableWatchAlerts()}>Enable alerts</button>}</header>{watchedFlights.map((flight) => <button key={flight.id} type="button" onClick={() => selectFlight(flight.id)}><i className={flight.connectionHealthy ? "connected" : "stale"} /><span><strong>{flight.flightNumber}</strong><small>{flight.from} → {flight.diversionAirport ?? flight.to}</small></span><b>Open</b></button>)}{watchedStations.map((station) => <button key={station} type="button" onClick={() => setAirport(station)}><i className="station" /><span><strong>{station}</strong><small>Airport watch</small></span><b>View</b></button>)}</section> : null}
+        <PrivateOnboardPulse operation={onboardPulse} />
         {replayLibrary.length ? <details className="ba-radar-replay-library"><summary><span>My flight replays</span><b>{replayLibrary.length}</b><i aria-hidden="true">⌄</i></summary><div>{replayLibrary.map((entry) => <button key={entry.id} type="button" disabled={replayLoadingId === entry.id} onClick={() => void openReplay(entry.id)}><span><strong>{entry.flightNumber} · {entry.from} → {entry.to}</strong><small>{entry.aircraft} · {entry.distanceNm.toLocaleString()} NM</small></span><em>{replayLoadingId === entry.id ? "Loading" : "Replay"}</em></button>)}</div></details> : null}
         <div className="ba-radar-list-controls"><span>Flight list</span><div>{(["all", "airborne", "ground"] as const).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "airborne" ? "Air" : "Ground"}</button>)}</div></div>
         <div className="ba-radar-flight-list">{visibleFlights.length ? visibleFlights.map((flight) => <button key={flight.id} type="button" onClick={() => selectFlight(flight.id)} className={flight.id === selected?.id && !controller ? "selected" : ""}><i className={flight.connectionHealthy ? "connected" : "stale"} /><span><strong>{flight.flightNumber}</strong><small>{flight.from} → {flight.diversionAirport ?? flight.to}{flight.diversionAirport ? " · DIVERTING" : ""}</small></span><em>{flight.lastSnapshot ? `${Math.round(flight.lastSnapshot.altitudeFt).toLocaleString()} ft` : "Pending"}</em></button>) : <p className="ba-radar-none">No flights match this view.</p>}</div>

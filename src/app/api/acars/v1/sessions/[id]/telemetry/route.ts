@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { AcarsFlightSnapshot } from "@/lib/acars-contract";
+import type { AcarsCabinStatus, AcarsConnectivityStatus, AcarsFlightSnapshot } from "@/lib/acars-contract";
 import { requireAcarsBearer } from "@/lib/acars-auth";
 import { appendAcarsSnapshot, getAcarsSession } from "@/lib/acars-store";
 
@@ -19,6 +19,47 @@ function optionalRegistration(value: unknown) {
 function optionalAirport(value: unknown) {
   const airport = typeof value === "string" ? value.trim().toUpperCase() : "";
   return /^[A-Z0-9]{3,4}$/.test(airport) ? airport : null;
+}
+
+function record(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function optionalShortLabel(value: unknown, maximum = 48) {
+  const label = typeof value === "string" ? value.trim() : "";
+  return label && label.length <= maximum ? label : null;
+}
+
+function optionalWhole(value: unknown, maximum: number) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= maximum ? value : null;
+}
+
+function optionalCabinStatus(value: unknown): AcarsCabinStatus | null {
+  const cabin = record(value);
+  if (!cabin) return null;
+  const flightPhase = optionalShortLabel(cabin.flightPhase, 32);
+  const boardedPassengerCount = optionalWhole(cabin.boardedPassengerCount, 900);
+  const serviceState = cabin.serviceState;
+  const technicalEventState = cabin.technicalEventState;
+  if (!flightPhase || boardedPassengerCount == null || typeof cabin.seatbeltSignOn !== "boolean" ||
+      serviceState !== "preparing" && serviceState !== "boarding" && serviceState !== "ground_operations" && serviceState !== "in_service" && serviceState !== "arrival_preparation" ||
+      technicalEventState !== "disabled" && technicalEventState !== "monitoring" && technicalEventState !== "event_filed" && technicalEventState !== "held" && technicalEventState !== "unavailable") return null;
+  return { flightPhase, seatbeltSignOn: cabin.seatbeltSignOn, boardedPassengerCount, serviceState, technicalEventState };
+}
+
+function optionalConnectivityStatus(value: unknown): AcarsConnectivityStatus | null {
+  const connectivity = record(value);
+  if (!connectivity) return null;
+  const provider = optionalShortLabel(connectivity.provider, 48);
+  const onlinePassengerCount = optionalWhole(connectivity.onlinePassengerCount, 900);
+  const connectedDeviceCount = optionalWhole(connectivity.connectedDeviceCount, 1_800);
+  const downlinkMbps = optionalFinite(connectivity.downlinkMbps, 0, 10_000);
+  const uplinkMbps = optionalFinite(connectivity.uplinkMbps, 0, 10_000);
+  const latencyMs = optionalWhole(connectivity.latencyMs, 5_000);
+  const linkQualityPercent = optionalFinite(connectivity.linkQualityPercent, 0, 100);
+  if (!provider || onlinePassengerCount == null || connectedDeviceCount == null || downlinkMbps == null || uplinkMbps == null || latencyMs == null || linkQualityPercent == null ||
+      typeof connectivity.enabled !== "boolean" || typeof connectivity.isModelled !== "boolean") return null;
+  return { provider, enabled: connectivity.enabled, onlinePassengerCount, connectedDeviceCount, downlinkMbps, uplinkMbps, latencyMs, linkQualityPercent, isModelled: connectivity.isModelled };
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -55,6 +96,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     registration: optionalRegistration(body.registration),
     detectedAirport: optionalAirport(body.detectedAirport),
     diversionAirport: optionalAirport(body.diversionAirport),
+    cabin: optionalCabinStatus(body.cabin),
+    connectivity: optionalConnectivityStatus(body.connectivity),
   };
   const session = await appendAcarsSnapshot(id, auth.account.id, snapshot);
   if (!session) return NextResponse.json({ error: "Session is no longer active." }, { status: 409 });
