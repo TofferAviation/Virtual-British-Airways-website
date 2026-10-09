@@ -421,9 +421,27 @@ export async function listPilotBookings(pilotId: string) {
   return state.bookings.filter((booking) => booking.pilotId === pilotId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export async function countActiveScheduleBookings(routeId: string, date: string) {
+/**
+ * Returns active booking totals for a scheduled date in one durable-state
+ * read. Booking search can show many services at once, so reading the entire
+ * operations store once per route would overwhelm the production service.
+ */
+export async function getActiveScheduleBookingCounts(date: string, routeIds?: Iterable<string>) {
+  const requestedRouteIds = routeIds ? new Set(routeIds) : null;
+  const totals = new Map<string, number>();
   const state = await readState();
-  return state.bookings.filter((booking) => booking.routeId === routeId && booking.date === date && ["booked", "in_progress"].includes(booking.status)).length;
+
+  for (const booking of state.bookings) {
+    if (!booking.routeId || booking.date !== date || !["booked", "in_progress"].includes(booking.status)) continue;
+    if (requestedRouteIds && !requestedRouteIds.has(booking.routeId)) continue;
+    totals.set(booking.routeId, (totals.get(booking.routeId) ?? 0) + 1);
+  }
+
+  return totals;
+}
+
+export async function countActiveScheduleBookings(routeId: string, date: string) {
+  return (await getActiveScheduleBookingCounts(date, [routeId])).get(routeId) ?? 0;
 }
 
 export async function listPilotPireps(pilotId: string) {

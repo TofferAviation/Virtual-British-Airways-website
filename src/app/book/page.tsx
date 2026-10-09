@@ -59,10 +59,15 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   const maximumHours = durationHoursParam(params.maxHours);
   const hasDurationFilter = minimumHours !== null || maximumHours !== null;
   const invalidDurationRange = minimumHours !== null && maximumHours !== null && minimumHours > maximumHours;
+  const flightSearchOptions = {
+    includeVirtualFlexible: flexible,
+    ...(minimumHours !== null ? { minDurationMinutes: minimumHours * 60 } : {}),
+    ...(maximumHours !== null ? { maxDurationMinutes: maximumHours * 60 } : {}),
+  };
   const scheduledFlights = hasCityPair && from !== to
-      ? await getFlightsForRoute(from, to, date, { includeVirtualFlexible: flexible })
+      ? await getFlightsForRoute(from, to, date, flightSearchOptions)
       : departureStation
-        ? await getFlightsFromStation(departureStation, date, { includeVirtualFlexible: flexible })
+        ? await getFlightsFromStation(departureStation, date, flightSearchOptions)
       : aircraft
         ? await getFlightsForAircraft(aircraft, date)
         : [];

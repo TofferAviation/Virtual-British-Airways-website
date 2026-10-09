@@ -1,4 +1,4 @@
-import { countActiveScheduleBookings } from "@/lib/pilot-operations-store";
+import { getActiveScheduleBookingCounts } from "@/lib/pilot-operations-store";
 import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
 import { getStaffState, saveStaffState } from "@/lib/staff-store";
 import { BAV_NETWORK_2026, BAV_NETWORK_SCHEDULE_VERSION } from "@/data/bav-network-2026";
@@ -236,8 +236,14 @@ export async function getBookableRoute(id: string) {
 }
 
 async function withAvailability(routes: ManagedRoute[], date?: string) {
-  return Promise.all(routes.map(async (route) => {
-    const reserved = date ? await countActiveScheduleBookings(route.id, date) : 0;
+  // A station search can return a whole timetable. Fetch the durable booking
+  // state once, rather than making one Supabase-backed read per flight.
+  const reservations = date
+    ? await getActiveScheduleBookingCounts(date, routes.map((route) => route.id))
+    : new Map<string, number>();
+
+  return routes.map((route) => {
+    const reserved = reservations.get(route.id) ?? 0;
     return {
       routeId: route.id,
       number: route.flightNumber,
@@ -261,12 +267,16 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),
     };
-  }));
+  });
 }
 
 type FlightSearchOptions = {
   /** Lets pilots book a checked real-world service outside its reference date. */
   includeVirtualFlexible?: boolean;
+  /** Applied before availability is loaded, keeping broad timetable searches responsive. */
+  minDurationMinutes?: number;
+  /** Applied before availability is loaded, keeping broad timetable searches responsive. */
+  maxDurationMinutes?: number;
 };
 
 /**
@@ -298,7 +308,13 @@ function publishedOperationalServices(routes: ManagedRoute[], date?: string, opt
     isPublishedOperationalService(route, date, false) &&
     !scheduledPairs.has(`${route.from}-${route.to}`),
   );
-  return [...exact, ...flexible, ...references];
+  return [...exact, ...flexible, ...references].filter((route) => {
+    if (options.minDurationMinutes === undefined && options.maxDurationMinutes === undefined) return true;
+    const duration = durationToMinutes(route.duration);
+    return duration !== null &&
+      (options.minDurationMinutes === undefined || duration >= options.minDurationMinutes) &&
+      (options.maxDurationMinutes === undefined || duration <= options.maxDurationMinutes);
+  });
 }
 
 export async function getFlightsForRoute(from: string, to: string, date?: string, options: FlightSearchOptions = {}) {
