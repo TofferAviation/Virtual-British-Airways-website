@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarAuroraData, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight } from "@/lib/radar-live";
+import { BaRadarAuroraLayer } from "@/components/BaRadarAuroraLayer";
 
 type GlobeReplay = { id: string; points: Array<{ latitude: number; longitude: number; headingDeg: number }>; activeIndex: number } | null;
 export type GlobeCamera = { center: [number, number]; zoom: number; bearing: number; pitch: number };
@@ -21,64 +22,6 @@ const emptyCollection: GeoJson = { type: "FeatureCollection", features: [] };
 
 function validPoint(latitude: number, longitude: number) {
   return Number.isFinite(latitude) && Number.isFinite(longitude);
-}
-
-const auroraNorth = 84.8;
-const auroraCoordinates: [[number, number], [number, number], [number, number], [number, number]] = [
-  [-179.9, auroraNorth], [179.9, auroraNorth], [179.9, 45], [-179.9, 45],
-];
-const transparentImage = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
-
-type GlobeImageSource = {
-  updateImage: (input: { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] }) => void;
-};
-
-function auroraColour(probability: number) {
-  if (probability < 10) return [48, 151, 212, 0.09] as const;
-  if (probability < 15) return [56, 208, 184, 0.18] as const;
-  if (probability < 30) return [83, 239, 145, 0.35] as const;
-  if (probability < 50) return [132, 246, 117, 0.48] as const;
-  if (probability < 70) return [180, 249, 108, 0.62] as const;
-  return [209, 126, 255, 0.74] as const;
-}
-
-function auroraTexture(data: RadarAuroraData | null, blur: number, strength: number) {
-  if (!data?.samples.length || typeof document === "undefined") return transparentImage;
-  const west = -180;
-  const south = 45;
-  const field = document.createElement("canvas");
-  field.width = 720;
-  field.height = 180;
-  const fieldContext = field.getContext("2d");
-  const canvas = document.createElement("canvas");
-  canvas.width = 1440;
-  canvas.height = 360;
-  const context = canvas.getContext("2d");
-  if (!fieldContext || !context) return transparentImage;
-
-  for (const sample of data.samples) {
-    // Image sources cannot touch Web Mercator's ±180° / 90° bounds.  The
-    // actual auroral oval is well below 85° for the operational forecast.
-    if (sample.latitude > auroraNorth) continue;
-    const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
-    const x = Math.round((longitude - west) / 360 * field.width);
-    const y = Math.round((auroraNorth - sample.latitude) / (auroraNorth - south) * field.height);
-    const [red, green, blue, alpha] = auroraColour(sample.probability);
-    fieldContext.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-    fieldContext.fillRect(x - 2, y - 3, 5, 7);
-  }
-
-  context.imageSmoothingEnabled = true;
-  context.globalCompositeOperation = "lighter";
-  context.filter = `blur(${blur}px)`;
-  context.globalAlpha = strength;
-  context.drawImage(field, 0, 0, field.width, field.height, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/png");
-}
-
-function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData | null, blur: number, strength: number) {
-  const source = map.getSource(id) as unknown as GlobeImageSource | undefined;
-  source?.updateImage({ url: auroraTexture(data, blur, strength), coordinates: auroraCoordinates });
 }
 
 function globeData(flights: PublicRadarFlight[], selectedId: string, replay: GlobeReplay) {
@@ -152,6 +95,7 @@ export function BaRadarGlobe({
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const auroraLayerRef = useRef<BaRadarAuroraLayer | null>(null);
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
   const onCameraChangeRef = useRef(onCameraChange);
@@ -177,10 +121,7 @@ export function BaRadarGlobe({
       setGeoJson(map, "ba-radar-globe-aircraft", current.aircraft);
       setGeoJson(map, "ba-radar-globe-routes", current.routes);
       setGeoJson(map, "ba-radar-globe-controllers", current.controllers);
-      updateAuroraSurface(map, "ba-radar-globe-aurora-glow", current.aurora, 18, 0.92);
-      updateAuroraSurface(map, "ba-radar-globe-aurora-core", current.aurora, 5, 1);
-      map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", current.auroraEnabled ? "visible" : "none");
-      map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", current.auroraEnabled ? "visible" : "none");
+      auroraLayerRef.current?.update(current.aurora, current.auroraEnabled);
     };
     const start = async () => {
       if (!container.current) return;
@@ -214,7 +155,9 @@ export function BaRadarGlobe({
         },
         // Keep the planet itself centred; the northern oval then rises
         // naturally over the horizon without pushing the Earth downward.
-        center: initialCamera?.center ?? [-18, 0],
+        // Begin over the North Atlantic rather than the equator, so the
+        // globe is still centred but its auroral oval is naturally in view.
+        center: initialCamera?.center ?? [10, 67],
         zoom: initialCamera?.zoom ?? 0.1,
         minZoom: -1.3,
         bearing: initialCamera?.bearing ?? 0,
@@ -228,10 +171,10 @@ export function BaRadarGlobe({
         map.addSource("ba-radar-globe-aircraft", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-routes", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-controllers", { type: "geojson", data: emptyCollection as never });
-        map.addSource("ba-radar-globe-aurora-glow", { type: "image", url: auroraTexture(dataRef.current.aurora, 18, 0.92), coordinates: auroraCoordinates });
-        map.addSource("ba-radar-globe-aurora-core", { type: "image", url: auroraTexture(dataRef.current.aurora, 5, 1), coordinates: auroraCoordinates });
-        map.addLayer({ id: "ba-radar-globe-aurora-glow-layer", type: "raster", source: "ba-radar-globe-aurora-glow", paint: { "raster-opacity": 0.64, "raster-fade-duration": 0 } });
-        map.addLayer({ id: "ba-radar-globe-aurora-core-layer", type: "raster", source: "ba-radar-globe-aurora-core", paint: { "raster-opacity": 0.94, "raster-fade-duration": 0 } });
+        const auroraLayer = new BaRadarAuroraLayer();
+        auroraLayerRef.current = auroraLayer;
+        auroraLayer.update(dataRef.current.aurora, dataRef.current.auroraEnabled);
+        map.addLayer(auroraLayer);
         map.addLayer({ id: "ba-radar-globe-planned", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "planned"], paint: { "line-color": "#73bdf1", "line-width": 2.2, "line-opacity": 0.85, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "ba-radar-globe-recorded", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "recorded"], paint: { "line-color": "#f1c84c", "line-width": 3.5, "line-opacity": 0.96, "line-blur": 0.35 } });
         map.addLayer({ id: "ba-radar-globe-replay", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "replay"], paint: { "line-color": "#d91e45", "line-width": 3.5, "line-opacity": 0.92 } });
@@ -270,7 +213,7 @@ export function BaRadarGlobe({
             // safe initial frame on ultrawide screens, then never overwrite a
             // pilot's orbit or zoom when the selected-flight panel changes.
             const zoom = Math.max(-0.35, Math.min(0.82, 1.16 - Math.max(0, Math.log2(ratio)) * 0.75));
-            map.jumpTo({ center: [-18, 0], zoom, bearing: 0, pitch: 0 });
+            map.jumpTo({ center: [10, 67], zoom, bearing: 0, pitch: 0 });
             // Capture the resolved camera synchronously. That makes a
             // selection immediately after first paint just as stable as one
             // made later in the session.
@@ -299,6 +242,7 @@ export function BaRadarGlobe({
         liveMap.remove();
       }
       mapRef.current = null;
+      auroraLayerRef.current = null;
     };
   }, []);
 
@@ -309,10 +253,7 @@ export function BaRadarGlobe({
       source?.setData(data.aircraft as never);
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
-      updateAuroraSurface(map, "ba-radar-globe-aurora-glow", aurora, 18, 0.92);
-      updateAuroraSurface(map, "ba-radar-globe-aurora-core", aurora, 5, 1);
-      map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", auroraEnabled ? "visible" : "none");
-      map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", auroraEnabled ? "visible" : "none");
+      auroraLayerRef.current?.update(aurora, auroraEnabled);
     }
   }, [data, controllersGeoJson, auroraEnabled, aurora]);
 
