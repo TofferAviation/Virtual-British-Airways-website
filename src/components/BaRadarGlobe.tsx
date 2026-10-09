@@ -11,7 +11,7 @@ type GeoJson = {
   type: "FeatureCollection";
   features: Array<{
     type: "Feature";
-    geometry: { type: "Point"; coordinates: [number, number] } | { type: "LineString"; coordinates: Array<[number, number]> };
+    geometry: { type: "Point"; coordinates: [number, number] } | { type: "LineString"; coordinates: Array<[number, number]> } | { type: "Polygon"; coordinates: Array<Array<[number, number]>> };
     properties: Record<string, string | number | boolean>;
   }>;
 };
@@ -78,6 +78,70 @@ function auroraTexture(data: RadarAuroraData | null, blur: number, strength: num
 function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData | null, blur: number, strength: number) {
   const source = map.getSource(id) as unknown as GlobeImageSource | undefined;
   source?.updateImage({ url: auroraTexture(data, blur, strength), coordinates: auroraCoordinates });
+}
+
+function auroraVolumes(data: RadarAuroraData | null, time: number): GeoJson {
+  if (!data?.samples.length) return emptyCollection;
+  const bucketWidth = 2;
+  const buckets = new Map<number, { latitudeTotal: number; weight: number; peak: number }>();
+  for (const sample of data.samples) {
+    if (sample.latitude > auroraNorth || sample.probability < 6) continue;
+    const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
+    const key = Math.max(0, Math.min(179, Math.floor((longitude + 180) / bucketWidth)));
+    const current = buckets.get(key) ?? { latitudeTotal: 0, weight: 0, peak: 0 };
+    const weight = sample.probability * sample.probability;
+    current.latitudeTotal += sample.latitude * weight;
+    current.weight += weight;
+    current.peak = Math.max(current.peak, sample.probability);
+    buckets.set(key, current);
+  }
+  return {
+    type: "FeatureCollection",
+    features: [...buckets.entries()].flatMap(([key, bucket]) => {
+      if (!bucket.weight || bucket.peak < 6) return [];
+      const longitude = -180 + key * bucketWidth;
+      const latitude = bucket.latitudeTotal / bucket.weight;
+      const halfWidth = Math.min(3.5, 1 + bucket.peak / 5.8);
+      // The oval position and brightness are NOAA data. The movement only
+      // gives the otherwise static forecast field a gentle curtain motion.
+      const flutter = 0.86 + Math.sin(time * 1.55 + key * 0.72) * 0.14;
+      // Nitrogen sits beneath 100 km; the familiar green oxygen curtain is
+      // around 100–150 km. Pink is a lower energetic mix, while red oxygen
+      // only appears above 200 km during stronger activity.
+      const violetHeight = 99_000 + bucket.peak * 260 * flutter;
+      const greenHeight = 142_000 + bucket.peak * 520 * flutter;
+      const magentaHeight = 112_000 + bucket.peak * 420 * (0.82 + Math.sin(time * 1.18 + key * 0.43) * 0.18);
+      const redHeight = 218_000 + bucket.peak * 1_050 * (0.84 + Math.sin(time * 0.94 + key * 0.51) * 0.16);
+      const greenColour = bucket.peak < 11 ? "#58ce9e" : bucket.peak < 20 ? "#48eab3" : "#a9f681";
+      return [{
+        type: "Feature" as const,
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [[
+            [longitude, latitude - halfWidth],
+            [longitude + bucketWidth, latitude - halfWidth],
+            [longitude + bucketWidth, latitude + halfWidth],
+            [longitude, latitude + halfWidth],
+            [longitude, latitude - halfWidth],
+          ]],
+        },
+        properties: {
+          peak: bucket.peak,
+          violetBase: 78_000,
+          violetHeight,
+          greenBase: 99_000,
+          greenHeight,
+          magentaBase: 91_000,
+          magentaHeight,
+          redBase: 195_000,
+          redHeight,
+          greenColour,
+          magentaColour: "#d94da3",
+          redColour: "#ef5b68",
+        },
+      }];
+    }),
+  };
 }
 
 function globeData(flights: PublicRadarFlight[], selectedId: string, replay: GlobeReplay) {
@@ -158,6 +222,8 @@ export function BaRadarGlobe({
 
   useEffect(() => {
     let animation = 0;
+    let resizeFrame = 0;
+    let resizeObserver: ResizeObserver | null = null;
     let disposed = false;
 
     const setGeoJson = (map: MapLibreMap, id: string, value: GeoJson) => {
@@ -169,10 +235,14 @@ export function BaRadarGlobe({
       setGeoJson(map, "ba-radar-globe-aircraft", current.aircraft);
       setGeoJson(map, "ba-radar-globe-routes", current.routes);
       setGeoJson(map, "ba-radar-globe-controllers", current.controllers);
+      setGeoJson(map, "ba-radar-globe-aurora-volume", auroraVolumes(current.aurora, performance.now() / 1000));
       updateAuroraSurface(map, "ba-radar-globe-aurora-glow", current.aurora, 18, 0.92);
       updateAuroraSurface(map, "ba-radar-globe-aurora-core", current.aurora, 5, 1);
       map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", current.auroraEnabled ? "visible" : "none");
       map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", current.auroraEnabled ? "visible" : "none");
+      for (const id of ["ba-radar-globe-aurora-violet", "ba-radar-globe-aurora-green", "ba-radar-globe-aurora-magenta", "ba-radar-globe-aurora-red"]) {
+        map.setLayoutProperty(id, "visibility", current.auroraEnabled ? "visible" : "none");
+      }
     };
     const start = async () => {
       if (!container.current) return;
@@ -202,8 +272,11 @@ export function BaRadarGlobe({
             },
           }],
         },
-        center: [-18, 28],
-        zoom: 0.72,
+        // Looking at the equator keeps the physical globe itself centred;
+        // the northern oval then rises naturally over the horizon.
+        center: [-18, 0],
+        zoom: 0.1,
+        minZoom: -1.3,
         bearing: 0,
         pitch: 0,
       });
@@ -217,11 +290,17 @@ export function BaRadarGlobe({
         map.addSource("ba-radar-globe-controllers", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-aurora-glow", { type: "image", url: auroraTexture(dataRef.current.aurora, 18, 0.92), coordinates: auroraCoordinates });
         map.addSource("ba-radar-globe-aurora-core", { type: "image", url: auroraTexture(dataRef.current.aurora, 5, 1), coordinates: auroraCoordinates });
+        map.addSource("ba-radar-globe-aurora-volume", { type: "geojson", data: emptyCollection as never });
         map.addLayer({ id: "ba-radar-globe-aurora-glow-layer", type: "raster", source: "ba-radar-globe-aurora-glow", paint: { "raster-opacity": 0.64, "raster-fade-duration": 0 } });
         map.addLayer({ id: "ba-radar-globe-aurora-core-layer", type: "raster", source: "ba-radar-globe-aurora-core", paint: { "raster-opacity": 0.94, "raster-fade-duration": 0 } });
+        map.addLayer({ id: "ba-radar-globe-aurora-violet", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", paint: { "fill-extrusion-color": "#7a5af8", "fill-extrusion-base": ["get", "violetBase"], "fill-extrusion-height": ["get", "violetHeight"], "fill-extrusion-opacity": 0.42 } });
+        map.addLayer({ id: "ba-radar-globe-aurora-green", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", paint: { "fill-extrusion-color": ["get", "greenColour"], "fill-extrusion-base": ["get", "greenBase"], "fill-extrusion-height": ["get", "greenHeight"], "fill-extrusion-opacity": 0.58 } });
+        map.addLayer({ id: "ba-radar-globe-aurora-magenta", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", filter: [">=", ["get", "peak"], 22], paint: { "fill-extrusion-color": ["get", "magentaColour"], "fill-extrusion-base": ["get", "magentaBase"], "fill-extrusion-height": ["get", "magentaHeight"], "fill-extrusion-opacity": 0.34 } });
+        map.addLayer({ id: "ba-radar-globe-aurora-red", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", filter: [">=", ["get", "peak"], 50], paint: { "fill-extrusion-color": ["get", "redColour"], "fill-extrusion-base": ["get", "redBase"], "fill-extrusion-height": ["get", "redHeight"], "fill-extrusion-opacity": 0.28 } });
         map.addLayer({ id: "ba-radar-globe-planned", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "planned"], paint: { "line-color": "#73bdf1", "line-width": 2.2, "line-opacity": 0.85, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "ba-radar-globe-recorded", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "recorded"], paint: { "line-color": "#f1c84c", "line-width": 3.5, "line-opacity": 0.96, "line-blur": 0.35 } });
         map.addLayer({ id: "ba-radar-globe-replay", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "replay"], paint: { "line-color": "#d91e45", "line-width": 3.5, "line-opacity": 0.92 } });
+        map.addLayer({ id: "ba-radar-globe-controllers", type: "circle", source: "ba-radar-globe-controllers", paint: { "circle-radius": 3.2, "circle-color": "#79dafa", "circle-stroke-color": "#f0fbff", "circle-stroke-width": 0.7, "circle-opacity": 0.82 } });
         map.addLayer({ id: "ba-radar-globe-aircraft-glow", type: "circle", source: "ba-radar-globe-aircraft", paint: { "circle-radius": ["case", ["get", "selected"], 12, 9], "circle-color": "#f4c430", "circle-opacity": 0.18, "circle-blur": 0.55 } });
         map.addLayer({ id: "ba-radar-globe-aircraft", type: "circle", source: "ba-radar-globe-aircraft", paint: { "circle-radius": ["case", ["get", "selected"], 6.5, 4.5], "circle-color": ["case", ["get", "selected"], "#ffffff", "#f4c430"], "circle-stroke-color": "#0a2c45", "circle-stroke-width": 1.2 } });
         map.on("click", "ba-radar-globe-aircraft", (event) => {
@@ -230,18 +309,42 @@ export function BaRadarGlobe({
         });
         map.on("mouseenter", "ba-radar-globe-aircraft", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "ba-radar-globe-aircraft", () => { map.getCanvas().style.cursor = ""; });
-        sync(map);
-        window.requestAnimationFrame(() => {
-          map.resize();
-          map.jumpTo({ center: [-18, 28], zoom: 0.72, bearing: 0, pitch: 0 });
-          window.requestAnimationFrame(() => map.resize());
+        map.on("click", "ba-radar-globe-controllers", (event) => {
+          const callsign = event.features?.[0]?.properties?.callsign;
+          if (typeof callsign === "string") onSelectControllerRef.current(callsign);
         });
+        map.on("mouseenter", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = ""; });
+        sync(map);
+        const fitGlobe = () => {
+          if (disposed) return;
+          const viewport = map.getContainer();
+          const ratio = viewport.clientWidth / Math.max(viewport.clientHeight, 1);
+          // A MapLibre globe scales with the narrow dimension. This keeps the
+          // complete Earth centred on ultrawide screens instead of clipping it.
+          const zoom = Math.max(-1.3, Math.min(0.62, 0.82 - Math.max(0, Math.log2(ratio)) * 0.92));
+          map.resize();
+          map.jumpTo({ center: [-18, 0], zoom, bearing: 0, pitch: 0 });
+        };
+        window.requestAnimationFrame(() => {
+          fitGlobe();
+          resizeObserver = new ResizeObserver(() => {
+            window.cancelAnimationFrame(resizeFrame);
+            resizeFrame = window.requestAnimationFrame(fitGlobe);
+          });
+          resizeObserver.observe(map.getContainer());
+        });
+        let lastVolumeUpdate = 0;
         const animateAurora = (time: number) => {
           if (disposed || !map.getSource("ba-radar-globe-aurora-core")) return;
           if (dataRef.current.auroraEnabled) {
             const shimmer = Math.sin(time / 2600) * 0.05;
             map.setPaintProperty("ba-radar-globe-aurora-glow-layer", "raster-opacity", 0.64 + shimmer);
             map.setPaintProperty("ba-radar-globe-aurora-core-layer", "raster-opacity", 0.9 + shimmer * 0.5);
+            if (time - lastVolumeUpdate > 80) {
+              setGeoJson(map, "ba-radar-globe-aurora-volume", auroraVolumes(dataRef.current.aurora, time / 1000));
+              lastVolumeUpdate = time;
+            }
           }
           animation = window.requestAnimationFrame(animateAurora);
         };
@@ -252,6 +355,8 @@ export function BaRadarGlobe({
     return () => {
       disposed = true;
       window.cancelAnimationFrame(animation);
+      window.cancelAnimationFrame(resizeFrame);
+      resizeObserver?.disconnect();
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -264,10 +369,14 @@ export function BaRadarGlobe({
       source?.setData(data.aircraft as never);
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
+      (map.getSource("ba-radar-globe-aurora-volume") as GeoJSONSource | undefined)?.setData(auroraVolumes(aurora, performance.now() / 1000) as never);
       updateAuroraSurface(map, "ba-radar-globe-aurora-glow", aurora, 18, 0.92);
       updateAuroraSurface(map, "ba-radar-globe-aurora-core", aurora, 5, 1);
       map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", auroraEnabled ? "visible" : "none");
       map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", auroraEnabled ? "visible" : "none");
+      for (const id of ["ba-radar-globe-aurora-violet", "ba-radar-globe-aurora-green", "ba-radar-globe-aurora-magenta", "ba-radar-globe-aurora-red"]) {
+        map.setLayoutProperty(id, "visibility", auroraEnabled ? "visible" : "none");
+      }
     }
   }, [data, controllersGeoJson, auroraEnabled, aurora]);
 
