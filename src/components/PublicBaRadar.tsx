@@ -18,6 +18,7 @@ const BaRadarGlobe = dynamic(() => import("@/components/BaRadarGlobe").then((mod
 
 type FlightFilter = "all" | "airborne" | "ground";
 type RadarViewMode = "map" | "globe";
+type GlobeCamera = { center: [number, number]; zoom: number; bearing: number; pitch: number };
 
 type FlightWeatherReport = {
   icao: string;
@@ -317,6 +318,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [flights, setFlights] = useState(initialFlights);
   const [filter, setFilter] = useState<FlightFilter>("all");
   const [viewMode, setViewMode] = useState<RadarViewMode>("map");
+  const globeCameraRef = useRef<GlobeCamera | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
   const [liveCheckedAt, setLiveCheckedAt] = useState<Date | null>(null);
@@ -651,7 +653,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       </aside>
       <div className="ba-radar-map-wrap">
         <div className="ba-radar-map">
-          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={globeVatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} />}
+          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={globeVatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} initialCamera={globeCameraRef.current} onCameraChange={(camera) => { globeCameraRef.current = camera; }} />}
           <div className="ba-radar-view-toggle" role="group" aria-label="Radar view">
             <button type="button" className={viewMode === "map" ? "active" : ""} onClick={() => setViewMode("map")} aria-pressed={viewMode === "map"}>2D map</button>
             <button type="button" className={viewMode === "globe" ? "active" : ""} onClick={() => setViewMode("globe")} aria-pressed={viewMode === "globe"}>3D globe</button>

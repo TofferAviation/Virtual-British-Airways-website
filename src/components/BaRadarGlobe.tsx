@@ -6,6 +6,7 @@ import type { RadarAuroraData, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight } from "@/lib/radar-live";
 
 type GlobeReplay = { id: string; points: Array<{ latitude: number; longitude: number; headingDeg: number }>; activeIndex: number } | null;
+export type GlobeCamera = { center: [number, number]; zoom: number; bearing: number; pitch: number };
 
 type GeoJson = {
   type: "FeatureCollection";
@@ -209,6 +210,8 @@ export function BaRadarGlobe({
   replay,
   auroraEnabled,
   aurora,
+  initialCamera,
+  onCameraChange,
 }: {
   flights: PublicRadarFlight[];
   selectedId: string;
@@ -218,17 +221,21 @@ export function BaRadarGlobe({
   replay: GlobeReplay;
   auroraEnabled: boolean;
   aurora: RadarAuroraData | null;
+  initialCamera: GlobeCamera | null;
+  onCameraChange: (camera: GlobeCamera) => void;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
+  const onCameraChangeRef = useRef(onCameraChange);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
   const dataRef = useRef({ ...data, controllers: controllersGeoJson, auroraEnabled, aurora });
   dataRef.current = { ...data, controllers: controllersGeoJson, auroraEnabled, aurora };
   onSelectRef.current = onSelect;
   onSelectControllerRef.current = onSelectController;
+  onCameraChangeRef.current = onCameraChange;
 
   useEffect(() => {
     let animation = 0;
@@ -284,11 +291,11 @@ export function BaRadarGlobe({
         },
         // Looking at the equator keeps the physical globe itself centred;
         // the northern oval then rises naturally over the horizon.
-        center: [-18, 0],
-        zoom: 0.1,
+        center: initialCamera?.center ?? [-18, 0],
+        zoom: initialCamera?.zoom ?? 0.1,
         minZoom: -1.3,
-        bearing: 0,
-        pitch: 0,
+        bearing: initialCamera?.bearing ?? 0,
+        pitch: initialCamera?.pitch ?? 0,
       });
       mapRef.current = map;
       map.on("load", () => {
@@ -325,6 +332,11 @@ export function BaRadarGlobe({
         });
         map.on("mouseenter", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = ""; });
+        const rememberCamera = () => {
+          const centre = map.getCenter();
+          onCameraChangeRef.current({ center: [centre.lng, centre.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
+        };
+        map.on("moveend", rememberCamera);
         sync(map);
         const fitGlobe = (initial = false) => {
           if (disposed) return;
@@ -340,7 +352,7 @@ export function BaRadarGlobe({
           }
         };
         window.requestAnimationFrame(() => {
-          fitGlobe(true);
+          fitGlobe(!initialCamera);
           resizeObserver = new ResizeObserver(() => {
             window.cancelAnimationFrame(resizeFrame);
             resizeFrame = window.requestAnimationFrame(() => fitGlobe());
@@ -370,7 +382,12 @@ export function BaRadarGlobe({
       window.cancelAnimationFrame(animation);
       window.cancelAnimationFrame(resizeFrame);
       resizeObserver?.disconnect();
-      mapRef.current?.remove();
+      const liveMap = mapRef.current;
+      if (liveMap) {
+        const centre = liveMap.getCenter();
+        onCameraChangeRef.current({ center: [centre.lng, centre.lat], zoom: liveMap.getZoom(), bearing: liveMap.getBearing(), pitch: liveMap.getPitch() });
+        liveMap.remove();
+      }
       mapRef.current = null;
     };
   }, []);
