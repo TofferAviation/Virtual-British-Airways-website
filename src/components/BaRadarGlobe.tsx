@@ -81,8 +81,8 @@ function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData
   source?.updateImage({ url: auroraTexture(data, blur, strength), coordinates: auroraCoordinates });
 }
 
-type AuroraCurtain = { probability: number };
-type AuroraQuality = { frameInterval: number; pixelRatio: number };
+type AuroraCurtain = { longitude: number; latitude: number; probability: number; phase: number };
+type AuroraQuality = { frameInterval: number; pixelRatio: number; strandStep: number; bloomEvery: number; maxStrands: number };
 
 function initialAuroraQuality(): AuroraQuality {
   const device = navigator as Navigator & { deviceMemory?: number };
@@ -91,15 +91,18 @@ function initialAuroraQuality(): AuroraQuality {
   // The map needs priority over decoration. The curtain evolves slowly in
   // nature, so a lower visual cadence still feels fluid while keeping orbit,
   // zoom and live positions responsive.
-  if (cores <= 4 || memory <= 4) return { frameInterval: 83, pixelRatio: 1 };
-  if (cores <= 6 || memory <= 8) return { frameInterval: 66, pixelRatio: 1 };
-  return { frameInterval: 50, pixelRatio: 1.25 };
+  if (cores <= 4 || memory <= 4) return { frameInterval: 83, pixelRatio: 1, strandStep: 3, bloomEvery: 4, maxStrands: 48 };
+  if (cores <= 6 || memory <= 8) return { frameInterval: 66, pixelRatio: 1, strandStep: 2, bloomEvery: 3, maxStrands: 64 };
+  return { frameInterval: 50, pixelRatio: 1.25, strandStep: 1, bloomEvery: 2, maxStrands: 84 };
 }
 
 function lowerAuroraQuality(quality: AuroraQuality): AuroraQuality {
   return {
     frameInterval: Math.min(100, quality.frameInterval + 17),
     pixelRatio: Math.max(1, quality.pixelRatio - 0.2),
+    strandStep: Math.min(4, quality.strandStep + 1),
+    bloomEvery: Math.min(5, quality.bloomEvery + 1),
+    maxStrands: Math.max(32, quality.maxStrands - 12),
   };
 }
 
@@ -109,22 +112,30 @@ function auroraCurtains(data: RadarAuroraData | null): AuroraCurtain[] {
   // its actual position and strength, then use it as the anchor for a smooth
   // light curtain between five-minute NOAA updates.
   const bucketWidth = 1.5;
-  const buckets = new Map<number, { peak: number }>();
+  const buckets = new Map<number, { latitudeTotal: number; weight: number; peak: number }>();
   for (const sample of data.samples) {
-    if (sample.latitude > auroraNorth || sample.probability < 4) continue;
+    if (sample.latitude > auroraNorth || sample.probability < 6) continue;
     const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
     const key = Math.max(0, Math.min(239, Math.floor((longitude + 180) / bucketWidth)));
-    const current = buckets.get(key) ?? { peak: 0 };
+    const current = buckets.get(key) ?? { latitudeTotal: 0, weight: 0, peak: 0 };
+    const weight = sample.probability * sample.probability;
+    current.latitudeTotal += sample.latitude * weight;
+    current.weight += weight;
     current.peak = Math.max(current.peak, sample.probability);
     buckets.set(key, current);
   }
-  // NOAA samples are not guaranteed to arrive in longitude order. The veil
-  // joins neighbouring longitudes, so sort the buckets before constructing
-  // any continuous surface.
-  return [...buckets.entries()].sort(([left], [right]) => left - right).flatMap(([, bucket]) => {
-    if (bucket.peak < 4) return [];
+  return [...buckets.entries()].flatMap(([key, bucket]) => {
+    if (!bucket.weight || bucket.peak < 6) return [];
+    const latitude = bucket.latitudeTotal / bucket.weight;
+    const seam = (Math.sin(key * 11.17 + bucket.peak * 0.91) + 1) / 2;
+    // Weak cells form naturally spaced curtains instead of a manufactured
+    // complete ring. Stronger regions remain continuous and brighter.
+    if (bucket.peak < 12 && seam < (12 - bucket.peak) / 14) return [];
     return [{
+      longitude: -180 + (key + 0.5) * bucketWidth,
+      latitude,
       probability: bucket.peak,
+      phase: key * 0.621 + latitude * 0.143,
     }];
   });
 }
@@ -146,57 +157,59 @@ function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtain
 
   const camera = map.project(map.getCenter());
   const seconds = time / 1000;
-  const peakProbability = curtains.reduce((peak, curtain) => Math.max(peak, curtain.probability), 0);
-  // The georeferenced NOAA raster below provides the precise oval on Earth.
-  // This overlay is its high-altitude optical counterpart: one coherent
-  // curtain system rather than hundreds of independently projected rays.
-  const strength = Math.max(0.18, Math.min(1, (peakProbability - 3) / 28));
-  const radius = Math.max(82, Math.min(Math.min(width, height) * 0.37, Math.min(width, height) * (0.3 + Math.max(0, map.getZoom()) * 0.06)));
-  const spread = radius * 1.34;
-  const surfaceY = camera.y - radius * 0.58;
-  const hasHighAltitudeRed = peakProbability >= 40;
+  const viewScale = Math.max(0.85, Math.min(1.62, Math.pow(2, map.getZoom()) * 0.92));
+  // A NOAA field can have a large number of occupied longitude cells. The
+  // visible aurora reads as a continuous curtain with far fewer strands, and
+  // capping them stops strong forecasts from overwhelming the map renderer.
+  const strandStep = Math.max(quality.strandStep, Math.ceil(curtains.length / quality.maxStrands));
   context.save();
   context.globalCompositeOperation = "lighter";
   context.filter = "none";
-  for (let layer = 0; layer < 3; layer += 1) {
-    const phase = seconds * (0.18 + layer * 0.035) + layer * 1.91;
-    const lift = radius * (0.31 + layer * 0.11) * (0.76 + strength * 0.48);
-    // Broad, slow folds read as an auroral curtain from orbit. They are
-    // deliberately coherent across the sheet, rather than noisy particles.
-    const sideWave = Math.sin(phase) * radius * 0.23;
-    const centreWave = Math.sin(phase * 1.41 + 0.8) * radius * 0.36;
-    const rightWave = Math.sin(phase * 0.77 + 2.1) * radius * 0.22;
-    const lowerY = surfaceY + layer * radius * 0.035;
-    const upperY = lowerY - lift;
-    const gradient = context.createLinearGradient(camera.x, lowerY, camera.x, upperY);
-    gradient.addColorStop(0, "rgba(59,205,172,0)");
-    gradient.addColorStop(0.2, "rgba(73,235,181,.44)");
-    gradient.addColorStop(0.56, "rgba(119,255,159,.76)");
-    gradient.addColorStop(0.83, hasHighAltitudeRed ? "rgba(242,88,176,.52)" : "rgba(89,161,255,.26)");
-    gradient.addColorStop(1, "rgba(112,92,255,0)");
+  for (let index = 0; index < curtains.length; index += strandStep) {
+    const curtain = curtains[index];
+    const base = map.project([curtain.longitude, curtain.latitude]);
+    if (!Number.isFinite(base.x) || !Number.isFinite(base.y) || base.x < -180 || base.x > width + 180 || base.y < -180 || base.y > height + 180) continue;
+    const fromCentreX = base.x - camera.x;
+    const fromCentreY = base.y - camera.y;
+    const distance = Math.hypot(fromCentreX, fromCentreY);
+    const outwardX = distance > 18 ? fromCentreX / distance : 0;
+    const outwardY = distance > 18 ? fromCentreY / distance : -1;
+    const sideX = -outwardY;
+    const sideY = outwardX;
+    const intensity = Math.max(0.08, Math.min(1, (curtain.probability - 5) / 45));
+    // Two slow travelling waves make neighbouring strands bend together,
+    // rather than flickering as independent map symbols.
+    const undulation = Math.sin(seconds * 0.48 + curtain.phase * 1.42) * 0.62 + Math.sin(seconds * 0.19 - curtain.phase * 0.73) * 0.28;
+    const swell = 0.86 + Math.sin(seconds * 0.31 + curtain.phase * 0.92) * 0.14;
+    const curtainLength = (20 + curtain.probability * 1.82) * swell * viewScale;
+    const tipX = base.x + outwardX * curtainLength + sideX * undulation * 11 * viewScale;
+    const tipY = base.y + outwardY * curtainLength + sideY * undulation * 11 * viewScale;
+    const controlX = (base.x + tipX) / 2 + sideX * (12 + Math.sin(seconds * 0.67 + curtain.phase) * 8) * viewScale;
+    const controlY = (base.y + tipY) / 2 + sideY * (12 + Math.sin(seconds * 0.67 + curtain.phase) * 8) * viewScale;
+    const widthVariation = 1 + (Math.sin(seconds * 0.86 + curtain.phase * 1.91) + 1) * 0.38;
 
-    context.beginPath();
-    context.moveTo(camera.x - spread, lowerY + sideWave);
-    context.bezierCurveTo(camera.x - spread * 0.55, lowerY - radius * 0.08 + centreWave, camera.x + spread * 0.22, lowerY + radius * 0.06 - centreWave, camera.x + spread, lowerY + rightWave);
-    context.bezierCurveTo(camera.x + spread * 0.61, upperY + rightWave * 0.48, camera.x + spread * 0.18, upperY - centreWave, camera.x, upperY + sideWave * 0.36);
-    context.bezierCurveTo(camera.x - spread * 0.31, upperY + centreWave * 0.62, camera.x - spread * 0.77, upperY - sideWave * 0.56, camera.x - spread, upperY + sideWave * 0.3);
-    context.closePath();
-    context.fillStyle = gradient;
-    context.globalAlpha = (0.16 + strength * 0.2) / (layer + 1);
-    context.fill();
-
-    // A few soft folds give depth without reintroducing a costly ray mesh.
-    context.strokeStyle = "rgba(193,255,215,.82)";
-    context.lineWidth = 0.65;
-    context.globalAlpha = (0.025 + strength * 0.06) / (layer + 1);
-    for (let fold = 1; fold <= 4; fold += 1) {
-      const fraction = fold / 5;
-      const foldX = camera.x - spread + spread * 2 * fraction;
-      const foldWave = Math.sin(phase + fold * 0.9) * radius * 0.12;
+    const drawRibbon = (lineWidth: number, alpha: number, colours: Array<[number, string]>) => {
+      const gradient = context.createLinearGradient(base.x, base.y, tipX, tipY);
+      for (const [stop, colour] of colours) gradient.addColorStop(stop, colour);
       context.beginPath();
-      context.moveTo(foldX, lowerY + foldWave * 0.45);
-      context.quadraticCurveTo(foldX + sideWave * 0.22, (lowerY + upperY) / 2 + foldWave, foldX - centreWave * 0.16, upperY + foldWave * 0.25);
+      context.moveTo(base.x, base.y);
+      context.quadraticCurveTo(controlX, controlY, tipX, tipY);
+      context.strokeStyle = gradient;
+      context.lineWidth = lineWidth;
+      context.lineCap = "round";
+      context.globalAlpha = alpha;
       context.stroke();
+    };
+
+    // Broad atmospheric bloom, then a narrower moving oxygen curtain. A
+    // red upper fringe only becomes visible as the forecast strengthens;
+    // this avoids inventing storm colours during quiet geomagnetic periods.
+    if (index % (strandStep * quality.bloomEvery) === 0) {
+      drawRibbon(7 * widthVariation * viewScale, intensity * 0.11, [[0, "rgba(37,125,255,0)"], [0.2, "rgba(78,143,255,.12)"], [0.46, "rgba(89,242,155,.48)"], [0.76, curtain.probability > 40 ? "rgba(232,75,149,.26)" : "rgba(74,153,255,.08)"], [1, "rgba(219,82,164,0)"]]);
+    }
+    drawRibbon(2.35 * widthVariation * viewScale, intensity * 0.55, [[0, "rgba(139,255,214,0)"], [0.16, "rgba(82,227,178,.6)"], [0.5, "rgba(108,255,145,.9)"], [0.79, curtain.probability > 40 ? "rgba(241,83,178,.62)" : "rgba(94,172,255,.2)"], [1, "rgba(155,99,255,0)"]]);
+    if (curtain.probability >= 30) {
+      drawRibbon(1.25, intensity * 0.84, [[0, "rgba(237,255,209,0)"], [0.3, "rgba(210,255,173,.96)"], [0.65, "rgba(126,255,172,.78)"], [1, "rgba(103,134,255,0)"]]);
     }
   }
   context.restore();
