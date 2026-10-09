@@ -81,140 +81,6 @@ function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData
   source?.updateImage({ url: auroraTexture(data, blur, strength), coordinates: auroraCoordinates });
 }
 
-type AuroraCurtain = { longitude: number; latitude: number; probability: number; phase: number };
-type AuroraQuality = { frameInterval: number; pixelRatio: number; strandStep: number; bloomEvery: number; maxStrands: number };
-
-function initialAuroraQuality(): AuroraQuality {
-  const device = navigator as Navigator & { deviceMemory?: number };
-  const cores = navigator.hardwareConcurrency ?? 4;
-  const memory = device.deviceMemory ?? 4;
-  // The map needs priority over decoration. The curtain evolves slowly in
-  // nature, so a lower visual cadence still feels fluid while keeping orbit,
-  // zoom and live positions responsive.
-  if (cores <= 4 || memory <= 4) return { frameInterval: 83, pixelRatio: 1, strandStep: 3, bloomEvery: 4, maxStrands: 48 };
-  if (cores <= 6 || memory <= 8) return { frameInterval: 66, pixelRatio: 1, strandStep: 2, bloomEvery: 3, maxStrands: 64 };
-  return { frameInterval: 50, pixelRatio: 1.25, strandStep: 1, bloomEvery: 2, maxStrands: 84 };
-}
-
-function lowerAuroraQuality(quality: AuroraQuality): AuroraQuality {
-  return {
-    frameInterval: Math.min(100, quality.frameInterval + 17),
-    pixelRatio: Math.max(1, quality.pixelRatio - 0.2),
-    strandStep: Math.min(4, quality.strandStep + 1),
-    bloomEvery: Math.min(5, quality.bloomEvery + 1),
-    maxStrands: Math.max(32, quality.maxStrands - 12),
-  };
-}
-
-function auroraCurtains(data: RadarAuroraData | null): AuroraCurtain[] {
-  if (!data?.samples.length) return [];
-  // The forecast is a probability field, not an optical photograph. We keep
-  // its actual position and strength, then use it as the anchor for a smooth
-  // light curtain between five-minute NOAA updates.
-  const bucketWidth = 1.5;
-  const buckets = new Map<number, { latitudeTotal: number; weight: number; peak: number }>();
-  for (const sample of data.samples) {
-    if (sample.latitude > auroraNorth || sample.probability < 6) continue;
-    const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
-    const key = Math.max(0, Math.min(239, Math.floor((longitude + 180) / bucketWidth)));
-    const current = buckets.get(key) ?? { latitudeTotal: 0, weight: 0, peak: 0 };
-    const weight = sample.probability * sample.probability;
-    current.latitudeTotal += sample.latitude * weight;
-    current.weight += weight;
-    current.peak = Math.max(current.peak, sample.probability);
-    buckets.set(key, current);
-  }
-  return [...buckets.entries()].flatMap(([key, bucket]) => {
-    if (!bucket.weight || bucket.peak < 6) return [];
-    const latitude = bucket.latitudeTotal / bucket.weight;
-    const seam = (Math.sin(key * 11.17 + bucket.peak * 0.91) + 1) / 2;
-    // Weak cells form naturally spaced curtains instead of a manufactured
-    // complete ring. Stronger regions remain continuous and brighter.
-    if (bucket.peak < 12 && seam < (12 - bucket.peak) / 14) return [];
-    return [{
-      longitude: -180 + (key + 0.5) * bucketWidth,
-      latitude,
-      probability: bucket.peak,
-      phase: key * 0.621 + latitude * 0.143,
-    }];
-  });
-}
-
-function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtains: AuroraCurtain[], enabled: boolean, time: number, quality: AuroraQuality) {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);
-  if (!width || !height) return;
-  if (canvas.width !== Math.round(width * pixelRatio) || canvas.height !== Math.round(height * pixelRatio)) {
-    canvas.width = Math.round(width * pixelRatio);
-    canvas.height = Math.round(height * pixelRatio);
-  }
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  if (!enabled || !curtains.length) return;
-
-  const camera = map.project(map.getCenter());
-  const seconds = time / 1000;
-  const viewScale = Math.max(0.85, Math.min(1.62, Math.pow(2, map.getZoom()) * 0.92));
-  // A NOAA field can have a large number of occupied longitude cells. The
-  // visible aurora reads as a continuous curtain with far fewer strands, and
-  // capping them stops strong forecasts from overwhelming the map renderer.
-  const strandStep = Math.max(quality.strandStep, Math.ceil(curtains.length / quality.maxStrands));
-  context.save();
-  context.globalCompositeOperation = "lighter";
-  context.filter = "none";
-  for (let index = 0; index < curtains.length; index += strandStep) {
-    const curtain = curtains[index];
-    const base = map.project([curtain.longitude, curtain.latitude]);
-    if (!Number.isFinite(base.x) || !Number.isFinite(base.y) || base.x < -180 || base.x > width + 180 || base.y < -180 || base.y > height + 180) continue;
-    const fromCentreX = base.x - camera.x;
-    const fromCentreY = base.y - camera.y;
-    const distance = Math.hypot(fromCentreX, fromCentreY);
-    const outwardX = distance > 18 ? fromCentreX / distance : 0;
-    const outwardY = distance > 18 ? fromCentreY / distance : -1;
-    const sideX = -outwardY;
-    const sideY = outwardX;
-    const intensity = Math.max(0.08, Math.min(1, (curtain.probability - 5) / 45));
-    // Two slow travelling waves make neighbouring strands bend together,
-    // rather than flickering as independent map symbols.
-    const undulation = Math.sin(seconds * 0.48 + curtain.phase * 1.42) * 0.62 + Math.sin(seconds * 0.19 - curtain.phase * 0.73) * 0.28;
-    const swell = 0.86 + Math.sin(seconds * 0.31 + curtain.phase * 0.92) * 0.14;
-    const curtainLength = (20 + curtain.probability * 1.82) * swell * viewScale;
-    const tipX = base.x + outwardX * curtainLength + sideX * undulation * 11 * viewScale;
-    const tipY = base.y + outwardY * curtainLength + sideY * undulation * 11 * viewScale;
-    const controlX = (base.x + tipX) / 2 + sideX * (12 + Math.sin(seconds * 0.67 + curtain.phase) * 8) * viewScale;
-    const controlY = (base.y + tipY) / 2 + sideY * (12 + Math.sin(seconds * 0.67 + curtain.phase) * 8) * viewScale;
-    const widthVariation = 1 + (Math.sin(seconds * 0.86 + curtain.phase * 1.91) + 1) * 0.38;
-
-    const drawRibbon = (lineWidth: number, alpha: number, colours: Array<[number, string]>) => {
-      const gradient = context.createLinearGradient(base.x, base.y, tipX, tipY);
-      for (const [stop, colour] of colours) gradient.addColorStop(stop, colour);
-      context.beginPath();
-      context.moveTo(base.x, base.y);
-      context.quadraticCurveTo(controlX, controlY, tipX, tipY);
-      context.strokeStyle = gradient;
-      context.lineWidth = lineWidth;
-      context.lineCap = "round";
-      context.globalAlpha = alpha;
-      context.stroke();
-    };
-
-    // Broad atmospheric bloom, then a narrower moving oxygen curtain. A
-    // red upper fringe only becomes visible as the forecast strengthens;
-    // this avoids inventing storm colours during quiet geomagnetic periods.
-    if (index % (strandStep * quality.bloomEvery) === 0) {
-      drawRibbon(7 * widthVariation * viewScale, intensity * 0.11, [[0, "rgba(37,125,255,0)"], [0.2, "rgba(78,143,255,.12)"], [0.46, "rgba(89,242,155,.48)"], [0.76, curtain.probability > 40 ? "rgba(232,75,149,.26)" : "rgba(74,153,255,.08)"], [1, "rgba(219,82,164,0)"]]);
-    }
-    drawRibbon(2.35 * widthVariation * viewScale, intensity * 0.55, [[0, "rgba(139,255,214,0)"], [0.16, "rgba(82,227,178,.6)"], [0.5, "rgba(108,255,145,.9)"], [0.79, curtain.probability > 40 ? "rgba(241,83,178,.62)" : "rgba(94,172,255,.2)"], [1, "rgba(155,99,255,0)"]]);
-    if (curtain.probability >= 30) {
-      drawRibbon(1.25, intensity * 0.84, [[0, "rgba(237,255,209,0)"], [0.3, "rgba(210,255,173,.96)"], [0.65, "rgba(126,255,172,.78)"], [1, "rgba(103,134,255,0)"]]);
-    }
-  }
-  context.restore();
-}
-
 function globeData(flights: PublicRadarFlight[], selectedId: string, replay: GlobeReplay) {
   const selected = flights.find((flight) => flight.id === selectedId) ?? null;
   const aircraft: GeoJson = {
@@ -285,23 +151,19 @@ export function BaRadarGlobe({
   onCameraChange: (camera: GlobeCamera) => void;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
-  const auroraCanvas = useRef<HTMLCanvasElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
   const onCameraChangeRef = useRef(onCameraChange);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
-  const curtainData = useMemo(() => auroraCurtains(aurora), [aurora]);
-  const dataRef = useRef({ ...data, controllers: controllersGeoJson, auroraEnabled, aurora, curtains: curtainData });
-  dataRef.current = { ...data, controllers: controllersGeoJson, auroraEnabled, aurora, curtains: curtainData };
+  const dataRef = useRef({ ...data, controllers: controllersGeoJson, auroraEnabled, aurora });
+  dataRef.current = { ...data, controllers: controllersGeoJson, auroraEnabled, aurora };
   onSelectRef.current = onSelect;
   onSelectControllerRef.current = onSelectController;
   onCameraChangeRef.current = onCameraChange;
 
   useEffect(() => {
-    let animation = 0;
-    let animationTimer: number | null = null;
     let resizeFrame = 0;
     let resizeObserver: ResizeObserver | null = null;
     let disposed = false;
@@ -350,9 +212,9 @@ export function BaRadarGlobe({
             },
           }],
         },
-        // Looking at the equator keeps the physical globe itself centred;
-        // the northern oval then rises naturally over the horizon.
-        center: initialCamera?.center ?? [-18, 18],
+        // Keep the planet itself centred; the northern oval then rises
+        // naturally over the horizon without pushing the Earth downward.
+        center: initialCamera?.center ?? [-18, 0],
         zoom: initialCamera?.zoom ?? 0.1,
         minZoom: -1.3,
         bearing: initialCamera?.bearing ?? 0,
@@ -408,7 +270,7 @@ export function BaRadarGlobe({
             // safe initial frame on ultrawide screens, then never overwrite a
             // pilot's orbit or zoom when the selected-flight panel changes.
             const zoom = Math.max(-0.35, Math.min(0.82, 1.16 - Math.max(0, Math.log2(ratio)) * 0.75));
-            map.jumpTo({ center: [-18, 18], zoom, bearing: 0, pitch: 0 });
+            map.jumpTo({ center: [-18, 0], zoom, bearing: 0, pitch: 0 });
             // Capture the resolved camera synchronously. That makes a
             // selection immediately after first paint just as stable as one
             // made later in the session.
@@ -423,54 +285,11 @@ export function BaRadarGlobe({
           });
           resizeObserver.observe(map.getContainer());
         });
-        let quality = initialAuroraQuality();
-        let lastSurfaceFrame = 0;
-        let overBudgetFrames = 0;
-        const scheduleAuroraFrame = () => {
-          // Do not leave a requestAnimationFrame loop running at the display
-          // refresh rate. Between visual frames, the browser and MapLibre can
-          // return to their normal idle behaviour.
-          animationTimer = window.setTimeout(() => {
-            animation = window.requestAnimationFrame(animateAurora);
-          }, document.hidden ? 1_000 : quality.frameInterval);
-        };
-        const animateAurora = (time: number) => {
-          if (disposed || !map.getSource("ba-radar-globe-aurora-core")) return;
-          if (document.hidden) {
-            scheduleAuroraFrame();
-            return;
-          }
-          // MapLibre's raster paint updates are comparatively costly. Their
-          // slow luminance drift does not need to run at the curtain cadence.
-          if (dataRef.current.auroraEnabled && time - lastSurfaceFrame >= 1_800) {
-            const shimmer = Math.sin(time / 2600) * 0.05;
-            map.setPaintProperty("ba-radar-globe-aurora-glow-layer", "raster-opacity", 0.64 + shimmer);
-            map.setPaintProperty("ba-radar-globe-aurora-core-layer", "raster-opacity", 0.9 + shimmer * 0.5);
-            lastSurfaceFrame = time;
-          }
-          if (auroraCanvas.current) {
-            const started = performance.now();
-            drawAuroraCurtains(auroraCanvas.current, map, dataRef.current.curtains, dataRef.current.auroraEnabled, time, quality);
-            const elapsed = performance.now() - started;
-            // Degrade only if the device repeatedly exceeds its own frame
-            // budget. It keeps the same soft, wavy effect rather than making
-            // the entire map lag behind pointer movement.
-            overBudgetFrames = elapsed > quality.frameInterval * 0.72 ? overBudgetFrames + 1 : Math.max(0, overBudgetFrames - 1);
-            if (overBudgetFrames >= 3 && quality.frameInterval < 100) {
-              quality = lowerAuroraQuality(quality);
-              overBudgetFrames = 0;
-            }
-          }
-          scheduleAuroraFrame();
-        };
-        scheduleAuroraFrame();
       });
     };
     void start();
     return () => {
       disposed = true;
-      window.cancelAnimationFrame(animation);
-      if (animationTimer !== null) window.clearTimeout(animationTimer);
       window.cancelAnimationFrame(resizeFrame);
       resizeObserver?.disconnect();
       const liveMap = mapRef.current;
@@ -498,7 +317,6 @@ export function BaRadarGlobe({
   }, [data, controllersGeoJson, auroraEnabled, aurora]);
 
   return <div className="ba-radar-globe-map" ref={container} aria-label="BA-Radar interactive 3D globe">
-    <canvas ref={auroraCanvas} className="ba-radar-globe-aurora-curtains" aria-hidden="true" />
     <div className="ba-radar-globe-caption"><strong>3D Globe</strong><span>Live BAV tracks · drag to orbit · scroll to zoom</span></div>
   </div>;
 }
