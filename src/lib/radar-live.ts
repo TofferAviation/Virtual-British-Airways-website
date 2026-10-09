@@ -30,6 +30,7 @@ export type PublicRadarRoutePoint = {
 
 export type PublicRadarTrackPoint = PublicRadarRoutePoint & {
   timestamp: string;
+  onGround: boolean;
 };
 
 export type PublicRadarPlannedRoute = {
@@ -90,7 +91,7 @@ function publicSnapshot(snapshot: Awaited<ReturnType<typeof listLiveAcarsSession
 
 function publicTrackPoint(snapshot: Awaited<ReturnType<typeof listLiveAcarsSessions>>[number]["lastSnapshot"]): PublicRadarTrackPoint | null {
   if (!snapshot || !Number.isFinite(snapshot.latitude) || !Number.isFinite(snapshot.longitude)) return null;
-  return { timestamp: snapshot.timestamp, latitude: snapshot.latitude, longitude: snapshot.longitude };
+  return { timestamp: snapshot.timestamp, latitude: snapshot.latitude, longitude: snapshot.longitude, onGround: snapshot.onGround };
 }
 
 function validRoutePoint(point: { latitude: number | null | undefined; longitude: number | null | undefined }): point is PublicRadarRoutePoint {

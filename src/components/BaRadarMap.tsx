@@ -40,6 +40,16 @@ function replayIcon(headingDeg: number) {
   });
 }
 
+function trackStartIcon(flight: PublicRadarFlight, isGroundPosition: boolean) {
+  const label = isGroundPosition ? `${flight.from} ground start` : `${flight.from} first report`;
+  return L.divIcon({
+    className: "ba-radar-track-start-icon-shell",
+    html: `<span class="ba-radar-track-start-icon ${isGroundPosition ? "ground" : "airborne"}"><b>${isGroundPosition ? "G" : "•"}</b><em>${escapeHtml(label)}</em></span>`,
+    iconSize: [92, 31],
+    iconAnchor: [10, 15],
+  });
+}
+
 function controllerIcon(controller: VatsimStation, selected: boolean) {
   const isAtis = controller.kind === "atis";
   return L.divIcon({
@@ -151,9 +161,11 @@ export function BaRadarMap({
   const plannedRoute: Position[] = (selected?.plannedRoute?.points ?? [])
     .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
     .map((point) => [point.latitude, point.longitude]);
-  const track: Position[] = (selected?.trackSnapshots?.length ? selected.trackSnapshots : selected?.recentSnapshots ?? [])
+  const trackSnapshots = selected?.trackSnapshots?.length ? selected.trackSnapshots : selected?.recentSnapshots ?? [];
+  const track: Position[] = trackSnapshots
     .filter((snapshot) => Number.isFinite(snapshot.latitude) && Number.isFinite(snapshot.longitude))
     .map((snapshot) => [snapshot.latitude, snapshot.longitude]);
+  const trackStart = trackSnapshots.find((snapshot) => Number.isFinite(snapshot.latitude) && Number.isFinite(snapshot.longitude)) ?? null;
   const replayTrack: Position[] = (replay?.points ?? [])
     .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
     .map((point) => [point.latitude, point.longitude]);
@@ -172,6 +184,7 @@ export function BaRadarMap({
     <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
     {plannedRoute.length > 1 ? <Polyline positions={plannedRoute} pathOptions={{ color: "#73bdf1", weight: 2.5, opacity: 0.8, dashArray: "7 10", lineCap: "round", lineJoin: "round", className: "ba-radar-planned-route" }} /> : null}
     {track.length > 1 ? <Polyline positions={track} pathOptions={{ color: "#f1c84c", weight: 3.5, opacity: 0.96, lineCap: "round", lineJoin: "round", className: "ba-radar-recorded-track" }} /> : null}
+    {selected && trackStart ? <Marker position={[trackStart.latitude, trackStart.longitude]} icon={trackStartIcon(selected, "onGround" in trackStart ? trackStart.onGround : false)} interactive={false} zIndexOffset={500} /> : null}
     {replayTrack.length > 1 ? <Polyline positions={replayTrack} pathOptions={{ color: "#d91e45", weight: 3.5, opacity: 0.92, lineCap: "round", lineJoin: "round", className: "ba-radar-replay-track" }} /> : null}
     {replayPoint ? <Marker position={[replayPoint.latitude, replayPoint.longitude]} icon={replayIcon(replayPoint.headingDeg)} zIndexOffset={900} /> : null}
     {positioned.map((flight) => <Marker key={flight.id} position={[flight.lastSnapshot!.latitude, flight.lastSnapshot!.longitude]} icon={aircraftIcon(flight, flight.id === selectedId)} eventHandlers={{ click: () => onSelect(flight.id) }} />)}

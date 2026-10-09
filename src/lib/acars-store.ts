@@ -10,9 +10,15 @@ const MAX_RECENT_SNAPSHOTS = 60;
 // The tracker keeps its compact, high-frequency chart separately from the
 // longer line shown on BA-Radar.  The latter is read from the durable report
 // table and reduced before it ever reaches a browser.
-const MAX_PUBLIC_TRACK_REPORTS = 10_000;
+// A five-second ACARS cadence produces 720 reports per hour. Supabase's
+// default REST response cap is commonly 1,000 rows, so a single query only
+// returned the final 83 minutes of a flight even when Ember retained the
+// complete operation. Keep enough reports for a twenty-five-hour operation and
+// page through them below before reducing the path for the browser.
+const MAX_PUBLIC_TRACK_REPORTS = 18_000;
 const MAX_PUBLIC_TRACK_POINTS = 640;
 const PUBLIC_TRACK_CACHE_MS = 45_000;
+const ACARS_REPORT_PAGE_SIZE = 1_000;
 
 export type AcarsSessionStatus = "active" | "completed" | "disconnected";
 export type AcarsSession = {
@@ -221,11 +227,33 @@ async function listPersistentAcarsSessionSnapshots(client: SupabaseClient, id: s
   if (!session || session.pilotId !== pilotId) return [];
   // These are the durable, per-session reports used for the post-flight
   // debrief.  The short recentSnapshots list remains reserved for live maps.
-  const { data, error } = await client.from("acars_position_reports")
-    .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
-    .eq("session_id", id).order("reported_at", { ascending: true }).limit(6_000);
-  if (error) throw error;
-  return (data as AcarsPositionReportRow[]).map((row) => snapshotFromPositionRow(row, session));
+  const reports = await listPersistentPositionReports(client, id, 6_000);
+  return reports.map((row) => snapshotFromPositionRow(row, session));
+}
+
+/**
+ * Supabase can cap an individual REST response at 1,000 rows. ACARS samples
+ * every five seconds, so reading one page silently turns a long-haul
+ * gate-to-gate operation into a short recent tail on BA-Radar. Pagination
+ * keeps the complete recorded operation without exposing raw reports.
+ */
+async function listPersistentPositionReports(client: SupabaseClient, sessionId: string, maximum: number) {
+  const reports: AcarsPositionReportRow[] = [];
+  for (let offset = 0; offset < maximum; offset += ACARS_REPORT_PAGE_SIZE) {
+    const end = Math.min(maximum - 1, offset + ACARS_REPORT_PAGE_SIZE - 1);
+    const { data, error } = await client.from("acars_position_reports")
+      .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
+      .eq("session_id", sessionId)
+      .order("reported_at", { ascending: true })
+      .range(offset, end);
+    if (error) throw error;
+
+    const page = (data ?? []) as AcarsPositionReportRow[];
+    reports.push(...page);
+    if (page.length < ACARS_REPORT_PAGE_SIZE) break;
+  }
+
+  return reports;
 }
 
 async function listPersistentPublicTrackSnapshots(client: SupabaseClient, session: AcarsSession) {
@@ -233,13 +261,8 @@ async function listPersistentPublicTrackSnapshots(client: SupabaseClient, sessio
   const latest = session.recentSnapshots ?? [];
   if (cached && cached.expiresAt > Date.now()) return reduceTrackSnapshots([...cached.snapshots, ...latest, ...(session.lastSnapshot ? [session.lastSnapshot] : [])]);
 
-  // Read newest first so an unusually long session always retains the live
-  // end of its route, then restore chronological order for Leaflet.
-  const { data, error } = await client.from("acars_position_reports")
-    .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
-    .eq("session_id", session.id).order("reported_at", { ascending: false }).limit(MAX_PUBLIC_TRACK_REPORTS);
-  if (error) throw error;
-  const durable = (data as AcarsPositionReportRow[]).reverse().map((row) => snapshotFromPositionRow(row, session));
+  const durable = (await listPersistentPositionReports(client, session.id, MAX_PUBLIC_TRACK_REPORTS))
+    .map((row) => snapshotFromPositionRow(row, session));
   const snapshots = reduceTrackSnapshots([...durable, ...latest, ...(session.lastSnapshot ? [session.lastSnapshot] : [])]);
   publicTrackCache.set(session.id, { expiresAt: Date.now() + PUBLIC_TRACK_CACHE_MS, snapshots });
   return snapshots;
@@ -276,7 +299,16 @@ export async function listLiveAcarsSessionTrackSnapshots(sessions: AcarsSession[
 
     const activeIds = new Set(sessions.map((session) => session.id));
     for (const sessionId of publicTrackCache.keys()) if (!activeIds.has(sessionId)) publicTrackCache.delete(sessionId);
-    const entries = await Promise.all(sessions.map(async (session) => [session.id, await listPersistentPublicTrackSnapshots(client, session)] as const));
+    // A transient history read for one aircraft must not turn every other
+    // flight back into a short recent-sample path.
+    const entries = await Promise.all(sessions.map(async (session) => {
+      try {
+        return [session.id, await listPersistentPublicTrackSnapshots(client, session)] as const;
+      } catch (error) {
+        console.error(`[acars] Could not load durable tracker path for ${session.id}.`, error);
+        return [session.id, reduceTrackSnapshots([...(session.recentSnapshots ?? []), ...(session.lastSnapshot ? [session.lastSnapshot] : [])])] as const;
+      }
+    }));
     return new Map(entries);
   } catch (error) {
     // A temporary history-query issue must not hide the live aircraft marker.
