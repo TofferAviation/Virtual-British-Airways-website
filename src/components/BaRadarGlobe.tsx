@@ -82,6 +82,27 @@ function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData
 }
 
 type AuroraCurtain = { longitude: number; latitude: number; probability: number; phase: number };
+type AuroraQuality = { frameInterval: number; pixelRatio: number; strandStep: number; bloomEvery: number };
+
+function initialAuroraQuality(): AuroraQuality {
+  const device = navigator as Navigator & { deviceMemory?: number };
+  const cores = navigator.hardwareConcurrency ?? 4;
+  const memory = device.deviceMemory ?? 4;
+  // The visual character is retained at every tier. Lower-spec systems trade
+  // invisible intermediate strands for interaction that remains responsive.
+  if (cores <= 4 || memory <= 4) return { frameInterval: 50, pixelRatio: 1, strandStep: 3, bloomEvery: 4 };
+  if (cores <= 6 || memory <= 8) return { frameInterval: 42, pixelRatio: 1.25, strandStep: 2, bloomEvery: 3 };
+  return { frameInterval: 33, pixelRatio: 1.5, strandStep: 1, bloomEvery: 2 };
+}
+
+function lowerAuroraQuality(quality: AuroraQuality): AuroraQuality {
+  return {
+    frameInterval: Math.min(66, quality.frameInterval + 9),
+    pixelRatio: Math.max(1, quality.pixelRatio - 0.2),
+    strandStep: Math.min(4, quality.strandStep + 1),
+    bloomEvery: Math.min(5, quality.bloomEvery + 1),
+  };
+}
 
 function auroraCurtains(data: RadarAuroraData | null): AuroraCurtain[] {
   if (!data?.samples.length) return [];
@@ -117,10 +138,10 @@ function auroraCurtains(data: RadarAuroraData | null): AuroraCurtain[] {
   });
 }
 
-function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtains: AuroraCurtain[], enabled: boolean, time: number) {
+function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtains: AuroraCurtain[], enabled: boolean, time: number, quality: AuroraQuality) {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);
   if (!width || !height) return;
   if (canvas.width !== Math.round(width * pixelRatio) || canvas.height !== Math.round(height * pixelRatio)) {
     canvas.width = Math.round(width * pixelRatio);
@@ -134,9 +155,11 @@ function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtain
 
   const camera = map.project(map.getCenter());
   const seconds = time / 1000;
+  const viewScale = Math.max(0.85, Math.min(1.62, Math.pow(2, map.getZoom()) * 0.92));
   context.save();
   context.globalCompositeOperation = "lighter";
-  for (const curtain of curtains) {
+  for (let index = 0; index < curtains.length; index += quality.strandStep) {
+    const curtain = curtains[index];
     const base = map.project([curtain.longitude, curtain.latitude]);
     if (!Number.isFinite(base.x) || !Number.isFinite(base.y) || base.x < -180 || base.x > width + 180 || base.y < -180 || base.y > height + 180) continue;
     const fromCentreX = base.x - camera.x;
@@ -147,14 +170,16 @@ function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtain
     const sideX = -outwardY;
     const sideY = outwardX;
     const intensity = Math.max(0.08, Math.min(1, (curtain.probability - 5) / 45));
-    const undulation = Math.sin(seconds * 0.74 + curtain.phase) * 0.5 + Math.sin(seconds * 1.31 + curtain.phase * 1.73) * 0.25;
-    const viewScale = Math.max(0.85, Math.min(1.62, Math.pow(2, map.getZoom()) * 0.92));
-    const curtainLength = (20 + curtain.probability * 1.82 + undulation * 10) * viewScale;
-    const tipX = base.x + outwardX * curtainLength + sideX * undulation * 6;
-    const tipY = base.y + outwardY * curtainLength + sideY * undulation * 6;
-    const controlX = (base.x + tipX) / 2 + sideX * (7 + Math.sin(seconds * 1.12 + curtain.phase) * 6);
-    const controlY = (base.y + tipY) / 2 + sideY * (7 + Math.sin(seconds * 1.12 + curtain.phase) * 6);
-    const widthVariation = 1 + (Math.sin(seconds * 1.72 + curtain.phase * 1.91) + 1) * 0.5;
+    // Two slow travelling waves make neighbouring strands bend together,
+    // rather than flickering as independent map symbols.
+    const undulation = Math.sin(seconds * 0.48 + curtain.phase * 1.42) * 0.62 + Math.sin(seconds * 0.19 - curtain.phase * 0.73) * 0.28;
+    const swell = 0.86 + Math.sin(seconds * 0.31 + curtain.phase * 0.92) * 0.14;
+    const curtainLength = (20 + curtain.probability * 1.82) * swell * viewScale;
+    const tipX = base.x + outwardX * curtainLength + sideX * undulation * 11 * viewScale;
+    const tipY = base.y + outwardY * curtainLength + sideY * undulation * 11 * viewScale;
+    const controlX = (base.x + tipX) / 2 + sideX * (12 + Math.sin(seconds * 0.67 + curtain.phase) * 8) * viewScale;
+    const controlY = (base.y + tipY) / 2 + sideY * (12 + Math.sin(seconds * 0.67 + curtain.phase) * 8) * viewScale;
+    const widthVariation = 1 + (Math.sin(seconds * 0.86 + curtain.phase * 1.91) + 1) * 0.38;
 
     const drawRibbon = (lineWidth: number, blur: number, alpha: number, colours: Array<[number, string]>) => {
       const gradient = context.createLinearGradient(base.x, base.y, tipX, tipY);
@@ -173,12 +198,15 @@ function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtain
     // Broad atmospheric bloom, then a narrower moving oxygen curtain. A
     // red upper fringe only becomes visible as the forecast strengthens;
     // this avoids inventing storm colours during quiet geomagnetic periods.
-    drawRibbon(8 * widthVariation * viewScale, 8, intensity * 0.13, [[0, "rgba(37,125,255,0)"], [0.2, "rgba(78,143,255,.12)"], [0.46, "rgba(89,242,155,.48)"], [0.76, curtain.probability > 40 ? "rgba(232,75,149,.26)" : "rgba(74,153,255,.08)"], [1, "rgba(219,82,164,0)"]]);
+    if (index % (quality.strandStep * quality.bloomEvery) === 0) {
+      drawRibbon(8 * widthVariation * viewScale, 8, intensity * 0.13, [[0, "rgba(37,125,255,0)"], [0.2, "rgba(78,143,255,.12)"], [0.46, "rgba(89,242,155,.48)"], [0.76, curtain.probability > 40 ? "rgba(232,75,149,.26)" : "rgba(74,153,255,.08)"], [1, "rgba(219,82,164,0)"]]);
+    }
     drawRibbon(2.35 * widthVariation * viewScale, 2.25, intensity * 0.55, [[0, "rgba(139,255,214,0)"], [0.16, "rgba(82,227,178,.6)"], [0.5, "rgba(108,255,145,.9)"], [0.79, curtain.probability > 40 ? "rgba(241,83,178,.62)" : "rgba(94,172,255,.2)"], [1, "rgba(155,99,255,0)"]]);
     if (curtain.probability >= 24) {
       drawRibbon(1.25, 0.8, intensity * 0.84, [[0, "rgba(237,255,209,0)"], [0.3, "rgba(210,255,173,.96)"], [0.65, "rgba(126,255,172,.78)"], [1, "rgba(103,134,255,0)"]]);
     }
   }
+  context.filter = "none";
   context.restore();
 }
 
@@ -389,14 +417,34 @@ export function BaRadarGlobe({
           });
           resizeObserver.observe(map.getContainer());
         });
+        let quality = initialAuroraQuality();
+        let lastCurtainFrame = 0;
+        let lastSurfaceFrame = 0;
+        let overBudgetFrames = 0;
         const animateAurora = (time: number) => {
           if (disposed || !map.getSource("ba-radar-globe-aurora-core")) return;
-          if (dataRef.current.auroraEnabled) {
+          // MapLibre's raster paint updates are comparatively costly. Their
+          // slow luminance drift does not need to run at the curtain cadence.
+          if (dataRef.current.auroraEnabled && time - lastSurfaceFrame >= 480) {
             const shimmer = Math.sin(time / 2600) * 0.05;
             map.setPaintProperty("ba-radar-globe-aurora-glow-layer", "raster-opacity", 0.64 + shimmer);
             map.setPaintProperty("ba-radar-globe-aurora-core-layer", "raster-opacity", 0.9 + shimmer * 0.5);
+            lastSurfaceFrame = time;
           }
-          if (auroraCanvas.current) drawAuroraCurtains(auroraCanvas.current, map, dataRef.current.curtains, dataRef.current.auroraEnabled, time);
+          if (auroraCanvas.current && time - lastCurtainFrame >= quality.frameInterval) {
+            const started = performance.now();
+            drawAuroraCurtains(auroraCanvas.current, map, dataRef.current.curtains, dataRef.current.auroraEnabled, time, quality);
+            const elapsed = performance.now() - started;
+            // Degrade only if the device repeatedly exceeds its own frame
+            // budget. It keeps the same soft, wavy effect rather than making
+            // the entire map lag behind pointer movement.
+            overBudgetFrames = elapsed > quality.frameInterval * 0.72 ? overBudgetFrames + 1 : Math.max(0, overBudgetFrames - 1);
+            if (overBudgetFrames >= 4 && quality.frameInterval < 66) {
+              quality = lowerAuroraQuality(quality);
+              overBudgetFrames = 0;
+            }
+            lastCurtainFrame = time;
+          }
           animation = window.requestAnimationFrame(animateAurora);
         };
         animation = window.requestAnimationFrame(animateAurora);
