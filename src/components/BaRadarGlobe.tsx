@@ -82,12 +82,14 @@ function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData
 
 function auroraVolumes(data: RadarAuroraData | null, time: number): GeoJson {
   if (!data?.samples.length) return emptyCollection;
-  const bucketWidth = 2;
+  // OVATION's quarter-degree cells are grouped just enough to remain smooth,
+  // while retaining the broken, folded shape of a real auroral curtain.
+  const bucketWidth = 0.75;
   const buckets = new Map<number, { latitudeTotal: number; weight: number; peak: number }>();
   for (const sample of data.samples) {
     if (sample.latitude > auroraNorth || sample.probability < 6) continue;
     const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
-    const key = Math.max(0, Math.min(179, Math.floor((longitude + 180) / bucketWidth)));
+    const key = Math.max(0, Math.min(479, Math.floor((longitude + 180) / bucketWidth)));
     const current = buckets.get(key) ?? { latitudeTotal: 0, weight: 0, peak: 0 };
     const weight = sample.probability * sample.probability;
     current.latitudeTotal += sample.latitude * weight;
@@ -100,8 +102,14 @@ function auroraVolumes(data: RadarAuroraData | null, time: number): GeoJson {
     features: [...buckets.entries()].flatMap(([key, bucket]) => {
       if (!bucket.weight || bucket.peak < 6) return [];
       const longitude = -180 + key * bucketWidth;
-      const latitude = bucket.latitudeTotal / bucket.weight;
-      const halfWidth = Math.min(3.5, 1 + bucket.peak / 5.8);
+      const stableRipple = Math.sin(key * 0.733 + bucket.peak * 0.19) * 0.72 + Math.sin(key * 0.173 - bucket.peak * 0.31) * 0.38;
+      const curtainWave = Math.sin(key * 0.49 + time * 0.36) * 0.38 + Math.sin(key * 0.16 - time * 0.22) * 0.24;
+      const breakLine = (Math.sin(key * 13.13 + bucket.peak * 1.71) + 1) / 2;
+      // Weak probability cells break into gaps instead of becoming a perfect
+      // man-made ring. Strong NOAA cells always remain represented.
+      if (bucket.peak < 11 && breakLine < (11 - bucket.peak) / 13) return [];
+      const latitude = bucket.latitudeTotal / bucket.weight + stableRipple + curtainWave;
+      const halfWidth = Math.min(2.8, 0.72 + bucket.peak / 11.5);
       // The oval position and brightness are NOAA data. The movement only
       // gives the otherwise static forecast field a gentle curtain motion.
       const flutter = 0.86 + Math.sin(time * 1.55 + key * 0.72) * 0.14;
@@ -118,11 +126,13 @@ function auroraVolumes(data: RadarAuroraData | null, time: number): GeoJson {
         geometry: {
           type: "Polygon" as const,
           coordinates: [[
-            [longitude, latitude - halfWidth],
-            [longitude + bucketWidth, latitude - halfWidth],
-            [longitude + bucketWidth, latitude + halfWidth],
-            [longitude, latitude + halfWidth],
-            [longitude, latitude - halfWidth],
+            [longitude, latitude - halfWidth * (0.75 + breakLine * 0.25)],
+            [longitude + bucketWidth * 0.5, latitude - halfWidth * (0.95 + curtainWave * 0.16)],
+            [longitude + bucketWidth, latitude - halfWidth * (0.72 + (1 - breakLine) * 0.27)],
+            [longitude + bucketWidth, latitude + halfWidth * (0.7 + breakLine * 0.3)],
+            [longitude + bucketWidth * 0.5, latitude + halfWidth * (0.96 - curtainWave * 0.16)],
+            [longitude, latitude + halfWidth * (0.74 + (1 - breakLine) * 0.26)],
+            [longitude, latitude - halfWidth * (0.75 + breakLine * 0.25)],
           ]],
         },
         properties: {
@@ -316,21 +326,24 @@ export function BaRadarGlobe({
         map.on("mouseenter", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = ""; });
         sync(map);
-        const fitGlobe = () => {
+        const fitGlobe = (initial = false) => {
           if (disposed) return;
           const viewport = map.getContainer();
           const ratio = viewport.clientWidth / Math.max(viewport.clientHeight, 1);
-          // A MapLibre globe scales with the narrow dimension. This keeps the
-          // complete Earth centred on ultrawide screens instead of clipping it.
-          const zoom = Math.max(-1.3, Math.min(0.62, 0.82 - Math.max(0, Math.log2(ratio)) * 0.92));
           map.resize();
-          map.jumpTo({ center: [-18, 0], zoom, bearing: 0, pitch: 0 });
+          if (initial) {
+            // A MapLibre globe scales with the narrow dimension. Establish a
+            // safe initial frame on ultrawide screens, then never overwrite a
+            // pilot's orbit or zoom when the selected-flight panel changes.
+            const zoom = Math.max(-1.3, Math.min(0.62, 0.82 - Math.max(0, Math.log2(ratio)) * 0.92));
+            map.jumpTo({ center: [-18, 0], zoom, bearing: 0, pitch: 0 });
+          }
         };
         window.requestAnimationFrame(() => {
-          fitGlobe();
+          fitGlobe(true);
           resizeObserver = new ResizeObserver(() => {
             window.cancelAnimationFrame(resizeFrame);
-            resizeFrame = window.requestAnimationFrame(fitGlobe);
+            resizeFrame = window.requestAnimationFrame(() => fitGlobe());
           });
           resizeObserver.observe(map.getContainer());
         });
