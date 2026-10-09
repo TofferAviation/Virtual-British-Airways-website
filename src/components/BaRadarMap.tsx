@@ -1,7 +1,7 @@
 "use client";
 
 import L from "leaflet";
-import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
+import { GeoJSON, MapContainer, Marker, Pane, Polyline, SVGOverlay, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
 import { useEffect, useState } from "react";
 import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
 import type { RadarLayers } from "@/components/PublicBaRadar";
@@ -83,6 +83,36 @@ function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
     opacity={0.86}
     attribution={'Observed lightning &copy; <a href="https://www.eumetsat.int/" target="_blank" rel="noreferrer">EUMETSAT</a>'}
   />;
+}
+
+function SeasonalAuroraLayer({ enabled }: { enabled: boolean }) {
+  if (!enabled) return null;
+  return <Pane name="ba-radar-seasonal-aurora" className="ba-radar-seasonal-aurora-pane" style={{ zIndex: 500, pointerEvents: "none" }}>
+    <SVGOverlay bounds={[[58, -180], [85, 180]]} opacity={0.88} interactive={false} attributes={{ viewBox: "0 0 1200 560", preserveAspectRatio: "none", class: "ba-radar-aurora-svg" }}>
+      <defs>
+        <linearGradient id="ba-radar-aurora-main" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor="#56c9ff" stopOpacity="0" />
+          <stop offset="0.26" stopColor="#74dfff" stopOpacity="0.16" />
+          <stop offset="0.52" stopColor="#63f2b0" stopOpacity="0.53" />
+          <stop offset="0.74" stopColor="#7a91ff" stopOpacity="0.28" />
+          <stop offset="1" stopColor="#6dffcc" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="ba-radar-aurora-second" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor="#3bb4ff" stopOpacity="0" />
+          <stop offset="0.43" stopColor="#6dffd5" stopOpacity="0.32" />
+          <stop offset="0.65" stopColor="#a39aff" stopOpacity="0.28" />
+          <stop offset="1" stopColor="#3fd2ff" stopOpacity="0" />
+        </linearGradient>
+        <filter id="ba-radar-aurora-soft" x="-12%" y="-60%" width="124%" height="220%"><feGaussianBlur stdDeviation="7" /></filter>
+      </defs>
+      <path d="M-90 300 C 130 212, 300 352, 506 270 S 883 214, 1290 298 L 1290 414 C 1042 342, 784 449, 521 372 S 112 451, -90 387 Z" fill="url(#ba-radar-aurora-main)" filter="url(#ba-radar-aurora-soft)">
+        <animateTransform attributeName="transform" type="translate" values="-46 7;34 -9;-46 7" dur="27s" repeatCount="indefinite" />
+      </path>
+      <path d="M-65 411 C 177 315, 351 447, 609 370 S 1004 314, 1260 390 L 1260 479 C 1009 424, 843 520, 612 456 S 142 524, -65 485 Z" fill="url(#ba-radar-aurora-second)" filter="url(#ba-radar-aurora-soft)" opacity="0.76">
+        <animateTransform attributeName="transform" type="translate" values="39 -4;-42 10;39 -4" dur="35s" repeatCount="indefinite" />
+      </path>
+    </SVGOverlay>
+  </Pane>;
 }
 
 function MapLayers({
@@ -181,6 +211,7 @@ export function BaRadarMap({
       maxNativeZoom={19}
       maxZoom={19}
     />
+    <SeasonalAuroraLayer enabled={layers.seasonal} />
     <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
     {plannedRoute.length > 1 ? <Polyline positions={plannedRoute} pathOptions={{ color: "#73bdf1", weight: 2.5, opacity: 0.8, dashArray: "7 10", lineCap: "round", lineJoin: "round", className: "ba-radar-planned-route" }} /> : null}
     {track.length > 1 ? <Polyline positions={track} pathOptions={{ color: "#f1c84c", weight: 3.5, opacity: 0.96, lineCap: "round", lineJoin: "round", className: "ba-radar-recorded-track" }} /> : null}
