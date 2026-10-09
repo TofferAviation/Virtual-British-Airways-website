@@ -65,6 +65,7 @@ import "./first-visit-welcome.css";
 import "./hour-transfer.css";
 import "./hour-transfer-links.css";
 import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 export const metadata: Metadata = {
   title: {

@@ -87,10 +87,25 @@ export type RadarWeatherData = {
   refreshedAt: string;
 };
 
+export type RadarAuroraSample = {
+  longitude: number;
+  latitude: number;
+  probability: number;
+};
+
+export type RadarAuroraData = {
+  source: "NOAA SWPC OVATION Prime";
+  observedAt: string | null;
+  forecastAt: string | null;
+  samples: RadarAuroraSample[];
+  refreshedAt: string;
+};
+
 type Cached<T> = { value: T; expiresAt: number };
 
 let vatsimCache: Cached<VatsimRadarData> | null = null;
 let weatherCache: Cached<RadarWeatherData> | null = null;
+let auroraCache: Cached<RadarAuroraData> | null = null;
 
 const EMPTY_ADVISORIES: AviationAdvisories = { type: "FeatureCollection", features: [] };
 
@@ -319,4 +334,49 @@ export async function getRadarWeatherData() {
   const value = await refreshWeather();
   weatherCache = { value, expiresAt: Date.now() + 5 * 60_000 };
   return value;
+}
+
+
+function ovationTimestamp(value: unknown) {
+  const timestamp = asString(value);
+  return timestamp && Number.isFinite(new Date(timestamp).getTime()) ? timestamp : null;
+}
+
+function normaliseAurora(value: unknown): RadarAuroraData {
+  const record = asRecord(value);
+  const coordinates = Array.isArray(record?.coordinates) ? record.coordinates : [];
+  return {
+    source: "NOAA SWPC OVATION Prime",
+    observedAt: ovationTimestamp(record?.["Observation Time"]),
+    forecastAt: ovationTimestamp(record?.["Forecast Time"]),
+    // The northern map only needs the meaningful part of the OVATION grid.
+    // Keeping cells at 5% and above preserves the observed oval without
+    // sending the transparent zero-probability world grid to each pilot.
+    samples: coordinates.flatMap((entry) => {
+      if (!Array.isArray(entry) || entry.length < 3) return [];
+      const longitude = asNumber(entry[0]);
+      const latitude = asNumber(entry[1]);
+      const probability = asNumber(entry[2]);
+      if (longitude === null || latitude === null || probability === null || latitude < 45 || probability < 5) return [];
+      return [{ longitude, latitude, probability: Math.max(0, Math.min(100, probability)) }];
+    }),
+    refreshedAt: new Date().toISOString(),
+  };
+}
+
+export async function getRadarAuroraData() {
+  if (auroraCache && auroraCache.expiresAt > Date.now()) return auroraCache.value;
+  try {
+    const value = normaliseAurora(await fetchJson("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"));
+    auroraCache = { value, expiresAt: Date.now() + 5 * 60_000 };
+    return value;
+  } catch {
+    return auroraCache?.value ?? {
+      source: "NOAA SWPC OVATION Prime",
+      observedAt: null,
+      forecastAt: null,
+      samples: [],
+      refreshedAt: new Date().toISOString(),
+    };
+  }
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import L from "leaflet";
-import { GeoJSON, MapContainer, Marker, Pane, Polyline, SVGOverlay, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
+import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap, useMapEvents } from "react-leaflet";
 import { useEffect, useState } from "react";
-import type { RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
+import type { RadarAuroraData, RadarWeatherData, RadarWindGrid, VatsimStation } from "@/lib/radar-external";
 import type { RadarLayers } from "@/components/PublicBaRadar";
 import type { PublicRadarFlight } from "@/lib/radar-live";
 import { BaRadarWindField } from "@/components/BaRadarWindField";
@@ -85,39 +85,74 @@ function OfficialLightningLayer({ enabled }: { enabled: boolean }) {
   />;
 }
 
-function SeasonalAuroraLayer({ enabled }: { enabled: boolean }) {
-  if (!enabled) return null;
-  return <Pane name="ba-radar-seasonal-aurora" className="ba-radar-seasonal-aurora-pane" style={{ zIndex: 500, pointerEvents: "none" }}>
-    <SVGOverlay bounds={[[58, -180], [85, 180]]} opacity={0.88} interactive={false} attributes={{ viewBox: "0 0 1200 560", preserveAspectRatio: "none", class: "ba-radar-aurora-svg" }}>
-      <defs>
-        <linearGradient id="ba-radar-aurora-main" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#56c9ff" stopOpacity="0" />
-          <stop offset="0.26" stopColor="#74dfff" stopOpacity="0.16" />
-          <stop offset="0.52" stopColor="#63f2b0" stopOpacity="0.53" />
-          <stop offset="0.74" stopColor="#7a91ff" stopOpacity="0.28" />
-          <stop offset="1" stopColor="#6dffcc" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="ba-radar-aurora-second" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#3bb4ff" stopOpacity="0" />
-          <stop offset="0.43" stopColor="#6dffd5" stopOpacity="0.32" />
-          <stop offset="0.65" stopColor="#a39aff" stopOpacity="0.28" />
-          <stop offset="1" stopColor="#3fd2ff" stopOpacity="0" />
-        </linearGradient>
-        <filter id="ba-radar-aurora-soft" x="-12%" y="-60%" width="124%" height="220%"><feGaussianBlur stdDeviation="7" /></filter>
-      </defs>
-      <path d="M-90 300 C 130 212, 300 352, 506 270 S 883 214, 1290 298 L 1290 414 C 1042 342, 784 449, 521 372 S 112 451, -90 387 Z" fill="url(#ba-radar-aurora-main)" filter="url(#ba-radar-aurora-soft)">
-        <animateTransform attributeName="transform" type="translate" values="-46 7;34 -9;-46 7" dur="27s" repeatCount="indefinite" />
-      </path>
-      <path d="M-65 411 C 177 315, 351 447, 609 370 S 1004 314, 1260 390 L 1260 479 C 1009 424, 843 520, 612 456 S 142 524, -65 485 Z" fill="url(#ba-radar-aurora-second)" filter="url(#ba-radar-aurora-soft)" opacity="0.76">
-        <animateTransform attributeName="transform" type="translate" values="39 -4;-42 10;39 -4" dur="35s" repeatCount="indefinite" />
-      </path>
-    </SVGOverlay>
-  </Pane>;
+function auroraColour(probability: number) {
+  if (probability < 15) return [55, 180, 210, 0.12] as const;
+  if (probability < 30) return [68, 224, 185, 0.2] as const;
+  if (probability < 50) return [96, 247, 156, 0.3] as const;
+  if (probability < 70) return [165, 249, 119, 0.42] as const;
+  return [195, 132, 255, 0.52] as const;
+}
+
+function ovationImage(data: RadarAuroraData) {
+  const west = -180;
+  const south = 45;
+  const width = 1440;
+  const height = 360;
+  // OVATION arrives as a one-degree probability grid. Render its exact field
+  // at native scale first, then soften it only for display.
+  const field = document.createElement("canvas");
+  field.width = 720;
+  field.height = 180;
+  const fieldContext = field.getContext("2d");
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context || !fieldContext) return null;
+  fieldContext.imageSmoothingEnabled = true;
+  context.imageSmoothingEnabled = true;
+  for (const sample of data.samples) {
+    const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
+    const x = Math.round((longitude - west) / 360 * field.width);
+    const y = Math.round((90 - sample.latitude) / (90 - south) * field.height);
+    const [red, green, blue, alpha] = auroraColour(sample.probability);
+    fieldContext.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    fieldContext.fillRect(x - 2, y - 3, 5, 7);
+  }
+  context.filter = "blur(7px)";
+  context.globalAlpha = 0.9;
+  context.drawImage(field, 0, 0, field.width, field.height, 0, 0, width, height);
+  context.filter = "none";
+  context.globalAlpha = 0.24;
+  context.drawImage(field, 0, 0, field.width, field.height, 0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
+
+function OvationAuroraLayer({ data, enabled }: { data: RadarAuroraData | null; enabled: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!enabled || !data?.samples.length) return;
+    const image = ovationImage(data);
+    if (!image) return;
+    const paneName = "ba-radar-ovation-aurora";
+    const pane = map.getPane(paneName) ?? map.createPane(paneName);
+    pane.style.zIndex = "350";
+    pane.style.pointerEvents = "none";
+    const overlay = L.imageOverlay(image, [[45, -180], [90, 180]], {
+      opacity: 0.82,
+      interactive: false,
+      pane: paneName,
+      className: "ba-radar-ovation-aurora",
+    }).addTo(map);
+    return () => { overlay.remove(); };
+  }, [data, enabled, map]);
+  return null;
 }
 
 function MapLayers({
   controllers,
   weather,
+  aurora,
   windGrid,
   onWindRendererStatus,
   layers,
@@ -126,6 +161,7 @@ function MapLayers({
 }: {
   controllers: VatsimStation[];
   weather: RadarWeatherData | null;
+  aurora: RadarAuroraData | null;
   windGrid: RadarWindGrid | null;
   onWindRendererStatus: (status: "ready" | "unsupported") => void;
   layers: RadarLayers;
@@ -156,6 +192,7 @@ function MapLayers({
       style={{ color: "#ff9f43", weight: 2, fillColor: "#e45454", fillOpacity: 0.2 }}
     /> : null}
     <OfficialLightningLayer enabled={layers.lightning} />
+    <OvationAuroraLayer data={aurora} enabled={layers.seasonal} />
     <BaRadarWindField windGrid={windGrid} enabled={layers.winds} onStatus={onWindRendererStatus} />
     {layers.vatsim ? controllerMarkers.map((controller) => <Marker key={`${controller.kind}:${controller.callsign}`} position={[controller.latitude, controller.longitude]} icon={controllerIcon(controller, controller.callsign === selectedController)} eventHandlers={{ click: () => onSelectController(controller.callsign) }} />) : null}
   </>;
@@ -167,6 +204,7 @@ export function BaRadarMap({
   onSelect,
   controllers,
   weather,
+  aurora,
   windGrid,
   onWindRendererStatus,
   layers,
@@ -179,6 +217,7 @@ export function BaRadarMap({
   onSelect: (id: string) => void;
   controllers: VatsimStation[];
   weather: RadarWeatherData | null;
+  aurora: RadarAuroraData | null;
   windGrid: RadarWindGrid | null;
   onWindRendererStatus: (status: "ready" | "unsupported") => void;
   layers: RadarLayers;
@@ -211,8 +250,7 @@ export function BaRadarMap({
       maxNativeZoom={19}
       maxZoom={19}
     />
-    <SeasonalAuroraLayer enabled={layers.seasonal} />
-    <MapLayers controllers={controllers} weather={weather} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
+    <MapLayers controllers={controllers} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={onWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={onSelectController} />
     {plannedRoute.length > 1 ? <Polyline positions={plannedRoute} pathOptions={{ color: "#73bdf1", weight: 2.5, opacity: 0.8, dashArray: "7 10", lineCap: "round", lineJoin: "round", className: "ba-radar-planned-route" }} /> : null}
     {track.length > 1 ? <Polyline positions={track} pathOptions={{ color: "#f1c84c", weight: 3.5, opacity: 0.96, lineCap: "round", lineJoin: "round", className: "ba-radar-recorded-track" }} /> : null}
     {selected && trackStart ? <Marker position={[trackStart.latitude, trackStart.longitude]} icon={trackStartIcon(selected, "onGround" in trackStart ? trackStart.onGround : false)} interactive={false} zIndexOffset={500} /> : null}

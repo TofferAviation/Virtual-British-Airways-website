@@ -4,15 +4,20 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AcarsCabinStatus, AcarsConnectivityStatus } from "@/lib/acars-contract";
-import { RADAR_WIND_LAYERS, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
+import { RADAR_WIND_LAYERS, type RadarAuroraData, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
   ssr: false,
   loading: () => <div className="ba-radar-map-loading">Loading interactive map…</div>,
 });
+const BaRadarGlobe = dynamic(() => import("@/components/BaRadarGlobe").then((module) => module.BaRadarGlobe), {
+  ssr: false,
+  loading: () => <div className="ba-radar-map-loading">Loading 3D globe…</div>,
+});
 
 type FlightFilter = "all" | "airborne" | "ground";
+type RadarViewMode = "map" | "globe";
 
 type FlightWeatherReport = {
   icao: string;
@@ -72,7 +77,7 @@ const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string
   { key: "winds", label: "GFS wind flow", detail: "GPU-rendered NOAA GFS wind at the selected altitude" },
   { key: "lightning", label: "Observed lightning", detail: "EUMETSAT Lightning Imager flash coverage where available" },
   { key: "advisories", label: "Aviation hazards", detail: "SIGMET advisories, including turbulence where issued" },
-  { key: "seasonal", label: "Winter aurora", detail: "Animated seasonal atmosphere beneath live routes and map controls" },
+  { key: "seasonal", label: "Aurora forecast", detail: "NOAA SWPC OVATION Prime northern-aurora forecast, refreshed every five minutes" },
 ];
 
 const simulatorLabels: Record<PublicRadarFlight["simulator"], string> = {
@@ -311,6 +316,7 @@ function FlightTrackerDetails({ flight, weatherReports, layers, vatsimOnline, fo
 export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarFlight[] }) {
   const [flights, setFlights] = useState(initialFlights);
   const [filter, setFilter] = useState<FlightFilter>("all");
+  const [viewMode, setViewMode] = useState<RadarViewMode>("map");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
   const [liveCheckedAt, setLiveCheckedAt] = useState<Date | null>(null);
@@ -323,6 +329,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [weather, setWeather] = useState<RadarWeatherData | null>(null);
   const [weatherCheckedAt, setWeatherCheckedAt] = useState<Date | null>(null);
   const [weatherError, setWeatherError] = useState("");
+  const [aurora, setAurora] = useState<RadarAuroraData | null>(null);
   const [windGrid, setWindGrid] = useState<RadarWindGrid | null>(null);
   const [windCheckedAt, setWindCheckedAt] = useState<Date | null>(null);
   const [windError, setWindError] = useState("");
@@ -465,6 +472,25 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     const interval = window.setInterval(refresh, 5 * 60_000);
     return () => { mounted = false; window.clearInterval(interval); };
   }, [needsWeather]);
+
+  useEffect(() => {
+    if (!layers.seasonal) return;
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/radar/aurora", { cache: "no-store" });
+        if (!response.ok) throw new Error("The OVATION forecast is currently unavailable.");
+        const payload = await response.json() as RadarAuroraData;
+        if (mounted) setAurora(payload);
+      } catch {
+        // Keep the last verified NOAA oval onscreen if the upstream forecast
+        // has a short interruption. The map itself remains fully usable.
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 5 * 60_000);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, [layers.seasonal]);
 
   useEffect(() => {
     if (!layers.winds) return;
@@ -624,12 +650,16 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       </aside>
       <div className="ba-radar-map-wrap">
         <div className="ba-radar-map">
-          <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} />
+          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={layers.vatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} />}
+          <div className="ba-radar-view-toggle" role="group" aria-label="Radar view">
+            <button type="button" className={viewMode === "map" ? "active" : ""} onClick={() => setViewMode("map")} aria-pressed={viewMode === "map"}>2D map</button>
+            <button type="button" className={viewMode === "globe" ? "active" : ""} onClick={() => setViewMode("globe")} aria-pressed={viewMode === "globe"}>3D globe</button>
+          </div>
           <div className="ba-radar-layer-controls" role="group" aria-label="BA-Radar map layers">
-            <strong>Map layers</strong>
-            {layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
-            {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
-            {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}
+            <strong>{viewMode === "map" ? "Map layers" : "3D globe"}</strong>
+            {viewMode === "map" ? <>{layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
+              {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
+              {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}</> : <><button type="button" className={layers.seasonal ? "active" : ""} onClick={() => toggleLayer("seasonal")} aria-pressed={layers.seasonal}>NOAA aurora forecast</button><p className="ba-radar-layer-note">Live BAV tracks and VATSIM positions are retained. The aurora footprint follows NOAA SWPC OVATION Prime; detailed weather layers remain available in 2D map mode.</p></>}
           </div>
           <details className="ba-radar-mobile-layer-menu">
             <summary aria-label={`Map layers, ${activeLayerCount} active`}><span>Layers</span><b>{activeLayerCount} active</b><i aria-hidden="true">⌄</i></summary>
