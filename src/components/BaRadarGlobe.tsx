@@ -12,7 +12,7 @@ type GeoJson = {
   type: "FeatureCollection";
   features: Array<{
     type: "Feature";
-    geometry: { type: "Point"; coordinates: [number, number] } | { type: "LineString"; coordinates: Array<[number, number]> } | { type: "Polygon"; coordinates: Array<Array<[number, number]>> };
+    geometry: { type: "Point"; coordinates: [number, number] } | { type: "LineString"; coordinates: Array<[number, number]> };
     properties: Record<string, string | number | boolean>;
   }>;
 };
@@ -81,16 +81,19 @@ function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData
   source?.updateImage({ url: auroraTexture(data, blur, strength), coordinates: auroraCoordinates });
 }
 
-function auroraVolumes(data: RadarAuroraData | null, time: number): GeoJson {
-  if (!data?.samples.length) return emptyCollection;
-  // OVATION's quarter-degree cells are grouped just enough to remain smooth,
-  // while retaining the broken, folded shape of a real auroral curtain.
-  const bucketWidth = 0.75;
+type AuroraCurtain = { longitude: number; latitude: number; probability: number; phase: number };
+
+function auroraCurtains(data: RadarAuroraData | null): AuroraCurtain[] {
+  if (!data?.samples.length) return [];
+  // The forecast is a probability field, not an optical photograph. We keep
+  // its actual position and strength, then use it as the anchor for a smooth
+  // light curtain between five-minute NOAA updates.
+  const bucketWidth = 1.5;
   const buckets = new Map<number, { latitudeTotal: number; weight: number; peak: number }>();
   for (const sample of data.samples) {
     if (sample.latitude > auroraNorth || sample.probability < 6) continue;
     const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
-    const key = Math.max(0, Math.min(479, Math.floor((longitude + 180) / bucketWidth)));
+    const key = Math.max(0, Math.min(239, Math.floor((longitude + 180) / bucketWidth)));
     const current = buckets.get(key) ?? { latitudeTotal: 0, weight: 0, peak: 0 };
     const weight = sample.probability * sample.probability;
     current.latitudeTotal += sample.latitude * weight;
@@ -98,61 +101,85 @@ function auroraVolumes(data: RadarAuroraData | null, time: number): GeoJson {
     current.peak = Math.max(current.peak, sample.probability);
     buckets.set(key, current);
   }
-  return {
-    type: "FeatureCollection",
-    features: [...buckets.entries()].flatMap(([key, bucket]) => {
-      if (!bucket.weight || bucket.peak < 6) return [];
-      const longitude = -180 + key * bucketWidth;
-      const stableRipple = Math.sin(key * 0.733 + bucket.peak * 0.19) * 0.72 + Math.sin(key * 0.173 - bucket.peak * 0.31) * 0.38;
-      const curtainWave = Math.sin(key * 0.49 + time * 0.36) * 0.38 + Math.sin(key * 0.16 - time * 0.22) * 0.24;
-      const breakLine = (Math.sin(key * 13.13 + bucket.peak * 1.71) + 1) / 2;
-      // Weak probability cells break into gaps instead of becoming a perfect
-      // man-made ring. Strong NOAA cells always remain represented.
-      if (bucket.peak < 11 && breakLine < (11 - bucket.peak) / 13) return [];
-      const latitude = bucket.latitudeTotal / bucket.weight + stableRipple + curtainWave;
-      const halfWidth = Math.min(2.8, 0.72 + bucket.peak / 11.5);
-      // The oval position and brightness are NOAA data. The movement only
-      // gives the otherwise static forecast field a gentle curtain motion.
-      const flutter = 0.86 + Math.sin(time * 1.55 + key * 0.72) * 0.14;
-      // Nitrogen sits beneath 100 km; the familiar green oxygen curtain is
-      // around 100–150 km. Pink is a lower energetic mix, while red oxygen
-      // only appears above 200 km during stronger activity.
-      const violetHeight = 99_000 + bucket.peak * 260 * flutter;
-      const greenHeight = 142_000 + bucket.peak * 520 * flutter;
-      const magentaHeight = 112_000 + bucket.peak * 420 * (0.82 + Math.sin(time * 1.18 + key * 0.43) * 0.18);
-      const redHeight = 218_000 + bucket.peak * 1_050 * (0.84 + Math.sin(time * 0.94 + key * 0.51) * 0.16);
-      const greenColour = bucket.peak < 11 ? "#58ce9e" : bucket.peak < 20 ? "#48eab3" : "#a9f681";
-      return [{
-        type: "Feature" as const,
-        geometry: {
-          type: "Polygon" as const,
-          coordinates: [[
-            [longitude, latitude - halfWidth * (0.75 + breakLine * 0.25)],
-            [longitude + bucketWidth * 0.5, latitude - halfWidth * (0.95 + curtainWave * 0.16)],
-            [longitude + bucketWidth, latitude - halfWidth * (0.72 + (1 - breakLine) * 0.27)],
-            [longitude + bucketWidth, latitude + halfWidth * (0.7 + breakLine * 0.3)],
-            [longitude + bucketWidth * 0.5, latitude + halfWidth * (0.96 - curtainWave * 0.16)],
-            [longitude, latitude + halfWidth * (0.74 + (1 - breakLine) * 0.26)],
-            [longitude, latitude - halfWidth * (0.75 + breakLine * 0.25)],
-          ]],
-        },
-        properties: {
-          peak: bucket.peak,
-          violetBase: 78_000,
-          violetHeight,
-          greenBase: 99_000,
-          greenHeight,
-          magentaBase: 91_000,
-          magentaHeight,
-          redBase: 195_000,
-          redHeight,
-          greenColour,
-          magentaColour: "#d94da3",
-          redColour: "#ef5b68",
-        },
-      }];
-    }),
-  };
+  return [...buckets.entries()].flatMap(([key, bucket]) => {
+    if (!bucket.weight || bucket.peak < 6) return [];
+    const latitude = bucket.latitudeTotal / bucket.weight;
+    const seam = (Math.sin(key * 11.17 + bucket.peak * 0.91) + 1) / 2;
+    // Weak cells form naturally spaced curtains instead of a manufactured
+    // complete ring. Stronger regions remain continuous and brighter.
+    if (bucket.peak < 12 && seam < (12 - bucket.peak) / 14) return [];
+    return [{
+      longitude: -180 + (key + 0.5) * bucketWidth,
+      latitude,
+      probability: bucket.peak,
+      phase: key * 0.621 + latitude * 0.143,
+    }];
+  });
+}
+
+function drawAuroraCurtains(canvas: HTMLCanvasElement, map: MapLibreMap, curtains: AuroraCurtain[], enabled: boolean, time: number) {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  if (!width || !height) return;
+  if (canvas.width !== Math.round(width * pixelRatio) || canvas.height !== Math.round(height * pixelRatio)) {
+    canvas.width = Math.round(width * pixelRatio);
+    canvas.height = Math.round(height * pixelRatio);
+  }
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  if (!enabled || !curtains.length) return;
+
+  const camera = map.project(map.getCenter());
+  const seconds = time / 1000;
+  context.save();
+  context.globalCompositeOperation = "lighter";
+  for (const curtain of curtains) {
+    const base = map.project([curtain.longitude, curtain.latitude]);
+    if (!Number.isFinite(base.x) || !Number.isFinite(base.y) || base.x < -180 || base.x > width + 180 || base.y < -180 || base.y > height + 180) continue;
+    const fromCentreX = base.x - camera.x;
+    const fromCentreY = base.y - camera.y;
+    const distance = Math.hypot(fromCentreX, fromCentreY);
+    const outwardX = distance > 18 ? fromCentreX / distance : 0;
+    const outwardY = distance > 18 ? fromCentreY / distance : -1;
+    const sideX = -outwardY;
+    const sideY = outwardX;
+    const intensity = Math.max(0.08, Math.min(1, (curtain.probability - 5) / 45));
+    const undulation = Math.sin(seconds * 0.74 + curtain.phase) * 0.5 + Math.sin(seconds * 1.31 + curtain.phase * 1.73) * 0.25;
+    const viewScale = Math.max(0.85, Math.min(1.62, Math.pow(2, map.getZoom()) * 0.92));
+    const curtainLength = (20 + curtain.probability * 1.82 + undulation * 10) * viewScale;
+    const tipX = base.x + outwardX * curtainLength + sideX * undulation * 6;
+    const tipY = base.y + outwardY * curtainLength + sideY * undulation * 6;
+    const controlX = (base.x + tipX) / 2 + sideX * (7 + Math.sin(seconds * 1.12 + curtain.phase) * 6);
+    const controlY = (base.y + tipY) / 2 + sideY * (7 + Math.sin(seconds * 1.12 + curtain.phase) * 6);
+    const widthVariation = 1 + (Math.sin(seconds * 1.72 + curtain.phase * 1.91) + 1) * 0.5;
+
+    const drawRibbon = (lineWidth: number, blur: number, alpha: number, colours: Array<[number, string]>) => {
+      const gradient = context.createLinearGradient(base.x, base.y, tipX, tipY);
+      for (const [stop, colour] of colours) gradient.addColorStop(stop, colour);
+      context.beginPath();
+      context.moveTo(base.x, base.y);
+      context.quadraticCurveTo(controlX, controlY, tipX, tipY);
+      context.strokeStyle = gradient;
+      context.lineWidth = lineWidth;
+      context.lineCap = "round";
+      context.globalAlpha = alpha;
+      context.filter = `blur(${blur}px)`;
+      context.stroke();
+    };
+
+    // Broad atmospheric bloom, then a narrower moving oxygen curtain. A
+    // red upper fringe only becomes visible as the forecast strengthens;
+    // this avoids inventing storm colours during quiet geomagnetic periods.
+    drawRibbon(8 * widthVariation * viewScale, 8, intensity * 0.13, [[0, "rgba(37,125,255,0)"], [0.2, "rgba(78,143,255,.12)"], [0.46, "rgba(89,242,155,.48)"], [0.76, curtain.probability > 40 ? "rgba(232,75,149,.26)" : "rgba(74,153,255,.08)"], [1, "rgba(219,82,164,0)"]]);
+    drawRibbon(2.35 * widthVariation * viewScale, 2.25, intensity * 0.55, [[0, "rgba(139,255,214,0)"], [0.16, "rgba(82,227,178,.6)"], [0.5, "rgba(108,255,145,.9)"], [0.79, curtain.probability > 40 ? "rgba(241,83,178,.62)" : "rgba(94,172,255,.2)"], [1, "rgba(155,99,255,0)"]]);
+    if (curtain.probability >= 24) {
+      drawRibbon(1.25, 0.8, intensity * 0.84, [[0, "rgba(237,255,209,0)"], [0.3, "rgba(210,255,173,.96)"], [0.65, "rgba(126,255,172,.78)"], [1, "rgba(103,134,255,0)"]]);
+    }
+  }
+  context.restore();
 }
 
 function globeData(flights: PublicRadarFlight[], selectedId: string, replay: GlobeReplay) {
@@ -225,14 +252,16 @@ export function BaRadarGlobe({
   onCameraChange: (camera: GlobeCamera) => void;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
+  const auroraCanvas = useRef<HTMLCanvasElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
   const onCameraChangeRef = useRef(onCameraChange);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
-  const dataRef = useRef({ ...data, controllers: controllersGeoJson, auroraEnabled, aurora });
-  dataRef.current = { ...data, controllers: controllersGeoJson, auroraEnabled, aurora };
+  const curtainData = useMemo(() => auroraCurtains(aurora), [aurora]);
+  const dataRef = useRef({ ...data, controllers: controllersGeoJson, auroraEnabled, aurora, curtains: curtainData });
+  dataRef.current = { ...data, controllers: controllersGeoJson, auroraEnabled, aurora, curtains: curtainData };
   onSelectRef.current = onSelect;
   onSelectControllerRef.current = onSelectController;
   onCameraChangeRef.current = onCameraChange;
@@ -252,14 +281,10 @@ export function BaRadarGlobe({
       setGeoJson(map, "ba-radar-globe-aircraft", current.aircraft);
       setGeoJson(map, "ba-radar-globe-routes", current.routes);
       setGeoJson(map, "ba-radar-globe-controllers", current.controllers);
-      setGeoJson(map, "ba-radar-globe-aurora-volume", auroraVolumes(current.aurora, performance.now() / 1000));
       updateAuroraSurface(map, "ba-radar-globe-aurora-glow", current.aurora, 18, 0.92);
       updateAuroraSurface(map, "ba-radar-globe-aurora-core", current.aurora, 5, 1);
       map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", current.auroraEnabled ? "visible" : "none");
       map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", current.auroraEnabled ? "visible" : "none");
-      for (const id of ["ba-radar-globe-aurora-violet", "ba-radar-globe-aurora-green", "ba-radar-globe-aurora-magenta", "ba-radar-globe-aurora-red"]) {
-        map.setLayoutProperty(id, "visibility", current.auroraEnabled ? "visible" : "none");
-      }
     };
     const start = async () => {
       if (!container.current) return;
@@ -272,9 +297,11 @@ export function BaRadarGlobe({
           sources: {
             "ba-radar-osm": {
               type: "raster",
-              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              // NASA's Blue Marble provides a real Earth surface instead of a
+              // flat road map when the pilot is orbiting the globe.
+              tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/std/BlueMarble_NextGeneration/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg"],
               tileSize: 256,
-              attribution: "© OpenStreetMap contributors",
+              attribution: "NASA GIBS · Blue Marble",
             },
           },
           layers: [{
@@ -282,16 +309,16 @@ export function BaRadarGlobe({
             type: "raster",
             source: "ba-radar-osm",
             paint: {
-              "raster-brightness-min": 0.04,
-              "raster-brightness-max": 0.48,
-              "raster-saturation": -0.68,
-              "raster-contrast": 0.2,
+              "raster-brightness-min": 0.12,
+              "raster-brightness-max": 0.72,
+              "raster-saturation": -0.18,
+              "raster-contrast": 0.18,
             },
           }],
         },
         // Looking at the equator keeps the physical globe itself centred;
         // the northern oval then rises naturally over the horizon.
-        center: initialCamera?.center ?? [-18, 0],
+        center: initialCamera?.center ?? [-18, 18],
         zoom: initialCamera?.zoom ?? 0.1,
         minZoom: -1.3,
         bearing: initialCamera?.bearing ?? 0,
@@ -307,35 +334,34 @@ export function BaRadarGlobe({
         map.addSource("ba-radar-globe-controllers", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-aurora-glow", { type: "image", url: auroraTexture(dataRef.current.aurora, 18, 0.92), coordinates: auroraCoordinates });
         map.addSource("ba-radar-globe-aurora-core", { type: "image", url: auroraTexture(dataRef.current.aurora, 5, 1), coordinates: auroraCoordinates });
-        map.addSource("ba-radar-globe-aurora-volume", { type: "geojson", data: emptyCollection as never });
         map.addLayer({ id: "ba-radar-globe-aurora-glow-layer", type: "raster", source: "ba-radar-globe-aurora-glow", paint: { "raster-opacity": 0.64, "raster-fade-duration": 0 } });
         map.addLayer({ id: "ba-radar-globe-aurora-core-layer", type: "raster", source: "ba-radar-globe-aurora-core", paint: { "raster-opacity": 0.94, "raster-fade-duration": 0 } });
-        map.addLayer({ id: "ba-radar-globe-aurora-violet", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", paint: { "fill-extrusion-color": "#7a5af8", "fill-extrusion-base": ["get", "violetBase"], "fill-extrusion-height": ["get", "violetHeight"], "fill-extrusion-opacity": 0.42 } });
-        map.addLayer({ id: "ba-radar-globe-aurora-green", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", paint: { "fill-extrusion-color": ["get", "greenColour"], "fill-extrusion-base": ["get", "greenBase"], "fill-extrusion-height": ["get", "greenHeight"], "fill-extrusion-opacity": 0.58 } });
-        map.addLayer({ id: "ba-radar-globe-aurora-magenta", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", filter: [">=", ["get", "peak"], 22], paint: { "fill-extrusion-color": ["get", "magentaColour"], "fill-extrusion-base": ["get", "magentaBase"], "fill-extrusion-height": ["get", "magentaHeight"], "fill-extrusion-opacity": 0.34 } });
-        map.addLayer({ id: "ba-radar-globe-aurora-red", type: "fill-extrusion", source: "ba-radar-globe-aurora-volume", filter: [">=", ["get", "peak"], 50], paint: { "fill-extrusion-color": ["get", "redColour"], "fill-extrusion-base": ["get", "redBase"], "fill-extrusion-height": ["get", "redHeight"], "fill-extrusion-opacity": 0.28 } });
         map.addLayer({ id: "ba-radar-globe-planned", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "planned"], paint: { "line-color": "#73bdf1", "line-width": 2.2, "line-opacity": 0.85, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "ba-radar-globe-recorded", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "recorded"], paint: { "line-color": "#f1c84c", "line-width": 3.5, "line-opacity": 0.96, "line-blur": 0.35 } });
         map.addLayer({ id: "ba-radar-globe-replay", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "replay"], paint: { "line-color": "#d91e45", "line-width": 3.5, "line-opacity": 0.92 } });
         map.addLayer({ id: "ba-radar-globe-controllers", type: "circle", source: "ba-radar-globe-controllers", paint: { "circle-radius": 3.2, "circle-color": "#79dafa", "circle-stroke-color": "#f0fbff", "circle-stroke-width": 0.7, "circle-opacity": 0.82 } });
         map.addLayer({ id: "ba-radar-globe-aircraft-glow", type: "circle", source: "ba-radar-globe-aircraft", paint: { "circle-radius": ["case", ["get", "selected"], 12, 9], "circle-color": "#f4c430", "circle-opacity": 0.18, "circle-blur": 0.55 } });
         map.addLayer({ id: "ba-radar-globe-aircraft", type: "circle", source: "ba-radar-globe-aircraft", paint: { "circle-radius": ["case", ["get", "selected"], 6.5, 4.5], "circle-color": ["case", ["get", "selected"], "#ffffff", "#f4c430"], "circle-stroke-color": "#0a2c45", "circle-stroke-width": 1.2 } });
+        const rememberCamera = () => {
+          const centre = map.getCenter();
+          onCameraChangeRef.current({ center: [centre.lng, centre.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
+        };
         map.on("click", "ba-radar-globe-aircraft", (event) => {
+          // Store the current orbit before selection updates the surrounding
+          // dashboard. The selection must never decide the pilot's view.
+          rememberCamera();
           const id = event.features?.[0]?.properties?.id;
           if (typeof id === "string") onSelectRef.current(id);
         });
         map.on("mouseenter", "ba-radar-globe-aircraft", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "ba-radar-globe-aircraft", () => { map.getCanvas().style.cursor = ""; });
         map.on("click", "ba-radar-globe-controllers", (event) => {
+          rememberCamera();
           const callsign = event.features?.[0]?.properties?.callsign;
           if (typeof callsign === "string") onSelectControllerRef.current(callsign);
         });
         map.on("mouseenter", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = ""; });
-        const rememberCamera = () => {
-          const centre = map.getCenter();
-          onCameraChangeRef.current({ center: [centre.lng, centre.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
-        };
         map.on("moveend", rememberCamera);
         sync(map);
         const fitGlobe = (initial = false) => {
@@ -347,8 +373,12 @@ export function BaRadarGlobe({
             // A MapLibre globe scales with the narrow dimension. Establish a
             // safe initial frame on ultrawide screens, then never overwrite a
             // pilot's orbit or zoom when the selected-flight panel changes.
-            const zoom = Math.max(-1.3, Math.min(0.62, 0.82 - Math.max(0, Math.log2(ratio)) * 0.92));
-            map.jumpTo({ center: [-18, 0], zoom, bearing: 0, pitch: 0 });
+            const zoom = Math.max(-0.35, Math.min(0.82, 1.16 - Math.max(0, Math.log2(ratio)) * 0.75));
+            map.jumpTo({ center: [-18, 18], zoom, bearing: 0, pitch: 0 });
+            // Capture the resolved camera synchronously. That makes a
+            // selection immediately after first paint just as stable as one
+            // made later in the session.
+            rememberCamera();
           }
         };
         window.requestAnimationFrame(() => {
@@ -359,18 +389,14 @@ export function BaRadarGlobe({
           });
           resizeObserver.observe(map.getContainer());
         });
-        let lastVolumeUpdate = 0;
         const animateAurora = (time: number) => {
           if (disposed || !map.getSource("ba-radar-globe-aurora-core")) return;
           if (dataRef.current.auroraEnabled) {
             const shimmer = Math.sin(time / 2600) * 0.05;
             map.setPaintProperty("ba-radar-globe-aurora-glow-layer", "raster-opacity", 0.64 + shimmer);
             map.setPaintProperty("ba-radar-globe-aurora-core-layer", "raster-opacity", 0.9 + shimmer * 0.5);
-            if (time - lastVolumeUpdate > 80) {
-              setGeoJson(map, "ba-radar-globe-aurora-volume", auroraVolumes(dataRef.current.aurora, time / 1000));
-              lastVolumeUpdate = time;
-            }
           }
+          if (auroraCanvas.current) drawAuroraCurtains(auroraCanvas.current, map, dataRef.current.curtains, dataRef.current.auroraEnabled, time);
           animation = window.requestAnimationFrame(animateAurora);
         };
         animation = window.requestAnimationFrame(animateAurora);
@@ -399,18 +425,15 @@ export function BaRadarGlobe({
       source?.setData(data.aircraft as never);
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
-      (map.getSource("ba-radar-globe-aurora-volume") as GeoJSONSource | undefined)?.setData(auroraVolumes(aurora, performance.now() / 1000) as never);
       updateAuroraSurface(map, "ba-radar-globe-aurora-glow", aurora, 18, 0.92);
       updateAuroraSurface(map, "ba-radar-globe-aurora-core", aurora, 5, 1);
       map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", auroraEnabled ? "visible" : "none");
       map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", auroraEnabled ? "visible" : "none");
-      for (const id of ["ba-radar-globe-aurora-violet", "ba-radar-globe-aurora-green", "ba-radar-globe-aurora-magenta", "ba-radar-globe-aurora-red"]) {
-        map.setLayoutProperty(id, "visibility", auroraEnabled ? "visible" : "none");
-      }
     }
   }, [data, controllersGeoJson, auroraEnabled, aurora]);
 
   return <div className="ba-radar-globe-map" ref={container} aria-label="BA-Radar interactive 3D globe">
+    <canvas ref={auroraCanvas} className="ba-radar-globe-aurora-curtains" aria-hidden="true" />
     <div className="ba-radar-globe-caption"><strong>3D Globe</strong><span>Live BAV tracks · drag to orbit · scroll to zoom</span></div>
   </div>;
 }
