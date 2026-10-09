@@ -63,6 +63,7 @@ export type RadarLayers = {
   winds: boolean;
   lightning: boolean;
   advisories: boolean;
+  seasonal: boolean;
 };
 
 const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string }> = [
@@ -71,6 +72,7 @@ const layerLabels: Array<{ key: keyof RadarLayers; label: string; detail: string
   { key: "winds", label: "GFS wind flow", detail: "GPU-rendered NOAA GFS wind at the selected altitude" },
   { key: "lightning", label: "Observed lightning", detail: "EUMETSAT Lightning Imager flash coverage where available" },
   { key: "advisories", label: "Aviation hazards", detail: "SIGMET advisories, including turbulence where issued" },
+  { key: "seasonal", label: "Winter aurora", detail: "Animated seasonal atmosphere beneath live routes and map controls" },
 ];
 
 const simulatorLabels: Record<PublicRadarFlight["simulator"], string> = {
@@ -313,7 +315,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
   const [liveCheckedAt, setLiveCheckedAt] = useState<Date | null>(null);
   const [liveError, setLiveError] = useState("");
-  const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, lightning: false, advisories: false });
+  const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, lightning: false, advisories: false, seasonal: true });
   const [windLayer, setWindLayer] = useState<RadarWindLayerId>("surface");
   const [vatsim, setVatsim] = useState<VatsimRadarData | null>(null);
   const [vatsimCheckedAt, setVatsimCheckedAt] = useState<Date | null>(null);

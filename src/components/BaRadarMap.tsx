@@ -173,7 +173,7 @@ export function BaRadarMap({
     ? replay.points[Math.max(0, Math.min(replay.activeIndex, replay.points.length - 1))]
     : null;
 
-  return <MapContainer className="ba-radar-leaflet-map" center={[27, -13]} zoom={2} minZoom={2} maxZoom={19} worldCopyJump scrollWheelZoom>
+  return <MapContainer className={`ba-radar-leaflet-map${layers.seasonal ? " ba-radar-winter-map" : ""}`} center={[27, -13]} zoom={2} minZoom={2} maxZoom={19} worldCopyJump scrollWheelZoom>
     <TileLayer
       className="ba-radar-base-tiles"
       url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"

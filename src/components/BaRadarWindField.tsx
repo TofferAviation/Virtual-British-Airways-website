@@ -298,7 +298,6 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
     let previousTime = performance.now();
     let lastRenderedAt = previousTime;
     let resumeTimer: number | null = null;
-    let moving = false;
     let disposed = false;
     let windTexture: WebGLTexture | null = null;
     let updateProgram: Program | null = null;
@@ -330,7 +329,7 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
         }
       };
 
-      const configureView = () => {
+      const configureView = (resetForNewView = true) => {
         if (!windTexture) return;
         const field = buildScreenField(map, grid);
         // A high-DPI canvas makes the whole map compositing surface much more
@@ -342,7 +341,7 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
         canvas.style.height = `${field.height}px`;
         gl.bindTexture(gl.TEXTURE_2D, windTexture);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, FIELD_COLUMNS, FIELD_ROWS, gl.RGBA, gl.FLOAT, field.values);
-        resetParticles();
+        if (resetForNewView) resetParticles();
       };
 
       const bindSharedUniforms = (program: Program, stateTexture: WebGLTexture, delta = 0) => {
@@ -362,7 +361,7 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
       };
 
       const animate = (timestamp: number) => {
-        if (disposed || moving || document.hidden || !stateA || !stateB || !updateProgram || !drawProgram) return;
+        if (disposed || document.hidden || !stateA || !stateB || !updateProgram || !drawProgram) return;
         frame = requestAnimationFrame(animate);
         if (timestamp - lastRenderedAt < frameInterval) return;
         const delta = Math.max(0.001, Math.min(0.05, (timestamp - previousTime) / 1_000));
@@ -384,8 +383,9 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
         [stateA, stateB] = [stateB, stateA];
       };
 
+      let viewRefreshTimer: number | null = null;
+      let lastViewRefreshAt = previousTime;
       const pause = () => {
-        moving = true;
         cancelAnimationFrame(frame);
         if (resumeTimer !== null) {
           window.clearTimeout(resumeTimer);
@@ -394,18 +394,33 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
       };
       const resume = () => {
         cancelAnimationFrame(frame);
-        moving = false;
         if (resumeTimer !== null) window.clearTimeout(resumeTimer);
         // Leaflet emits both move and zoom completion events for a single user
         // action. Wait briefly so that we rebuild the display field only once.
         resumeTimer = window.setTimeout(() => {
           resumeTimer = null;
-          if (disposed || moving) return;
+          if (disposed || document.hidden) return;
           configureView();
           previousTime = performance.now();
           lastRenderedAt = previousTime - frameInterval;
           frame = requestAnimationFrame(animate);
         }, 80);
+      };
+      const refreshViewDuringMove = () => {
+        if (disposed || document.hidden) return;
+        const elapsed = performance.now() - lastViewRefreshAt;
+        if (elapsed < 90) {
+          if (viewRefreshTimer === null) viewRefreshTimer = window.setTimeout(() => {
+            viewRefreshTimer = null;
+            refreshViewDuringMove();
+          }, 90 - elapsed);
+          return;
+        }
+        lastViewRefreshAt = performance.now();
+        // Reproject the field while the map moves but keep particle state so
+        // the flow remains visibly alive under the pilot's cursor.
+        configureView(false);
+        previousTime = lastViewRefreshAt;
       };
       const visibilityChange = () => {
         if (document.hidden) pause(); else resume();
@@ -413,7 +428,7 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
 
       configureView();
       onStatus("ready");
-      map.on("movestart zoomstart", pause);
+      map.on("move zoom", refreshViewDuringMove);
       map.on("moveend zoomend resize", resume);
       document.addEventListener("visibilitychange", visibilityChange);
       frame = requestAnimationFrame(animate);
@@ -422,7 +437,8 @@ export function BaRadarWindField({ windGrid, enabled, onStatus }: { windGrid: Ra
         disposed = true;
         cancelAnimationFrame(frame);
         if (resumeTimer !== null) window.clearTimeout(resumeTimer);
-        map.off("movestart zoomstart", pause);
+        if (viewRefreshTimer !== null) window.clearTimeout(viewRefreshTimer);
+        map.off("move zoom", refreshViewDuringMove);
         map.off("moveend zoomend resize", resume);
         document.removeEventListener("visibilitychange", visibilityChange);
         if (windTexture) gl.deleteTexture(windTexture);
