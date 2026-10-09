@@ -22,15 +22,62 @@ function validPoint(latitude: number, longitude: number) {
   return Number.isFinite(latitude) && Number.isFinite(longitude);
 }
 
-function auroraData(data: RadarAuroraData | null): GeoJson {
-  return {
-    type: "FeatureCollection",
-    features: (data?.samples ?? []).map((sample) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: [sample.longitude > 180 ? sample.longitude - 360 : sample.longitude, sample.latitude] as [number, number] },
-      properties: { probability: sample.probability },
-    })),
-  };
+const auroraNorth = 84.8;
+const auroraCoordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+  [-179.9, auroraNorth], [179.9, auroraNorth], [179.9, 45], [-179.9, 45],
+];
+const transparentImage = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
+type GlobeImageSource = {
+  updateImage: (input: { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] }) => void;
+};
+
+function auroraColour(probability: number) {
+  if (probability < 10) return [48, 151, 212, 0.09] as const;
+  if (probability < 15) return [56, 208, 184, 0.18] as const;
+  if (probability < 30) return [83, 239, 145, 0.35] as const;
+  if (probability < 50) return [132, 246, 117, 0.48] as const;
+  if (probability < 70) return [180, 249, 108, 0.62] as const;
+  return [209, 126, 255, 0.74] as const;
+}
+
+function auroraTexture(data: RadarAuroraData | null, blur: number, strength: number) {
+  if (!data?.samples.length || typeof document === "undefined") return transparentImage;
+  const west = -180;
+  const south = 45;
+  const field = document.createElement("canvas");
+  field.width = 720;
+  field.height = 180;
+  const fieldContext = field.getContext("2d");
+  const canvas = document.createElement("canvas");
+  canvas.width = 1440;
+  canvas.height = 360;
+  const context = canvas.getContext("2d");
+  if (!fieldContext || !context) return transparentImage;
+
+  for (const sample of data.samples) {
+    // Image sources cannot touch Web Mercator's ±180° / 90° bounds.  The
+    // actual auroral oval is well below 85° for the operational forecast.
+    if (sample.latitude > auroraNorth) continue;
+    const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
+    const x = Math.round((longitude - west) / 360 * field.width);
+    const y = Math.round((auroraNorth - sample.latitude) / (auroraNorth - south) * field.height);
+    const [red, green, blue, alpha] = auroraColour(sample.probability);
+    fieldContext.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    fieldContext.fillRect(x - 2, y - 3, 5, 7);
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.globalCompositeOperation = "lighter";
+  context.filter = `blur(${blur}px)`;
+  context.globalAlpha = strength;
+  context.drawImage(field, 0, 0, field.width, field.height, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
+}
+
+function updateAuroraSurface(map: MapLibreMap, id: string, data: RadarAuroraData | null, blur: number, strength: number) {
+  const source = map.getSource(id) as unknown as GlobeImageSource | undefined;
+  source?.updateImage({ url: auroraTexture(data, blur, strength), coordinates: auroraCoordinates });
 }
 
 function globeData(flights: PublicRadarFlight[], selectedId: string, replay: GlobeReplay) {
@@ -122,9 +169,10 @@ export function BaRadarGlobe({
       setGeoJson(map, "ba-radar-globe-aircraft", current.aircraft);
       setGeoJson(map, "ba-radar-globe-routes", current.routes);
       setGeoJson(map, "ba-radar-globe-controllers", current.controllers);
-      setGeoJson(map, "ba-radar-globe-aurora", auroraData(current.aurora));
-      map.setLayoutProperty("ba-radar-globe-aurora-glow", "visibility", current.auroraEnabled ? "visible" : "none");
-      map.setLayoutProperty("ba-radar-globe-aurora-core", "visibility", current.auroraEnabled ? "visible" : "none");
+      updateAuroraSurface(map, "ba-radar-globe-aurora-glow", current.aurora, 18, 0.92);
+      updateAuroraSurface(map, "ba-radar-globe-aurora-core", current.aurora, 5, 1);
+      map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", current.auroraEnabled ? "visible" : "none");
+      map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", current.auroraEnabled ? "visible" : "none");
     };
     const start = async () => {
       if (!container.current) return;
@@ -142,47 +190,58 @@ export function BaRadarGlobe({
               attribution: "© OpenStreetMap contributors",
             },
           },
-          layers: [{ id: "ba-radar-osm", type: "raster", source: "ba-radar-osm" }],
+          layers: [{
+            id: "ba-radar-osm",
+            type: "raster",
+            source: "ba-radar-osm",
+            paint: {
+              "raster-brightness-min": 0.04,
+              "raster-brightness-max": 0.48,
+              "raster-saturation": -0.68,
+              "raster-contrast": 0.2,
+            },
+          }],
         },
-        center: [-13, 42],
-        zoom: 1.45,
-        bearing: -12,
-        pitch: 24,
+        center: [-18, 28],
+        zoom: 0.72,
+        bearing: 0,
+        pitch: 0,
       });
       mapRef.current = map;
       map.on("load", () => {
         map.setProjection({ type: "globe" });
         const fogMap = map as unknown as { setFog?: (options: Record<string, unknown>) => void };
-        fogMap.setFog?.({ range: [0.55, 10], color: "#071d2e", "high-color": "#1e6f94", "space-color": "#02060d", "horizon-blend": 0.12, "star-intensity": 0.38 });
+        fogMap.setFog?.({ range: [0.55, 10], color: "#071d2e", "high-color": "#246b88", "space-color": "#02060d", "horizon-blend": 0.16, "star-intensity": 0.5 });
         map.addSource("ba-radar-globe-aircraft", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-routes", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-controllers", { type: "geojson", data: emptyCollection as never });
-        map.addSource("ba-radar-globe-aurora", { type: "geojson", data: emptyCollection as never });
-        map.addLayer({ id: "ba-radar-globe-aurora-glow", type: "circle", source: "ba-radar-globe-aurora", paint: { "circle-radius": ["interpolate", ["linear"], ["get", "probability"], 5, 2, 30, 5, 60, 8, 100, 11], "circle-color": ["interpolate", ["linear"], ["get", "probability"], 5, "#45b9ff", 30, "#5fe5bb", 60, "#a1f47a", 100, "#d5a0ff"], "circle-opacity": 0.18, "circle-blur": 0.8 } });
-        map.addLayer({ id: "ba-radar-globe-aurora-core", type: "circle", source: "ba-radar-globe-aurora", paint: { "circle-radius": ["interpolate", ["linear"], ["get", "probability"], 5, 0.8, 30, 1.3, 60, 2.1, 100, 2.7], "circle-color": ["interpolate", ["linear"], ["get", "probability"], 5, "#80dfff", 30, "#77f6c1", 60, "#c3fa82", 100, "#efbdff"], "circle-opacity": 0.66, "circle-blur": 0.32 } });
+        map.addSource("ba-radar-globe-aurora-glow", { type: "image", url: auroraTexture(dataRef.current.aurora, 18, 0.92), coordinates: auroraCoordinates });
+        map.addSource("ba-radar-globe-aurora-core", { type: "image", url: auroraTexture(dataRef.current.aurora, 5, 1), coordinates: auroraCoordinates });
+        map.addLayer({ id: "ba-radar-globe-aurora-glow-layer", type: "raster", source: "ba-radar-globe-aurora-glow", paint: { "raster-opacity": 0.64, "raster-fade-duration": 0 } });
+        map.addLayer({ id: "ba-radar-globe-aurora-core-layer", type: "raster", source: "ba-radar-globe-aurora-core", paint: { "raster-opacity": 0.94, "raster-fade-duration": 0 } });
         map.addLayer({ id: "ba-radar-globe-planned", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "planned"], paint: { "line-color": "#73bdf1", "line-width": 2.2, "line-opacity": 0.85, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "ba-radar-globe-recorded", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "recorded"], paint: { "line-color": "#f1c84c", "line-width": 3.5, "line-opacity": 0.96, "line-blur": 0.35 } });
         map.addLayer({ id: "ba-radar-globe-replay", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "replay"], paint: { "line-color": "#d91e45", "line-width": 3.5, "line-opacity": 0.92 } });
-        map.addLayer({ id: "ba-radar-globe-controllers", type: "circle", source: "ba-radar-globe-controllers", paint: { "circle-radius": 4, "circle-color": ["case", ["==", ["get", "kind"], "atis"], "#b59bff", "#67d7fc"], "circle-stroke-color": "#dff7ff", "circle-stroke-width": 1.2, "circle-opacity": 0.9 } });
         map.addLayer({ id: "ba-radar-globe-aircraft-glow", type: "circle", source: "ba-radar-globe-aircraft", paint: { "circle-radius": ["case", ["get", "selected"], 12, 9], "circle-color": "#f4c430", "circle-opacity": 0.18, "circle-blur": 0.55 } });
         map.addLayer({ id: "ba-radar-globe-aircraft", type: "circle", source: "ba-radar-globe-aircraft", paint: { "circle-radius": ["case", ["get", "selected"], 6.5, 4.5], "circle-color": ["case", ["get", "selected"], "#ffffff", "#f4c430"], "circle-stroke-color": "#0a2c45", "circle-stroke-width": 1.2 } });
         map.on("click", "ba-radar-globe-aircraft", (event) => {
           const id = event.features?.[0]?.properties?.id;
           if (typeof id === "string") onSelectRef.current(id);
         });
-        map.on("click", "ba-radar-globe-controllers", (event) => {
-          const callsign = event.features?.[0]?.properties?.callsign;
-          if (typeof callsign === "string") onSelectControllerRef.current(callsign);
-        });
         map.on("mouseenter", "ba-radar-globe-aircraft", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "ba-radar-globe-aircraft", () => { map.getCanvas().style.cursor = ""; });
         sync(map);
+        window.requestAnimationFrame(() => {
+          map.resize();
+          map.jumpTo({ center: [-18, 28], zoom: 0.72, bearing: 0, pitch: 0 });
+          window.requestAnimationFrame(() => map.resize());
+        });
         const animateAurora = (time: number) => {
-          if (disposed || !map.getSource("ba-radar-globe-aurora")) return;
+          if (disposed || !map.getSource("ba-radar-globe-aurora-core")) return;
           if (dataRef.current.auroraEnabled) {
-            const shimmer = Math.sin(time / 1850) * 0.045;
-            map.setPaintProperty("ba-radar-globe-aurora-glow", "circle-opacity", 0.18 + shimmer);
-            map.setPaintProperty("ba-radar-globe-aurora-core", "circle-opacity", 0.66 + shimmer);
+            const shimmer = Math.sin(time / 2600) * 0.05;
+            map.setPaintProperty("ba-radar-globe-aurora-glow-layer", "raster-opacity", 0.64 + shimmer);
+            map.setPaintProperty("ba-radar-globe-aurora-core-layer", "raster-opacity", 0.9 + shimmer * 0.5);
           }
           animation = window.requestAnimationFrame(animateAurora);
         };
@@ -205,9 +264,10 @@ export function BaRadarGlobe({
       source?.setData(data.aircraft as never);
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
-      (map.getSource("ba-radar-globe-aurora") as GeoJSONSource | undefined)?.setData(auroraData(aurora) as never);
-      map.setLayoutProperty("ba-radar-globe-aurora-glow", "visibility", auroraEnabled ? "visible" : "none");
-      map.setLayoutProperty("ba-radar-globe-aurora-core", "visibility", auroraEnabled ? "visible" : "none");
+      updateAuroraSurface(map, "ba-radar-globe-aurora-glow", aurora, 18, 0.92);
+      updateAuroraSurface(map, "ba-radar-globe-aurora-core", aurora, 5, 1);
+      map.setLayoutProperty("ba-radar-globe-aurora-glow-layer", "visibility", auroraEnabled ? "visible" : "none");
+      map.setLayoutProperty("ba-radar-globe-aurora-core-layer", "visibility", auroraEnabled ? "visible" : "none");
     }
   }, [data, controllersGeoJson, auroraEnabled, aurora]);
 
