@@ -273,7 +273,8 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
     gl.vertexAttribPointer(bundle.position, 3, gl.FLOAT, false, 20, 0);
     gl.enableVertexAttribArray(bundle.field);
     gl.vertexAttribPointer(bundle.field, 2, gl.FLOAT, false, 20, 12);
-    gl.disable(gl.DEPTH_TEST);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
@@ -313,32 +314,39 @@ uniform float u_time;
 out float v_strength;
 out float v_height;
 out float v_fold;
+out float v_phase;
 void main() {
   float heightRatio = clamp((a_position.z - ${curtainFloorMetres.toFixed(1)}) / ${(curtainCeilingMetres - curtainFloorMetres).toFixed(1)}, 0.0, 1.0);
-  float broadWave = sin(a_field.y * 2.05 + u_time * 0.11) * 0.62 + sin(a_field.y * 5.2 - u_time * 0.07) * 0.22;
-  float travellingFold = sin(a_field.y * 1.45 + heightRatio * 3.5 - u_time * 0.15);
-  float extraHeight = broadWave * (7600.0 + a_field.x * 17600.0) * mix(0.48, 1.0, smoothstep(0.05, 0.94, heightRatio));
-  // This projection performs the globe's own horizon clipping. It keeps
-  // the back-side curtain out of view without forcing a depth mode that
-  // can disrupt MapLibre's raster globe on some GPUs.
-  gl_Position = projectTileWithElevation(a_position.xy, a_position.z + extraHeight);
+  float broadWave = sin(a_field.y * 0.56 + u_time * 0.085) * 0.68 + sin(a_field.y * 1.72 - u_time * 0.052) * 0.28;
+  float travellingFold = sin(a_field.y * 1.12 + heightRatio * 3.1 - u_time * 0.12);
+  float extraHeight = broadWave * (9000.0 + a_field.x * 24000.0) * mix(0.48, 1.0, smoothstep(0.05, 0.94, heightRatio));
+  // Preserve depth for a real 3D custom layer. MapLibre then handles the
+  // Earth horizon correctly as the pilot orbits instead of clipping the
+  // aurora as if it were a surface image.
+  gl_Position = projectTileFor3D(a_position.xy, a_position.z + extraHeight);
   v_strength = a_field.x;
   v_height = heightRatio;
   v_fold = travellingFold;
+  v_phase = a_field.y;
 }`);
     const fragment = compileShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
 in float v_strength;
 in float v_height;
 in float v_fold;
+in float v_phase;
 uniform float u_time;
 out vec4 fragColor;
 void main() {
   float lowerFade = smoothstep(0.01, 0.18, v_height);
   float upperFade = 1.0 - smoothstep(0.72, 1.0, v_height);
-  float filament = 0.86 + 0.14 * sin(v_fold * 1.15 + u_time * 0.075);
+  float filament = 0.82 + 0.18 * sin(v_fold * 1.15 + u_time * 0.075);
+  // Broad, drifting activity cells create natural quiet gaps and reconnecting
+  // arcs without moving the live NOAA oval away from its measured position.
+  float driftingCells = sin(v_phase * 0.64 + u_time * 0.13 + sin(v_phase * 2.05 - u_time * 0.08) * 0.64);
+  float reconnectingArc = mix(0.08, 1.0, smoothstep(-0.42, 0.42, driftingCells));
   float energy = smoothstep(0.04, 0.78, v_strength);
-  float alpha = (0.08 + energy * 0.70) * pow(energy, 0.62) * lowerFade * upperFade * filament;
+  float alpha = (0.08 + energy * 0.70) * pow(energy, 0.62) * lowerFade * upperFade * filament * reconnectingArc;
   vec3 oxygenGreen = mix(vec3(0.03, 0.24, 0.22), vec3(0.36, 1.0, 0.56), clamp(v_strength * 1.2, 0.0, 1.0));
   vec3 nitrogenViolet = vec3(0.44, 0.26, 0.90);
   vec3 highAltitudeRed = vec3(0.95, 0.18, 0.36);
