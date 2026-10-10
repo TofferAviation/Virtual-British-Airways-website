@@ -1,7 +1,14 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
-import type { RadarAuroraData } from "@/lib/radar-external";
+import type { RadarAuroraData, RadarAuroraSample } from "@/lib/radar-external";
 
-type AuroraColumn = { key: number; longitude: number; latitude: number; strength: number; phase: number };
+type AuroraSector = {
+  index: number;
+  longitude: number;
+  latitude: number;
+  strength: number;
+  phase: number;
+};
+
 type ProgramBundle = {
   program: WebGLProgram;
   position: number;
@@ -14,125 +21,179 @@ type ProgramBundle = {
   time: WebGLUniformLocation | null;
 };
 
-// These ranges follow the visible layers of an aurora: violet at the lower
-// edge, green through the main 100–150 km curtain and diffuse red above it.
-const curtainFloorMetres = 85_000;
-const curtainCeilingMetres = 300_000;
-const bucketWidthDegrees = 1;
-const curtainHeightSegments = 4;
+// The visible northern oval normally occupies roughly 60–75°N. Keeping the
+// source field inside this real-world envelope prevents low-confidence NOAA
+// pixels from turning into false curtains over the continental US or Europe.
+const POLAR_OVAL_FLOOR = 58;
+const POLAR_OVAL_CEILING = 82.5;
+const SECTOR_WIDTH_DEGREES = 12;
+const CURTAIN_LANES = 1;
+const CURTAIN_WIDTH_STEPS = 9;
+const CURTAIN_HEIGHT_STEPS = 7;
+const CURTAIN_FLOOR_METRES = 85_000;
+const CURTAIN_CEILING_METRES = 320_000;
+const CURTAIN_SHELL_ALTITUDES = [112_000, 165_000, 220_000];
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
 
 function mercatorCoordinate(longitude: number, latitude: number): [number, number] {
   const x = (longitude + 180) / 360;
-  const clippedLatitude = Math.max(-85, Math.min(85, latitude));
+  const clippedLatitude = clamp(latitude, -85, 85);
   const radians = clippedLatitude * Math.PI / 180;
   const y = (1 - Math.log(Math.tan(Math.PI / 4 + radians / 2)) / Math.PI) / 2;
   return [x, y];
 }
 
+function normaliseLongitude(longitude: number) {
+  return ((longitude + 540) % 360) - 180;
+}
+
+function sampleIsUsable(sample: RadarAuroraSample) {
+  return Number.isFinite(sample.latitude)
+    && Number.isFinite(sample.longitude)
+    && Number.isFinite(sample.probability)
+    && sample.latitude >= POLAR_OVAL_FLOOR
+    && sample.latitude <= POLAR_OVAL_CEILING
+    && sample.probability >= 5;
+}
+
+/**
+ * Converts NOAA's probability cells into a deliberately small set of broad
+ * curtain sections. The geometry never needs reprojecting when a pilot drags
+ * the camera: MapLibre projects every vertex against the live globe itself.
+ */
 function createAuroraMesh(data: RadarAuroraData | null) {
   if (!data?.samples.length) return new Float32Array();
-  const columns = new Map<number, { weightedLatitude: number; weight: number; peak: number }>();
+
+  const sectors = new Map<number, { totalWeight: number; weightedLatitude: number; peak: number }>();
   for (const sample of data.samples) {
-    if (!Number.isFinite(sample.latitude) || !Number.isFinite(sample.longitude) || sample.latitude > 84.8 || sample.latitude < 45 || sample.probability < 5) continue;
-    const longitude = sample.longitude > 180 ? sample.longitude - 360 : sample.longitude;
-    const key = Math.max(0, Math.min(359, Math.floor((longitude + 180) / bucketWidthDegrees)));
-    const column = columns.get(key) ?? { weightedLatitude: 0, weight: 0, peak: 0 };
+    if (!sampleIsUsable(sample)) continue;
+    const longitude = normaliseLongitude(sample.longitude);
+    const index = Math.floor((longitude + 180) / SECTOR_WIDTH_DEGREES);
+    const entry = sectors.get(index) ?? { totalWeight: 0, weightedLatitude: 0, peak: 0 };
     const weight = sample.probability * sample.probability;
-    column.weightedLatitude += sample.latitude * weight;
-    column.weight += weight;
-    column.peak = Math.max(column.peak, sample.probability);
-    columns.set(key, column);
+    entry.totalWeight += weight;
+    entry.weightedLatitude += sample.latitude * weight;
+    entry.peak = Math.max(entry.peak, sample.probability);
+    sectors.set(index, entry);
   }
 
-  const raw = [...columns.entries()]
-    .flatMap(([key, column]) => {
-      const strength = Math.max(0, Math.min(1, (column.peak - 4) / 18));
-      if (!column.weight || strength < 0.025) return [];
+  const ordered = [...sectors.entries()]
+    .flatMap(([index, entry]) => {
+      if (!entry.totalWeight) return [];
+      // A quiet oval remains gently visible while a NOAA hot spot receives a
+      // clearly brighter, wider curtain. This is intensity-led, not imagery.
+      const strength = clamp((entry.peak - 2) / 15, 0.28, 1);
       return [{
-        key,
-        longitude: -180 + (key + 0.5) * bucketWidthDegrees,
-        latitude: column.weightedLatitude / column.weight,
+        index,
+        longitude: -180 + (index + 0.5) * SECTOR_WIDTH_DEGREES,
+        latitude: entry.weightedLatitude / entry.totalWeight,
         strength,
-        phase: key * 0.079,
-      }];
+        phase: index * 0.61803398875,
+      } satisfies AuroraSector];
     })
-    .sort((left, right) => left.key - right.key);
-  if (raw.length < 2) return new Float32Array();
+    .sort((left, right) => left.index - right.index);
 
-  // OVATION is an intensity field rather than an optical photo. A tiny
-  // circular smoothing pass preserves the live oval while avoiding a
-  // polygonal, cell-by-cell appearance.
-  const ordered = raw.map((column, index) => {
-    const previous = raw[(index - 1 + raw.length) % raw.length];
-    const next = raw[(index + 1) % raw.length];
-    if (Math.abs(previous.key - column.key) > 2 || Math.abs(next.key - column.key) > 2) return column;
-    return {
-      ...column,
-      latitude: previous.latitude * 0.22 + column.latitude * 0.56 + next.latitude * 0.22,
-      strength: previous.strength * 0.18 + column.strength * 0.64 + next.strength * 0.18,
-    };
-  });
-
-  const vertices: number[] = [];
-  const append = (column: AuroraColumn, latitudeOffset: number, height: number, intensity: number, ribbon: number) => {
-    const [x, y] = mercatorCoordinate(column.longitude, column.latitude + latitudeOffset);
-    vertices.push(x, y, height, Math.max(0, Math.min(1, column.strength * intensity)), column.phase, ribbon);
-  };
-  const appendQuad = (
-    left: AuroraColumn,
-    right: AuroraColumn,
-    leftLatitude: number,
-    rightLatitude: number,
-    bottom: number,
-    top: number,
-    intensity: number,
-    ribbon: number,
-  ) => {
-    // A handful of height segments gives the GPU enough vertices to turn a
-    // ribbon into a moving drape. It is dramatically lighter than the old
-    // planet-wide horizontal emission sheets, even at close zoom.
-    for (let segment = 0; segment < curtainHeightSegments; segment += 1) {
-      const lower = bottom + (top - bottom) * segment / curtainHeightSegments;
-      const upper = bottom + (top - bottom) * (segment + 1) / curtainHeightSegments;
-      append(left, leftLatitude, lower, intensity, ribbon);
-      append(right, rightLatitude, lower, intensity, ribbon);
-      append(right, rightLatitude, upper, intensity, ribbon);
-      append(left, leftLatitude, lower, intensity, ribbon);
-      append(right, rightLatitude, upper, intensity, ribbon);
-      append(left, leftLatitude, upper, intensity, ribbon);
-    }
-  };
-
-  // Real aurora looks like a collection of suspended curtains, not a stack of
-  // flat rings. These lightweight ribbons are all vertical; the shader gives
-  // them independent motion and soft, irregular edges.
-  const curtainRibbons = [
-    { latitudeOffset: -1.34, bottom: 102_000, top: 208_000, intensity: 0.14, ribbon: -3 },
-    { latitudeOffset: -0.78, bottom: 90_000, top: 244_000, intensity: 0.25, ribbon: -2 },
-    { latitudeOffset: -0.34, bottom: 88_000, top: 278_000, intensity: 0.38, ribbon: -1 },
-    { latitudeOffset: 0, bottom: 92_000, top: 300_000, intensity: 0.48, ribbon: 0 },
-    { latitudeOffset: 0.36, bottom: 96_000, top: 286_000, intensity: 0.38, ribbon: 1 },
-    { latitudeOffset: 0.84, bottom: 104_000, top: 258_000, intensity: 0.24, ribbon: 2 },
-    { latitudeOffset: 1.38, bottom: 116_000, top: 222_000, intensity: 0.13, ribbon: 3 },
-  ];
+  const candidates: Array<{ left: AuroraSector; right: AuroraSector; score: number }> = [];
   for (let index = 0; index < ordered.length - 1; index += 1) {
     const left = ordered[index];
     const right = ordered[index + 1];
-    const consecutive = right.key - left.key <= 2;
-    if (!consecutive || Math.abs(right.latitude - left.latitude) > 7) continue;
-    const curtainStrength = Math.min(left.strength, right.strength);
-    if (curtainStrength >= 0.035) {
-      for (const curtain of curtainRibbons) {
-        appendQuad(
-          left,
-          right,
-          curtain.latitudeOffset,
-          curtain.latitudeOffset,
-          curtain.bottom,
-          curtain.top,
-          curtain.intensity,
-          curtain.ribbon,
-        );
+    // Do not connect across absent forecast sectors or the antimeridian. The
+    // natural gaps are what let the display breathe rather than form a ruler-
+    // perfect light ring.
+    if (right.index - left.index !== 1 || Math.abs(left.latitude - right.latitude) > 5.5) continue;
+    candidates.push({ left, right, score: Math.min(left.strength, right.strength) + Math.max(left.strength, right.strength) * 0.24 });
+  }
+
+  // Adjacent NOAA sectors deliberately share their edge vertices. This avoids
+  // the visible rectangular breaks caused by rendering each forecast cell as
+  // an isolated card; real gaps are still retained where the source has none.
+  const selected = candidates.sort((left, right) => left.left.index - right.left.index);
+  if (!selected.length) return new Float32Array();
+
+  const vertices: number[] = [];
+  const appendVertex = (longitude: number, latitude: number, elevation: number, strength: number, phase: number, lane: number, edge: number) => {
+    const [x, y] = mercatorCoordinate(longitude, latitude);
+    vertices.push(x, y, elevation, strength, phase, lane, edge);
+  };
+
+  for (let segmentIndex = 0; segmentIndex < selected.length; segmentIndex += 1) {
+    const { left, right } = selected[segmentIndex];
+    // The central curtain provides close, vertical detail. A separate set of
+    // low-alpha shells below supplies its visible aerial volume.
+    for (let laneIndex = 0; laneIndex < CURTAIN_LANES; laneIndex += 1) {
+      const laneProgress = CURTAIN_LANES === 1 ? 0.5 : laneIndex / (CURTAIN_LANES - 1);
+      const laneOffset = (laneProgress - 0.5) * 3.6;
+      const lane = segmentIndex * CURTAIN_LANES + laneIndex + 1;
+      for (let widthStep = 0; widthStep < CURTAIN_WIDTH_STEPS; widthStep += 1) {
+      const start = widthStep / CURTAIN_WIDTH_STEPS;
+      const end = (widthStep + 1) / CURTAIN_WIDTH_STEPS;
+      const makePoint = (ratio: number, heightRatio: number) => {
+        const longitude = left.longitude + (right.longitude - left.longitude) * ratio;
+        const baseLatitude = left.latitude + (right.latitude - left.latitude) * ratio;
+        // An irregular, yet fixed geographic leading edge gives the shader a
+        // broad, wavy canvas to animate. It is no longer a series of cards.
+        const shoreline = Math.sin((ratio * 4.6 + left.phase) * Math.PI) * 1.05
+          + Math.sin((ratio * 9.3 - right.phase) * Math.PI) * 0.36;
+        const laneWander = Math.sin((ratio * 5.8 + laneIndex * 0.71 + left.phase) * Math.PI) * 0.44;
+        const latitude = clamp(baseLatitude + laneOffset + laneWander + shoreline * (0.45 + heightRatio * 0.36), POLAR_OVAL_FLOOR - 1.4, POLAR_OVAL_CEILING + 1.8);
+        const elevation = CURTAIN_FLOOR_METRES + (CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES) * heightRatio;
+        const strength = (left.strength + (right.strength - left.strength) * ratio) * (0.82 + (1 - Math.abs(laneProgress - 0.5) * 2) * 0.18);
+        const phase = left.phase + (right.phase - left.phase) * ratio + heightRatio * 0.13 + laneIndex * 0.43;
+        return { longitude, latitude, elevation, strength, phase, edge: Math.sin(Math.PI * ratio) };
+      };
+      for (let heightStep = 0; heightStep < CURTAIN_HEIGHT_STEPS; heightStep += 1) {
+        const lower = heightStep / CURTAIN_HEIGHT_STEPS;
+        const upper = (heightStep + 1) / CURTAIN_HEIGHT_STEPS;
+        const bottomLeft = makePoint(start, lower);
+        const bottomRight = makePoint(end, lower);
+        const topRight = makePoint(end, upper);
+        const topLeft = makePoint(start, upper);
+        appendVertex(bottomLeft.longitude, bottomLeft.latitude, bottomLeft.elevation, bottomLeft.strength, bottomLeft.phase, lane, bottomLeft.edge);
+        appendVertex(bottomRight.longitude, bottomRight.latitude, bottomRight.elevation, bottomRight.strength, bottomRight.phase, lane, bottomRight.edge);
+        appendVertex(topRight.longitude, topRight.latitude, topRight.elevation, topRight.strength, topRight.phase, lane, topRight.edge);
+        appendVertex(bottomLeft.longitude, bottomLeft.latitude, bottomLeft.elevation, bottomLeft.strength, bottomLeft.phase, lane, bottomLeft.edge);
+        appendVertex(topRight.longitude, topRight.latitude, topRight.elevation, topRight.strength, topRight.phase, lane, topRight.edge);
+        appendVertex(topLeft.longitude, topLeft.latitude, topLeft.elevation, topLeft.strength, topLeft.phase, lane, topLeft.edge);
+      }
+      }
+    }
+
+    // Soft emission shells supply the width that is visible from above the
+    // planet. They share the same NOAA sector as the vertical curtains, but
+    // are suspended at three genuine altitudes to create parallax rather than
+    // a flat map overlay.
+    for (let shellIndex = 0; shellIndex < CURTAIN_SHELL_ALTITUDES.length; shellIndex += 1) {
+      const elevation = CURTAIN_SHELL_ALTITUDES[shellIndex];
+      for (let widthStep = 0; widthStep < CURTAIN_WIDTH_STEPS; widthStep += 1) {
+        const start = widthStep / CURTAIN_WIDTH_STEPS;
+        const end = (widthStep + 1) / CURTAIN_WIDTH_STEPS;
+        const makeShellPoint = (ratio: number, cross: number) => {
+          const longitude = left.longitude + (right.longitude - left.longitude) * ratio;
+          const baseLatitude = left.latitude + (right.latitude - left.latitude) * ratio;
+          const offset = -1.85 + cross * 3.7;
+          const latitude = clamp(baseLatitude + offset + Math.sin((ratio * 5.7 + cross * 1.9 + shellIndex * 0.41) * Math.PI) * 0.33, POLAR_OVAL_FLOOR - 1.6, POLAR_OVAL_CEILING + 2.1);
+          const strength = (left.strength + (right.strength - left.strength) * ratio) * (0.60 + shellIndex * 0.07);
+          const phase = left.phase + (right.phase - left.phase) * ratio + cross * 0.29 + shellIndex * 0.47;
+          return { longitude, latitude, strength, phase, edge: Math.sin(Math.PI * ratio) };
+        };
+        for (let crossStep = 0; crossStep < 3; crossStep += 1) {
+          const lowerCross = crossStep / 3;
+          const upperCross = (crossStep + 1) / 3;
+          const bottomLeft = makeShellPoint(start, lowerCross);
+          const bottomRight = makeShellPoint(end, lowerCross);
+          const topRight = makeShellPoint(end, upperCross);
+          const topLeft = makeShellPoint(start, upperCross);
+          const shellLane = -(shellIndex + 1);
+          appendVertex(bottomLeft.longitude, bottomLeft.latitude, elevation, bottomLeft.strength, bottomLeft.phase, shellLane, bottomLeft.edge);
+          appendVertex(bottomRight.longitude, bottomRight.latitude, elevation, bottomRight.strength, bottomRight.phase, shellLane, bottomRight.edge);
+          appendVertex(topRight.longitude, topRight.latitude, elevation, topRight.strength, topRight.phase, shellLane, topRight.edge);
+          appendVertex(bottomLeft.longitude, bottomLeft.latitude, elevation, bottomLeft.strength, bottomLeft.phase, shellLane, bottomLeft.edge);
+          appendVertex(topRight.longitude, topRight.latitude, elevation, topRight.strength, topRight.phase, shellLane, topRight.edge);
+          appendVertex(topLeft.longitude, topLeft.latitude, elevation, topLeft.strength, topLeft.phase, shellLane, topLeft.edge);
+        }
       }
     }
   }
@@ -153,9 +214,9 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
 }
 
 /**
- * GPU-first by design: the live NOAA field becomes a compact static set of
- * vertical ribbons and only their movement runs each frame. This avoids a
- * JavaScript particle loop while retaining a curved, high-altitude 3D aurora.
+ * A globe-native, data-led aurora. The altitude values are real-world metres,
+ * so MapLibre's globe projection and depth buffer keep every curtain attached
+ * to the northern Earth as it rotates — including close or oblique views.
  */
 export class BaRadarAuroraLayer implements CustomLayerInterface {
   readonly id = "ba-radar-globe-aurora-volume";
@@ -166,41 +227,38 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
   private gl: WebGL2RenderingContext | null = null;
   private buffer: WebGLBuffer | null = null;
   private programs = new Map<string, ProgramBundle>();
-  private vertexCount = 0;
   private mesh = new Float32Array();
+  private vertexCount = 0;
   private enabled = false;
-  private nextFrame: number | null = null;
+  private repaintTimer: number | null = null;
   private disposed = false;
 
   update(data: RadarAuroraData | null, enabled: boolean) {
     this.enabled = enabled;
     this.mesh = createAuroraMesh(data);
-    this.vertexCount = this.mesh.length / 6;
-    if (this.gl && this.buffer) this.uploadMesh();
-    this.schedule();
+    this.vertexCount = this.mesh.length / 7;
+    this.uploadMesh();
+    this.scheduleRepaint();
     this.map?.triggerRepaint();
   }
 
   onAdd(map: MapLibreMap, context: WebGLRenderingContext | WebGL2RenderingContext) {
-    // MapLibre supplies the page's own WebGL context. Duck-type here because
-    // cross-realm browser contexts can make an otherwise valid WebGL2 context
-    // fail an instanceof check.
     if (!("createVertexArray" in context)) {
-      console.warn("BA-Radar aurora needs WebGL2; using the stable globe without the volumetric curtain.");
+      console.warn("BA-Radar aurora requires WebGL2; the stable globe remains available.");
       return;
     }
     this.map = map;
     this.gl = context;
     this.buffer = context.createBuffer();
     this.uploadMesh();
-    this.schedule();
+    this.scheduleRepaint();
   }
 
   onRemove() {
     this.disposed = true;
-    if (this.nextFrame !== null) window.clearTimeout(this.nextFrame);
+    if (this.repaintTimer !== null) window.clearTimeout(this.repaintTimer);
     if (this.gl && this.buffer) this.gl.deleteBuffer(this.buffer);
-    for (const bundle of this.programs.values()) this.gl?.deleteProgram(bundle.program);
+    for (const program of this.programs.values()) this.gl?.deleteProgram(program.program);
     this.programs.clear();
     this.buffer = null;
     this.gl = null;
@@ -214,8 +272,6 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
     try {
       bundle = this.programFor(gl, options);
     } catch (error) {
-      // A custom layer should fail quiet rather than breaking the flight map
-      // on a browser with an incomplete WebGL implementation.
       this.enabled = false;
       console.warn("BA-Radar aurora shader could not start.", error);
       return;
@@ -228,21 +284,21 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
     gl.uniform4f(bundle.clippingPlane, ...projection.clippingPlane);
     gl.uniform1f(bundle.transition, projection.projectionTransition);
     const seconds = performance.now() / 1_000;
-    // Keep direct manipulation responsive. While the pilot is moving the
-    // globe, the map still redraws normally but the costly visual motion only
-    // advances four times per second.
+    // During a drag the Earth already redraws at the input rate. Freezing the
+    // tiny shader clock briefly avoids spending extra frame time on motion the
+    // pilot cannot perceive, while keeping the curtain fully globe-attached.
     gl.uniform1f(bundle.time, this.map?.isMoving() ? Math.floor(seconds * 4) / 4 : seconds);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.enableVertexAttribArray(bundle.position);
-    gl.vertexAttribPointer(bundle.position, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(bundle.position, 3, gl.FLOAT, false, 28, 0);
     gl.enableVertexAttribArray(bundle.field);
-    gl.vertexAttribPointer(bundle.field, 3, gl.FLOAT, false, 24, 12);
+    gl.vertexAttribPointer(bundle.field, 4, gl.FLOAT, false, 28, 12);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
     gl.depthMask(true);
   }
@@ -253,16 +309,16 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, this.mesh, this.gl.STATIC_DRAW);
   }
 
-  private schedule() {
-    if (this.nextFrame !== null) window.clearTimeout(this.nextFrame);
-    if (!this.map || this.disposed || !this.enabled) return;
+  private scheduleRepaint() {
+    if (this.repaintTimer !== null) window.clearTimeout(this.repaintTimer);
+    if (!this.map || this.disposed || !this.enabled || !this.vertexCount) return;
     const device = navigator as Navigator & { deviceMemory?: number };
-    const slowerDevice = (navigator.hardwareConcurrency ?? 4) <= 4 || (device.deviceMemory ?? 4) <= 4;
-    this.nextFrame = window.setTimeout(() => {
+    const lowPower = (navigator.hardwareConcurrency ?? 4) <= 4 || (device.deviceMemory ?? 4) <= 4;
+    this.repaintTimer = window.setTimeout(() => {
       if (this.disposed) return;
-      if (!document.hidden) this.map?.triggerRepaint();
-      this.schedule();
-    }, document.hidden ? 1_000 : this.map.isMoving() ? 220 : slowerDevice ? 120 : 84);
+      if (!document.hidden && !this.map?.isMoving()) this.map?.triggerRepaint();
+      this.scheduleRepaint();
+    }, document.hidden ? 1_000 : this.map.isMoving() ? 240 : lowPower ? 100 : 67);
   }
 
   private programFor(gl: WebGL2RenderingContext, options: CustomRenderMethodInput): ProgramBundle {
@@ -273,79 +329,93 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
 ${options.shaderData.vertexShaderPrelude}
 ${options.shaderData.define}
 in vec3 a_position;
-in vec3 a_field;
+in vec4 a_field;
 uniform float u_time;
 out float v_strength;
 out float v_height;
-out float v_fold;
 out float v_phase;
-out float v_ribbon;
+out float v_lane;
+out float v_shell;
+out float v_edge;
 void main() {
-  float heightRatio = clamp((a_position.z - ${curtainFloorMetres.toFixed(1)}) / ${(curtainCeilingMetres - curtainFloorMetres).toFixed(1)}, 0.0, 1.0);
-  float ribbon = a_field.z;
-  float midCurtain = sin(3.14159 * heightRatio);
-  // The wide swells move an entire curtain, while higher-frequency folds run
-  // through it. Each ribbon receives its own phase so they separate and weave
-  // together like the reference footage rather than fading as one circular band.
-  float broadWave = sin(a_field.y * 0.46 + u_time * 0.072 + ribbon * 0.86) * 0.66 + sin(a_field.y * 1.37 - u_time * 0.047 - ribbon * 0.43) * 0.24;
-  float travellingFold = sin(a_field.y * 1.52 + heightRatio * 8.7 - u_time * 0.19 + ribbon * 1.7) * 0.42 + sin(a_field.y * 3.36 - heightRatio * 5.4 + u_time * 0.11 - ribbon) * 0.17;
-  float extraHeight = (broadWave * 0.82 + travellingFold * 0.18) * (7000.0 + a_field.x * 22000.0) * mix(0.34, 1.0, midCurtain);
-  float lateralWander = broadWave * 0.62 + travellingFold * 0.38;
-  // The oval itself can meander by roughly one to two degrees at peak energy,
-  // which is a realistic scale for moving auroral arcs rather than a perfect
-  // mathematical ring.
-  float lateralOffset = (ribbon * 0.00070 + lateralWander * (0.00092 + a_field.x * 0.00180)) * mix(0.24, 1.0, midCurtain);
-  // Preserve depth for a real 3D custom layer. MapLibre then handles the
-  // Earth horizon correctly as the pilot orbits instead of clipping the
-  // aurora as if it were a surface image.
-  gl_Position = projectTileFor3D(a_position.xy + vec2(0.0, lateralOffset), a_position.z + extraHeight);
+  float heightRatio = clamp((a_position.z - ${CURTAIN_FLOOR_METRES.toFixed(1)}) / ${(CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES).toFixed(1)}, 0.0, 1.0);
+  float shell = step(a_field.z, 0.0);
+  float lane = abs(a_field.z);
+  float crest = sin(3.14159265 * heightRatio);
+  float slowWave = sin(a_field.y * 4.7 + u_time * 0.11 + lane * 0.79) * 0.58
+    + sin(a_field.y * 10.9 - u_time * 0.063 - lane * 0.37) * 0.24;
+  float travellingFold = sin(a_field.y * 18.0 + heightRatio * 8.2 - u_time * 0.31 + lane * 1.71) * 0.42
+    + sin(a_field.y * 31.0 - heightRatio * 14.0 + u_time * 0.16) * 0.16;
+  // Latitude drift stays under about 0.8 degrees. It is enough for living,
+  // intertwining curtains, but never permits a segment to wander away from
+  // the northern oval selected from NOAA's forecast.
+  float latitudeDrift = (slowWave * 0.68 + travellingFold * 0.32) * (0.00024 + a_field.x * 0.00078) * mix(0.25, 1.0, crest) * mix(1.0, 0.30, shell);
+  float elevationWave = (slowWave * 0.72 + travellingFold * 0.28) * (4500.0 + a_field.x * 12000.0) * crest * mix(1.0, 0.28, shell);
+  gl_Position = projectTileFor3D(a_position.xy + vec2(0.0, latitudeDrift), a_position.z + elevationWave);
   v_strength = a_field.x;
   v_height = heightRatio;
-  v_fold = travellingFold;
   v_phase = a_field.y;
-  v_ribbon = ribbon;
+  v_lane = lane;
+  v_shell = shell;
+  v_edge = a_field.w;
 }`);
     const fragment = compileShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
 in float v_strength;
 in float v_height;
-in float v_fold;
 in float v_phase;
-in float v_ribbon;
+in float v_lane;
+in float v_shell;
+in float v_edge;
 uniform float u_time;
 out vec4 fragColor;
+float hash(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float noise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 fraction = fract(point);
+  fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+  return mix(mix(hash(cell), hash(cell + vec2(1.0, 0.0)), fraction.x), mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), fraction.x), fraction.y);
+}
+float fbm(vec2 point) {
+  float total = 0.0;
+  float amplitude = 0.55;
+  for (int octave = 0; octave < 3; octave++) {
+    total += noise(point) * amplitude;
+    point = point * 2.04 + 7.3;
+    amplitude *= 0.5;
+  }
+  return total;
+}
 void main() {
-  float lowerFade = smoothstep(0.0, 0.09, v_height);
-  float upperFade = 1.0 - smoothstep(0.82, 1.0, v_height);
-  float filament = 0.74 + 0.26 * sin(v_fold * 1.34 + u_time * 0.083 + v_ribbon);
-  // Different height phases prevent the gaps ending as ruler-straight lines:
-  // they drift upward, split, and reconnect through each curtain.
-  float driftingCells = sin(v_phase * 0.72 + u_time * 0.15 + v_ribbon * 0.9) * 0.54;
-  float braidedCurtain = sin(v_phase * 1.46 + v_height * 9.4 - u_time * 0.21 - v_ribbon) * 0.31 + sin(v_phase * 3.82 - v_height * 15.0 + u_time * 0.12 + v_ribbon * 0.7) * 0.15;
-  // A broad, shared activity front introduces genuine calm gaps around the
-  // oval. Its height variation keeps each fading edge loose and diagonal,
-  // rather than ending every ribbon at the same straight longitude.
-  float broadActivity = sin(v_phase * 0.58 + v_height * 2.8 + u_time * 0.068) * 0.58 + sin(v_phase * 1.74 - v_height * 5.3 - u_time * 0.043) * 0.30 + sin(v_phase * 3.12 + v_height * 1.7 + u_time * 0.10) * 0.12;
-  float broadArcMask = smoothstep(-0.16, 0.45, broadActivity);
-  float reconnectingArc = mix(0.018, 1.0, broadArcMask) * mix(0.035, 1.0, smoothstep(-0.38, 0.46, driftingCells + braidedCurtain));
-  // Fine travelling rays sit inside the broad curtain and move at a different
-  // phase for every ribbon. This is what lets one strand peel away while its
-  // neighbours remain, then braid back together a moment later.
-  float travellingRays = sin(v_phase * 5.60 + v_height * 4.8 - u_time * 0.27 + v_ribbon * 2.3);
-  float splittingStrands = mix(0.14, 1.0, smoothstep(-0.12, 0.76, travellingRays));
-  float fineRipples = 0.78 + 0.22 * sin(v_phase * 5.2 + v_height * 18.0 - u_time * 0.25 + v_ribbon * 1.9);
-  float energy = smoothstep(0.04, 0.78, v_strength);
-  float alpha = (0.025 + energy * 0.42) * pow(energy, 0.70) * lowerFade * upperFade * filament * reconnectingArc * splittingStrands * fineRipples;
-  vec3 oxygenGreen = mix(vec3(0.03, 0.24, 0.22), vec3(0.36, 1.0, 0.56), clamp(v_strength * 1.2, 0.0, 1.0));
-  vec3 nitrogenViolet = vec3(0.44, 0.26, 0.90);
-  vec3 highAltitudeRed = vec3(0.95, 0.18, 0.36);
-  float violetMix = smoothstep(0.84, 1.0, v_strength) * (1.0 - smoothstep(0.03, 0.14, v_height));
-  float redMix = smoothstep(0.86, 1.0, v_strength) * smoothstep(0.80, 0.98, v_height);
-  vec3 colour = mix(oxygenGreen, nitrogenViolet, violetMix * 0.28);
-  colour = mix(colour, highAltitudeRed, redMix * 0.35);
-  // The map uses standard source-alpha blending, so keep RGB un-premultiplied.
-  // Premultiplying here would dim a faint curtain twice.
-  fragColor = vec4(colour, alpha);
+  float lowerFade = smoothstep(0.0, 0.055, v_height);
+  float upperFade = 1.0 - smoothstep(0.87, 1.0, v_height);
+  vec2 flow = vec2(v_phase * 2.6 - u_time * 0.047, v_height * 4.8 + u_time * 0.09 + v_lane * 0.13);
+  // This produces diagonal breaks that slide through the height of each
+  // curtain; no horizontal cutoff can become a visible straight line.
+  float broadBody = fbm(flow * 0.72 + vec2(0.0, v_height * 1.6));
+  float reconnecting = mix(0.38, 1.0, smoothstep(0.20, 0.68, broadBody + sin(v_phase * 7.8 + v_height * 8.5 - u_time * 0.16) * 0.17));
+  float fineRay = pow(0.5 + 0.5 * sin(v_phase * 27.0 + v_height * 6.4 - u_time * 0.33 + v_lane), 2.25);
+  float secondaryRay = pow(0.5 + 0.5 * sin(v_phase * 12.0 - v_height * 15.0 + u_time * 0.19), 3.2);
+  float strands = mix(0.48, 1.0, max(fineRay, secondaryRay));
+  float energy = smoothstep(0.12, 0.92, v_strength);
+  float curtainAlpha = (0.07 + energy * 0.30) * lowerFade * upperFade * reconnecting * strands;
+  float shellTexture = mix(0.45, 1.0, fbm(flow * 1.16 + vec2(v_height * 2.7, -u_time * 0.025)));
+  float shellAlpha = (0.035 + energy * 0.13) * shellTexture * (0.68 + 0.32 * reconnecting);
+  // Keep adjacent sectors visually continuous, while making a genuine source
+  // gap soften into the darkness instead of ending as a straight rectangle.
+  float endpointFade = mix(0.36, 1.0, smoothstep(0.05, 0.32, v_edge + sin(v_height * 8.0 - u_time * 0.13 + v_lane) * 0.05));
+  float alpha = mix(curtainAlpha, shellAlpha, v_shell) * endpointFade;
+  if (alpha < 0.018) discard;
+  vec3 green = mix(vec3(0.03, 0.30, 0.22), vec3(0.36, 0.92, 0.58), clamp(v_strength * 1.22, 0.0, 1.0));
+  vec3 violet = vec3(0.50, 0.30, 0.92);
+  vec3 red = vec3(1.0, 0.22, 0.39);
+  float violetMix = smoothstep(0.78, 1.0, v_strength) * (1.0 - smoothstep(0.04, 0.18, v_height));
+  float redMix = smoothstep(0.86, 1.0, v_strength) * smoothstep(0.74, 0.98, v_height);
+  vec3 colour = mix(green, violet, violetMix * 0.30);
+  colour = mix(colour, red, redMix * 0.38);
+  fragColor = vec4(mix(colour, colour * 0.72, v_shell), alpha);
 }`);
     const program = gl.createProgram();
     if (!program) throw new Error("Unable to create aurora program.");
