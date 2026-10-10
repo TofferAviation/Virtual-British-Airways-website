@@ -35,10 +35,10 @@ const POLAR_OVAL_FLOOR = 58;
 const POLAR_OVAL_CEILING = 82.5;
 const SECTOR_WIDTH_DEGREES = 12;
 const CURTAIN_COLUMN_SUBDIVISIONS = 8;
-const CURTAIN_HEIGHT_STEPS = 18;
+const CURTAIN_HEIGHT_STEPS = 20;
 const CURTAIN_FLOOR_METRES = 88_000;
 const CURTAIN_CEILING_METRES = 330_000;
-const CURTAIN_SHEETS = 4;
+const CURTAIN_SHEETS = 2;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -135,10 +135,10 @@ function makeColumns(run: AuroraSector[]) {
 }
 
 /**
- * Builds several high-resolution, continuous curtain volumes from the NOAA
- * field. The offset veils use interpolated vertices across each forecast run,
- * rather than independent sector cards, so a close view reads as a stack of
- * moving curtains instead of one projected plane.
+ * Builds two high-resolution curtain volumes from the NOAA field. The offset
+ * veils use interpolated vertices across each forecast run rather than
+ * independent sector cards, which lets their movement read as light rather
+ * than a grid of crossing polygons.
  */
 function createAuroraMesh(data: RadarAuroraData | null) {
   if (!data?.samples.length) return new Float32Array();
@@ -179,14 +179,13 @@ function createAuroraMesh(data: RadarAuroraData | null) {
   for (const run of buildRuns(sectors)) {
     const columns = makeColumns(run);
     for (let sheet = 0; sheet < CURTAIN_SHEETS; sheet += 1) {
-      // Four shallow, unevenly separated veils create parallax at low camera
-      // angles. They are not copies: every sheet gets a different geographic
-      // curl and an altitude offset before the GPU adds the animated motion.
-      const sheetOffset = [-1.38, -0.50, 0.34, 1.22][sheet] ?? 0;
-      const sheetAltitude = [0, 7_000, 16_000, 27_000][sheet] ?? 0;
-      for (let columnIndex = 0; columnIndex < columns.length - 1; columnIndex += 1) {
-        const left = columns[columnIndex];
-        const right = columns[columnIndex + 1];
+      // A front curtain and one restrained rear veil give depth without
+      // letting several wide planes weave through each other as a visible net.
+      const sheetOffset = [-0.34, 0.46][sheet] ?? 0;
+      const sheetAltitude = [0, 13_000][sheet] ?? 0;
+        for (let columnIndex = 0; columnIndex < columns.length - 1; columnIndex += 1) {
+          const left = columns[columnIndex];
+          const right = columns[columnIndex + 1];
         const makePoint = (column: AuroraColumn, height: number) => {
           // Real curtains do not stop at one perfectly level ceiling. A
           // stable combination of broad and fine crests gives each longitude
@@ -194,20 +193,20 @@ function createAuroraMesh(data: RadarAuroraData | null) {
           // Keeping this deterministic means the field remains anchored to
           // the live forecast when a user rotates or selects a flight.
           const crest = clamp(
-            0.68
-              + Math.sin(column.phase * Math.PI * (9.0 + sheet * 0.9) + sheet * 1.13) * 0.16
-              + Math.sin(column.phase * Math.PI * (25.0 + sheet * 1.8) - sheet * 0.57) * 0.11
-              + Math.sin(column.phase * Math.PI * (51.0 + sheet * 2.4) + sheet * 1.94) * 0.05,
-            0.34,
+            0.67
+              + Math.sin(column.phase * Math.PI * 9.3 + sheet * 0.41) * 0.17
+              + Math.sin(column.phase * Math.PI * 24.7 - sheet * 0.26) * 0.10
+              + Math.sin(column.phase * Math.PI * 49.0 + sheet * 0.66) * 0.04,
+            0.38,
             1,
           );
           const curtainHeight = height * crest;
           // Geographic folds run across the entire forecast strip rather than
           // restarting at every NOAA sector edge. The high part wanders more
           // than the base, like an auroral curtain held to a magnetic oval.
-          const coast = Math.sin(column.phase * Math.PI * (13 + sheet * 1.7) + sheet * 1.73) * 0.82
-            + Math.sin(column.phase * Math.PI * (29 + sheet * 2.1) - sheet * 0.81) * 0.42;
-          const fold = Math.sin(column.phase * Math.PI * (47 + sheet * 3.3) + sheet * 0.94) * 0.26;
+          const coast = Math.sin(column.phase * Math.PI * 13.2 + 0.51) * 0.74
+            + Math.sin(column.phase * Math.PI * 28.7 - 0.34) * 0.34;
+          const fold = Math.sin(column.phase * Math.PI * 46.2 + 0.72) * 0.16;
           const latitude = clamp(
             column.latitude + sheetOffset + coast * (0.34 + curtainHeight * 1.06) + fold * (0.08 + curtainHeight * 0.72),
             POLAR_OVAL_FLOOR - 1.8,
@@ -217,28 +216,28 @@ function createAuroraMesh(data: RadarAuroraData | null) {
             longitude: column.longitude + coast * (0.04 + curtainHeight * 0.30) + fold * (0.03 + curtainHeight * 0.20),
             latitude,
             elevation: CURTAIN_FLOOR_METRES + (CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES) * curtainHeight + sheetAltitude,
-            strength: column.strength * (sheet === 0 ? 1 : 0.76 - sheet * 0.04),
+            strength: column.strength * (sheet === 0 ? 1 : 0.64),
             phase: column.phase,
             height,
             edge: column.edge,
           };
         };
 
-        for (let heightStep = 0; heightStep < CURTAIN_HEIGHT_STEPS; heightStep += 1) {
-          const lower = heightStep / CURTAIN_HEIGHT_STEPS;
-          const upper = (heightStep + 1) / CURTAIN_HEIGHT_STEPS;
-          const bottomLeft = makePoint(left, lower);
-          const bottomRight = makePoint(right, lower);
-          const topRight = makePoint(right, upper);
-          const topLeft = makePoint(left, upper);
-          appendVertex(bottomLeft.longitude, bottomLeft.latitude, bottomLeft.elevation, bottomLeft.strength, bottomLeft.phase, bottomLeft.height, sheet, bottomLeft.edge);
-          appendVertex(bottomRight.longitude, bottomRight.latitude, bottomRight.elevation, bottomRight.strength, bottomRight.phase, bottomRight.height, sheet, bottomRight.edge);
-          appendVertex(topRight.longitude, topRight.latitude, topRight.elevation, topRight.strength, topRight.phase, topRight.height, sheet, topRight.edge);
-          appendVertex(bottomLeft.longitude, bottomLeft.latitude, bottomLeft.elevation, bottomLeft.strength, bottomLeft.phase, bottomLeft.height, sheet, bottomLeft.edge);
-          appendVertex(topRight.longitude, topRight.latitude, topRight.elevation, topRight.strength, topRight.phase, topRight.height, sheet, topRight.edge);
-          appendVertex(topLeft.longitude, topLeft.latitude, topLeft.elevation, topLeft.strength, topLeft.phase, topLeft.height, sheet, topLeft.edge);
+          for (let heightStep = 0; heightStep < CURTAIN_HEIGHT_STEPS; heightStep += 1) {
+            const lower = heightStep / CURTAIN_HEIGHT_STEPS;
+            const upper = (heightStep + 1) / CURTAIN_HEIGHT_STEPS;
+            const bottomLeft = makePoint(left, lower);
+            const bottomRight = makePoint(right, lower);
+            const topRight = makePoint(right, upper);
+            const topLeft = makePoint(left, upper);
+            appendVertex(bottomLeft.longitude, bottomLeft.latitude, bottomLeft.elevation, bottomLeft.strength, bottomLeft.phase, bottomLeft.height, sheet, bottomLeft.edge);
+            appendVertex(bottomRight.longitude, bottomRight.latitude, bottomRight.elevation, bottomRight.strength, bottomRight.phase, bottomRight.height, sheet, bottomRight.edge);
+            appendVertex(topRight.longitude, topRight.latitude, topRight.elevation, topRight.strength, topRight.phase, topRight.height, sheet, topRight.edge);
+            appendVertex(bottomLeft.longitude, bottomLeft.latitude, bottomLeft.elevation, bottomLeft.strength, bottomLeft.phase, bottomLeft.height, sheet, bottomLeft.edge);
+            appendVertex(topRight.longitude, topRight.latitude, topRight.elevation, topRight.strength, topRight.phase, topRight.height, sheet, topRight.edge);
+            appendVertex(topLeft.longitude, topLeft.latitude, topLeft.elevation, topLeft.strength, topLeft.phase, topLeft.height, sheet, topLeft.edge);
+          }
         }
-      }
     }
   }
 
@@ -342,7 +341,13 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    // Aurora emits light rather than acting like stained glass. Additive
+    // colour blending lets the two aligned veils build a soft glow without
+    // needing more overlapping planes.
+    // Preserve MapLibre's already-opaque map alpha while adding only emitted
+    // aurora colour. Letting the soft triangles accumulate their own alpha
+    // made oblique veils composite as dark panes over the globe.
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ZERO, gl.ONE);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
     gl.depthMask(true);
   }
@@ -437,30 +442,41 @@ void main() {
   float lowerFade = smoothstep(0.0, 0.07, v_height);
   float upperFade = 1.0 - smoothstep(0.91, 1.0, v_height);
   float edgeFade = smoothstep(0.02, 0.74, v_edge);
-  vec2 slowFlow = vec2(v_phase * 11.0 - u_time * 0.035, v_height * 3.1 + u_time * 0.052 + v_sheet * 0.37);
+  vec2 slowFlow = vec2(v_phase * 8.4 - u_time * 0.040, v_height * 0.58 + u_time * 0.036 + v_sheet * 0.17);
   float cloud = fbm(slowFlow);
-  float broadFold = 0.5 + 0.5 * sin(v_phase * 89.0 + cloud * 6.2 - u_time * 0.31 + v_height * 7.9 + v_sheet * 1.7);
-  float innerFold = 0.5 + 0.5 * sin(v_phase * 211.0 - cloud * 8.6 + u_time * 0.51 - v_height * 15.8 - v_sheet * 2.4);
-  // The two filament fields slide through each other at different speeds.
-  // Their curved phase includes height, so this creates flowing folds and
-  // pillars rather than a texture travelling across a planar ribbon.
-  float filamentA = 0.5 + 0.5 * sin(v_phase * 331.0 + cloud * 10.4 - u_time * 0.62 + v_height * 17.4 + v_sheet * 3.1);
-  float filamentB = 0.5 + 0.5 * sin(v_phase * 487.0 - cloud * 7.2 + u_time * 0.39 - v_height * 24.8 + v_sheet * 2.2);
-  float foldField = max(broadFold * 0.72 + innerFold * 0.28, innerFold * 0.58 + filamentA * 0.42);
-  float filamentField = max(filamentA, filamentB * 0.86);
-  float upwardRay = pow(max(foldField, filamentField * 0.92), 1.04);
-  float veil = mix(0.64, 1.0, cloud) * mix(0.34, 1.0, upwardRay);
-  float pillar = smoothstep(0.37, 0.82, filamentField * 0.72 + foldField * 0.28);
-  // A low-frequency disruption makes the ribbons gather, split and softly
-  // reconnect. It has no grid-aligned threshold, so the result cannot return
-  // to the straight forecast-cell cut-offs seen in earlier versions.
-  float breakField = fbm(vec2(v_phase * 4.8 + u_time * 0.026, v_height * 2.4 - u_time * 0.068));
-  float gathering = smoothstep(0.12, 0.84, breakField + sin(v_phase * 52.0 - u_time * 0.17 + v_height * 7.0) * 0.18);
-  float breathing = 0.65 + 0.35 * sin(v_phase * 63.0 + cloud * 5.1 + u_time * 0.22 + v_sheet);
-  float sheetWeight = max(0.34, 1.0 - v_sheet * 0.22);
-  float alpha = (0.30 + energy * 0.44) * veil * mix(0.18, 1.0, pillar) * mix(0.34, 1.0, gathering) * breathing * lowerFade * upperFade * edgeFade * sheetWeight;
+  // These waves deliberately travel almost vertically. Previous versions put
+  // too much of the vertical coordinate into each wave, which made the
+  // streamers criss-cross like a glowing net when seen at a shallow angle.
+  float broadFold = 0.5 + 0.5 * sin(v_phase * 17.0 + cloud * 5.8 - u_time * 0.26 + v_height * 0.24 + v_sheet * 0.36);
+  float innerFold = 0.5 + 0.5 * sin(v_phase * 39.0 - cloud * 7.4 + u_time * 0.42 + v_height * 0.58 - v_sheet * 0.44);
+  // A single curved filament field gives the light a vertical, curtain-like
+  // grain. Keeping all filaments aligned in the same flowing direction avoids
+  // the diagonal cross-hatching that made the previous build look like a net.
+  float filament = 0.5 + 0.5 * sin(v_phase * 78.0 + cloud * 8.6 - u_time * 0.54 + v_height * 0.86 + v_sheet * 0.72);
+  float foldField = broadFold * 0.47 + innerFold * 0.31 + filament * 0.22;
+  float upwardRay = pow(max(foldField, filament * 0.94), 1.28);
+  float veil = mix(0.70, 1.0, cloud) * mix(0.44, 1.0, upwardRay);
+  float pillar = smoothstep(0.47, 0.81, filament * 0.85 + innerFold * 0.11 + broadFold * 0.04);
+  // The geometry stays continuous around each NOAA run. These broad, soft
+  // intensity currents do the breaking and reconnecting instead, so the
+  // aurora can breathe without ever exposing a row of rectangular mesh ends.
+  // Most variation follows longitude and only gently leans with altitude,
+  // preserving the vertical feel of a real curtain rather than a lattice.
+  float breakField = fbm(vec2(v_phase * 5.3 - u_time * 0.027, 1.7 + v_sheet * 2.1));
+  float gathering = smoothstep(0.18, 0.82, breakField + sin(v_phase * 23.0 - u_time * 0.17 + v_height * 0.32) * 0.17);
+  // The pulse only modulates opacity, so pillars slowly emerge and recede
+  // while the curtain remains anchored to its live NOAA position.
+  float pulse = 0.66 + 0.34 * sin(v_phase * 47.0 + cloud * 4.4 + u_time * 0.30 + v_sheet);
+  float sheetWeight = mix(1.0, 0.54, v_sheet);
+  // Keep only a trace of the wide veil. The bulk of the light belongs to
+  // moving vertical streamers, which prevents an oblique camera from seeing
+  // the curtain as a transparent green plane over the Earth.
+  float streamer = pow(pillar, 1.08);
+  float diffuse = 0.10 + upwardRay * 0.16;
+  float lightField = diffuse + streamer * 1.22;
+  float alpha = (0.62 + energy * 0.58) * veil * lightField * mix(0.58, 1.0, gathering) * pulse * lowerFade * upperFade * edgeFade * sheetWeight;
   if (alpha < 0.003) discard;
-  vec3 green = mix(vec3(0.025, 0.33, 0.20), vec3(0.33, 1.0, 0.54), clamp(energy * 1.18, 0.0, 1.0));
+  vec3 green = mix(vec3(0.05, 0.57, 0.33), vec3(0.50, 1.0, 0.68), clamp(energy * 1.18, 0.0, 1.0));
   vec3 violet = vec3(0.56, 0.28, 0.94);
   vec3 crimson = vec3(0.98, 0.18, 0.34);
   // Nitrogen marks the low energetic fringe; high-altitude oxygen adds a
