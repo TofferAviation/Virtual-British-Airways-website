@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarAuroraData, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight } from "@/lib/radar-live";
-import { BaRadarAuroraLayer } from "@/components/BaRadarAuroraLayer";
+import { BaRadarAuroraExperience } from "@/components/BaRadarAuroraExperience";
 
 type GlobeReplay = { id: string; points: Array<{ latitude: number; longitude: number; headingDeg: number }>; activeIndex: number } | null;
 export type GlobeCamera = { center: [number, number]; zoom: number; bearing: number; pitch: number };
@@ -95,14 +95,14 @@ export function BaRadarGlobe({
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const auroraLayerRef = useRef<BaRadarAuroraLayer | null>(null);
+  const [liveMap, setLiveMap] = useState<MapLibreMap | null>(null);
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
   const onCameraChangeRef = useRef(onCameraChange);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
-  const dataRef = useRef({ ...data, controllers: controllersGeoJson, auroraEnabled, aurora });
-  dataRef.current = { ...data, controllers: controllersGeoJson, auroraEnabled, aurora };
+  const dataRef = useRef({ ...data, controllers: controllersGeoJson });
+  dataRef.current = { ...data, controllers: controllersGeoJson };
   onSelectRef.current = onSelect;
   onSelectControllerRef.current = onSelectController;
   onCameraChangeRef.current = onCameraChange;
@@ -121,7 +121,6 @@ export function BaRadarGlobe({
       setGeoJson(map, "ba-radar-globe-aircraft", current.aircraft);
       setGeoJson(map, "ba-radar-globe-routes", current.routes);
       setGeoJson(map, "ba-radar-globe-controllers", current.controllers);
-      auroraLayerRef.current?.update(current.aurora, current.auroraEnabled);
     };
     const start = async () => {
       if (!container.current) return;
@@ -173,10 +172,6 @@ export function BaRadarGlobe({
         map.addSource("ba-radar-globe-aircraft", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-routes", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-controllers", { type: "geojson", data: emptyCollection as never });
-        const auroraLayer = new BaRadarAuroraLayer();
-        auroraLayerRef.current = auroraLayer;
-        auroraLayer.update(dataRef.current.aurora, dataRef.current.auroraEnabled);
-        map.addLayer(auroraLayer);
         map.addLayer({ id: "ba-radar-globe-planned", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "planned"], paint: { "line-color": "#73bdf1", "line-width": 2.2, "line-opacity": 0.85, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "ba-radar-globe-recorded", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "recorded"], paint: { "line-color": "#f1c84c", "line-width": 3.5, "line-opacity": 0.96, "line-blur": 0.35 } });
         map.addLayer({ id: "ba-radar-globe-replay", type: "line", source: "ba-radar-globe-routes", filter: ["==", ["get", "kind"], "replay"], paint: { "line-color": "#d91e45", "line-width": 3.5, "line-opacity": 0.92 } });
@@ -205,6 +200,7 @@ export function BaRadarGlobe({
         map.on("mouseleave", "ba-radar-globe-controllers", () => { map.getCanvas().style.cursor = ""; });
         map.on("moveend", rememberCamera);
         sync(map);
+        setLiveMap(map);
         const fitGlobe = (initial = false) => {
           if (disposed) return;
           const viewport = map.getContainer();
@@ -244,7 +240,7 @@ export function BaRadarGlobe({
         liveMap.remove();
       }
       mapRef.current = null;
-      auroraLayerRef.current = null;
+      setLiveMap(null);
     };
   }, []);
 
@@ -255,11 +251,11 @@ export function BaRadarGlobe({
       source?.setData(data.aircraft as never);
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
-      auroraLayerRef.current?.update(aurora, auroraEnabled);
     }
-  }, [data, controllersGeoJson, auroraEnabled, aurora]);
+  }, [data, controllersGeoJson]);
 
   return <div className="ba-radar-globe-map" ref={container} aria-label="BA-Radar interactive 3D globe">
+    <BaRadarAuroraExperience map={liveMap} data={aurora} enabled={auroraEnabled} />
     <div className="ba-radar-globe-caption"><strong>3D Globe</strong><span>Live BAV tracks · drag to orbit · scroll to zoom</span></div>
   </div>;
 }
