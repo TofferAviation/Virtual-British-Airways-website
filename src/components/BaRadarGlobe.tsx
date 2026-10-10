@@ -165,7 +165,7 @@ export function BaRadarGlobe({
         bearing: initialCamera?.bearing ?? 0,
         // A shallow orbital angle lets the live aurora read as a suspended
         // curtain rather than a flat ring; a pilot's saved orbit still wins.
-        pitch: initialCamera?.pitch ?? 22,
+        pitch: initialCamera?.pitch ?? 36,
       });
       mapRef.current = map;
       map.on("load", () => {
@@ -217,7 +217,7 @@ export function BaRadarGlobe({
             // safe initial frame on ultrawide screens, then never overwrite a
             // pilot's orbit or zoom when the selected-flight panel changes.
             const zoom = Math.max(-0.35, Math.min(0.82, 1.16 - Math.max(0, Math.log2(ratio)) * 0.75));
-            map.jumpTo({ center: [10, 67], zoom, bearing: 0, pitch: 22 });
+            map.jumpTo({ center: [10, 67], zoom, bearing: 0, pitch: 36 });
             // Capture the resolved camera synchronously. That makes a
             // selection immediately after first paint just as stable as one
             // made later in the session.

@@ -8,6 +8,8 @@ export type AuroraSettings = {
   animationSpeed: number;
   brightness: number;
   quality: AuroraQuality;
+  /** A presentation-only multiplier for full-globe curtain relief. */
+  enhancedPresentation: boolean;
 };
 
 export const DEFAULT_AURORA_SETTINGS: AuroraSettings = {
@@ -15,6 +17,7 @@ export const DEFAULT_AURORA_SETTINGS: AuroraSettings = {
   animationSpeed: 1,
   brightness: 1,
   quality: "auto",
+  enhancedPresentation: true,
 };
 
 type Hemisphere = "north" | "south";
@@ -52,6 +55,7 @@ type ProgramBundle = {
   speed: WebGLUniformLocation | null;
   solarTime: WebGLUniformLocation | null;
   solarDeclination: WebGLUniformLocation | null;
+  enhancedPresentation: WebGLUniformLocation | null;
 };
 
 const MIN_AURORAL_LATITUDE = 45;
@@ -70,9 +74,11 @@ const MAGNETIC_POLES: Record<Hemisphere, { latitude: number; longitude: number }
 };
 
 const QUALITY: Record<Exclude<AuroraQuality, "auto">, QualityProfile> = {
-  high: { columnsPerSector: 10, heightSteps: 30, sheets: 3, repaintMs: 40 },
-  balanced: { columnsPerSector: 7, heightSteps: 22, sheets: 2, repaintMs: 62 },
-  low: { columnsPerSector: 4, heightSteps: 12, sheets: 1, repaintMs: 100 },
+  // Separate veils create parallax. Low keeps three so mobile still reads as
+  // a volume without a dense draw call.
+  high: { columnsPerSector: 10, heightSteps: 30, sheets: 5, repaintMs: 42 },
+  balanced: { columnsPerSector: 7, heightSteps: 22, sheets: 4, repaintMs: 68 },
+  low: { columnsPerSector: 4, heightSteps: 12, sheets: 3, repaintMs: 112 },
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -264,13 +270,20 @@ function createAuroraMesh(data: RadarAuroraData | null, profile: QualityProfile)
     const [x, y] = mercatorCoordinate(longitude, latitude);
     // a_field: OVATION strength, magnetic local-time phase, height through
     // the volume, then hemisphere/sheet/run-edge in one static VBO.
-    const packed = (hemisphere === "north" ? 0 : 2) + sheet + edge * 0.24;
+    // Eight slots per hemisphere keep additional veils from decoding as the
+    // opposite pole; the fractional part remains the soft run edge.
+    const packed = (hemisphere === "north" ? 0 : 8) + sheet + edge * 0.1;
     vertices.push(x, y, elevation, strength, phase, height, packed);
   };
 
   for (const run of buildRuns(sectors)) {
     const columns = makeColumns(run, profile.columnsPerSector);
     for (let sheet = 0; sheet < profile.sheets; sheet += 1) {
+      // These are separate arcs, displaced across the oval by roughly
+      // 150 km, not copies stacked on the same surface.
+      const sheetPosition = profile.sheets === 1 ? 0.5 : sheet / (profile.sheets - 1);
+      const radialOffset = interpolate(-1.42, 1.42, sheetPosition);
+      const sheetWeight = 0.68 + 0.28 * (1 - Math.abs(sheetPosition - 0.5) * 2);
       for (let columnIndex = 0; columnIndex < columns.length - 1; columnIndex += 1) {
         const left = columns[columnIndex];
         const right = columns[columnIndex + 1];
@@ -280,8 +293,10 @@ function createAuroraMesh(data: RadarAuroraData | null, profile: QualityProfile)
             0.68
               + Math.sin(column.phase * TAU * 3.7 + sheetPhase) * 0.17
               + Math.sin(column.phase * TAU * 11.4 - sheetPhase * 0.7) * 0.11
-              + Math.sin(column.phase * TAU * 23.8 + sheetPhase * 1.8) * 0.04,
-            0.46,
+              + Math.sin(column.phase * TAU * 23.8 + sheetPhase * 1.8) * 0.07
+              // Individual ray caps break the otherwise smooth upper edge.
+              + Math.sin(column.phase * TAU * 39.4 - sheetPhase * 2.1) * 0.045,
+            0.40,
             1,
           );
           const curtainHeight = height * crest;
@@ -291,15 +306,17 @@ function createAuroraMesh(data: RadarAuroraData | null, profile: QualityProfile)
           // Broad, Earth-locked folds break the oval's geometric perfection.
           // Their scale is tens of kilometres, which is visible from orbit
           // but stays faithful to an auroral arc rather than a random halo.
-          const arcFold = (
+          const veilMeander = Math.sin(column.phase * TAU * (1.45 + sheet * 0.17) + sheetPhase * 1.9) * 0.72
+            + Math.sin(column.phase * TAU * (4.6 + sheet * 0.31) - sheetPhase * 0.6) * 0.28;
+          const arcFold = radialOffset + veilMeander + (
             Math.sin(column.phase * TAU * 3.1 + sheetPhase * 1.7) * 0.46
             + Math.sin(column.phase * TAU * 8.6 - sheetPhase * 0.8) * 0.24
-            + Math.sin(column.phase * TAU * 17.2 + sheetPhase) * 0.10
-          ) * (0.28 + column.strength * 0.70);
+            + Math.sin(column.phase * TAU * 17.2 + sheetPhase) * 0.14
+          ) * (0.36 + column.strength * 0.78);
           // Magnetic field lines are close to vertical at auroral latitudes.
           // A restrained equatorward lean makes height legible in oblique
           // views without turning the oval into a camera-facing flat plane.
-          const fieldLean = (0.12 + sheet * 0.08 + crossFold * 0.05) * Math.pow(curtainHeight, 1.3);
+          const fieldLean = (0.22 + sheetPosition * 0.18 + crossFold * 0.13) * Math.pow(curtainHeight, 1.22);
           const alongField = moveAlongBearing(column.latitude, column.longitude, poleBearing + Math.PI, arcFold + fieldLean);
           const ripple = moveAlongBearing(
             alongField.latitude,
@@ -310,8 +327,9 @@ function createAuroraMesh(data: RadarAuroraData | null, profile: QualityProfile)
           return {
             longitude: ripple.longitude,
             latitude: ripple.latitude,
-            elevation: CURTAIN_FLOOR_METRES + (CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES) * curtainHeight + sheet * 6_000,
-            strength: column.strength * (sheet === 0 ? 1 : sheet === 1 ? 0.58 : 0.32),
+            elevation: CURTAIN_FLOOR_METRES + (CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES) * curtainHeight
+              + (sheetPosition - 0.5) * 12_000,
+            strength: column.strength * sheetWeight,
             phase: column.phase,
             height,
             edge: column.edge,
@@ -445,6 +463,7 @@ export class BaRadarAuroraLayer implements CustomLayerInterface {
     gl.uniform1f(bundle.speed, clamp(this.settings.animationSpeed, 0, 1.8));
     gl.uniform1f(bundle.solarTime, now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
     gl.uniform1f(bundle.solarDeclination, 0.409 * Math.sin(TAU * (dayOfYear - 81) / 365.25));
+    gl.uniform1f(bundle.enhancedPresentation, this.settings.enhancedPresentation ? 2.1 : 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.enableVertexAttribArray(bundle.position);
     gl.vertexAttribPointer(bundle.position, 3, gl.FLOAT, false, 28, 0);
@@ -494,6 +513,7 @@ uniform float u_time;
 uniform float u_speed;
 uniform float u_solarTime;
 uniform float u_solarDeclination;
+uniform float u_enhancedPresentation;
 out float v_strength;
 out float v_phase;
 out float v_height;
@@ -504,9 +524,9 @@ const float AURORA_PI = 3.14159265359;
 const float AURORA_TAU = 6.28318530718;
 void main() {
   float packed = floor(a_field.w + 0.001);
-  float hemisphere = floor(packed / 2.0);
-  float sheet = packed - hemisphere * 2.0;
-  float edge = fract(a_field.w) * 4.1666667;
+  float hemisphere = packed >= 8.0 ? 1.0 : 0.0;
+  float sheet = packed - hemisphere * 8.0;
+  float edge = fract(a_field.w) * 10.0;
   float motion = u_time * u_speed;
   // The same magnetic phase drives every height of a ray. A small correlated
   // high-altitude bend reads as a curtain, not a camera-facing texture/net.
@@ -520,7 +540,10 @@ void main() {
     * (0.00008 + a_field.x * 0.00038) * heightEnvelope;
   float altitudePulse = (broad * 0.45 + fold * 0.33 + ray * 0.22)
     * (10000.0 + a_field.x * 36000.0) * heightEnvelope;
-  gl_Position = projectTileFor3D(a_position.xy + vec2(longitudeDrift, latitudeDrift), a_position.z + altitudePulse);
+  // Enhanced mode only lifts structure above the physical 88 km floor; it
+  // never moves the data-backed coverage or claims measured higher emission.
+  float visualElevation = 88000.0 + (a_position.z - 88000.0) * u_enhancedPresentation;
+  gl_Position = projectTileFor3D(a_position.xy + vec2(longitudeDrift, latitudeDrift), visualElevation + altitudePulse);
   float longitude = a_position.x * AURORA_TAU - AURORA_PI;
   float latitude = atan(sinh(AURORA_PI * (1.0 - 2.0 * a_position.y)));
   float solarLongitude = (0.5 - u_solarTime / 86400.0) * AURORA_TAU;
@@ -582,21 +605,28 @@ void main() {
   float arcWave = 0.5 + 0.5 * sin(v_phase * 22.0 - motion * 0.11 + slowField * 3.8);
   float rayWave = 0.5 + 0.5 * sin(v_phase * 128.0 + v_height * 0.58 - motion * 0.42 + slowField * 5.2);
   float fineRay = 0.5 + 0.5 * sin(v_phase * 246.0 - v_height * 0.21 + motion * 0.24);
-  float rays = mix(0.38 + 0.62 * rayWave, 0.55 + 0.45 * fineRay, 0.32);
+  float needleRay = 0.5 + 0.5 * sin(v_phase * 718.0 + v_height * 0.14 - motion * 0.33 + v_sheet * 1.6);
+  // The broad wave is the curtain fold; the narrower correlated cores are
+  // the vertical rays inside it. They share the same time field, so the
+  // display dances as a sheet rather than flickering as random particles.
+  float rays = max(pow(rayWave, 3.2), max(0.66 * pow(fineRay, 5.0), 0.30 * pow(needleRay, 7.0)));
   float regionalPulse = 0.75 + 0.25 * sin(v_phase * 9.0 - motion * 0.065 + slowField * 4.0);
-  float fragmentingArc = smoothstep(0.30, 0.70, fbm(vec2(v_phase * 7.5 + slowField, motion * 0.018 + v_sheet * 0.47)));
-  float structure = mix(0.24, 1.0, arcWave) * mix(0.28, 1.0, rays) * regionalPulse;
+  // Veil-specific masks make gaps stagger between nearby arcs, so the volume
+  // can split and reconnect without resolving into a glowing torus.
+  float fragmentingArc = smoothstep(0.42, 0.70, fbm(vec2(v_phase * 7.5 + slowField + v_sheet * 1.71, motion * 0.018 + v_sheet * 0.47)));
+  float narrowGaps = smoothstep(0.30, 0.68, fbm(vec2(v_phase * 20.0 - motion * 0.032, v_sheet * 3.3 + motion * 0.009)));
+  float structure = mix(0.07, 1.0, arcWave) * (0.08 + 0.92 * rays) * regionalPulse;
   // Structured transparent gaps let the oval break and reconnect without
   // exposing straight rectangular ends in the underlying geometry.
-  structure *= mix(0.14, 1.0, fragmentingArc);
+  structure *= mix(0.055, 1.0, fragmentingArc) * mix(0.16, 1.0, narrowGaps);
   // The strong 557.7nm green core lives low in the sheet. Its faint upper
   // tail keeps individual rays legible from an oblique, space-like camera
   // angle without turning the oval into a solid atmospheric torus.
-  float greenProfile = bell(v_height, 0.16, 0.15) + 0.32 * bell(v_height, 0.34, 0.20);
-  float redProfile = bell(v_height, 0.69, 0.24);
+  float greenProfile = bell(v_height, 0.16, 0.13) + 0.48 * bell(v_height, 0.39, 0.23);
+  float redProfile = bell(v_height, 0.70, 0.26);
   float nitrogenProfile = bell(v_height, 0.045, 0.065);
-  float rayTail = bell(v_height, 0.46, 0.22) * (0.10 + 0.34 * energy) * (0.18 + 0.82 * rays);
-  float green = (greenProfile * (0.24 + 0.76 * structure) + rayTail) * (0.34 + 0.66 * energy);
+  float rayTail = bell(v_height, 0.50, 0.25) * (0.10 + 0.48 * energy) * pow(0.12 + 0.88 * rays, 1.35);
+  float green = (greenProfile * (0.10 + 0.90 * structure) + rayTail) * (0.34 + 0.66 * energy);
   // High oxygen red is broader, smoother and slower than the lower curtain.
   float red = redProfile * (0.05 + 0.40 * energy * energy) * (0.52 + 0.48 * slowField);
   float nitrogen = nitrogenProfile * (0.10 + 0.50 * energy) * (0.52 + 0.48 * rays);
@@ -606,10 +636,11 @@ void main() {
   vec3 nitrogenBlue = vec3(0.20, 0.22, 0.94);
   vec3 nitrogenPink = vec3(0.90, 0.18, 0.58);
   vec3 colour = oxygenGreen * green + oxygenRed * red + nitrogenBlue * nitrogen * 0.44 + nitrogenPink * pink;
-  float alpha = (green * 0.70 + red * 0.48 + nitrogen * 0.34 + pink * 0.30)
+  float alpha = (green * 0.80 + red * 0.44 + nitrogen * 0.30 + pink * 0.34)
     * edge * baseFade * capFade * mix(0.055, 1.0, v_night) * u_brightness;
   // Tone down daylight and secondary veils before additive blending.
-  colour *= mix(0.15, 1.0, v_night) * (v_sheet < 0.5 ? 1.0 : 0.62) * u_brightness;
+  float veilWeight = 0.78 + 0.22 * sin(v_sheet * 2.1 + 0.6);
+  colour *= mix(0.15, 1.0, v_night) * veilWeight * u_brightness;
   fragColor = vec4(colour, clamp(alpha, 0.0, 0.82));
 }`);
     const program = gl.createProgram();
@@ -642,6 +673,7 @@ void main() {
       speed: gl.getUniformLocation(program, "u_speed"),
       solarTime: gl.getUniformLocation(program, "u_solarTime"),
       solarDeclination: gl.getUniformLocation(program, "u_solarDeclination"),
+      enhancedPresentation: gl.getUniformLocation(program, "u_enhancedPresentation"),
     };
     this.programs.set(key, bundle);
     return bundle;
