@@ -96,8 +96,8 @@ function createAuroraMesh(data: RadarAuroraData | null) {
   });
 
   const vertices: number[] = [];
-  const append = (column: AuroraColumn, latitudeOffset: number, height: number, intensity = 1, longitudeOffset = 0) => {
-    const [x, y] = mercatorCoordinate(column.longitude + longitudeOffset, column.latitude + latitudeOffset);
+  const append = (column: AuroraColumn, latitudeOffset: number, height: number, intensity = 1) => {
+    const [x, y] = mercatorCoordinate(column.longitude, column.latitude + latitudeOffset);
     vertices.push(x, y, height, Math.max(0, Math.min(1, column.strength * intensity)), column.phase);
   };
   const appendQuad = (
@@ -109,14 +109,12 @@ function createAuroraMesh(data: RadarAuroraData | null) {
     top: number,
     leftIntensity = 1,
     rightIntensity = 1,
-    seam = false,
   ) => {
-    const longitudeOffset = seam ? 360 : 0;
     append(left, leftLatitude, bottom, leftIntensity);
-    append(right, rightLatitude, bottom, rightIntensity, longitudeOffset);
-    append(right, rightLatitude, top, rightIntensity, longitudeOffset);
+    append(right, rightLatitude, bottom, rightIntensity);
+    append(right, rightLatitude, top, rightIntensity);
     append(left, leftLatitude, bottom, leftIntensity);
-    append(right, rightLatitude, top, rightIntensity, longitudeOffset);
+    append(right, rightLatitude, top, rightIntensity);
     append(left, leftLatitude, top, leftIntensity);
   };
   const appendField = (longitude: number, latitude: number, height: number, strength: number) => {
@@ -146,17 +144,15 @@ function createAuroraMesh(data: RadarAuroraData | null) {
   // The narrow vertical sheets are the real 3D component. One face per live
   // field segment is enough: the shader interpolates smoothly up the curtain,
   // avoiding the horizontal striping that a stack of little rectangles creates.
-  for (let index = 0; index < ordered.length; index += 1) {
+  for (let index = 0; index < ordered.length - 1; index += 1) {
     const left = ordered[index];
-    const right = ordered[(index + 1) % ordered.length];
-    const seam = index === ordered.length - 1 && right.key + 360 - left.key <= 2;
-    const consecutive = seam || right.key - left.key <= 2;
+    const right = ordered[index + 1];
+    const consecutive = right.key - left.key <= 2;
     if (!consecutive || Math.abs(right.latitude - left.latitude) > 7) continue;
     const curtainStrength = Math.min(left.strength, right.strength);
-    if (curtainStrength >= 0.12) {
-      appendQuad(left, right, 0, 0, curtainFloorMetres, curtainCeilingMetres, 1, 1, seam);
+    if (curtainStrength >= 0.045) {
+      appendQuad(left, right, 0, 0, curtainFloorMetres, curtainCeilingMetres);
     }
-
   }
 
   // The actual NOAA field is drawn as elevated atmospheric-emission sheets,
@@ -170,7 +166,10 @@ function createAuroraMesh(data: RadarAuroraData | null) {
       const southeast = fieldStrengthAt(longitude + 2, latitude);
       const northwest = fieldStrengthAt(longitude, latitude + 1);
       const northeast = fieldStrengthAt(longitude + 2, latitude + 1);
-      if (Math.max(southwest, southeast, northwest, northeast) < 0.08) continue;
+      // Keep the nearly-empty perimeter cells. Their interpolated zeroes are
+      // what feather a live oval into space; dropping them creates the hard,
+      // straight cutoff that shows up when an active segment fades away.
+      if (Math.max(southwest, southeast, northwest, northeast) < 0.001) continue;
       appendFieldQuad(longitude, longitude + 2, latitude, latitude + 1, southwest, southeast, northwest, northeast, 112_000, 0.26);
       appendFieldQuad(longitude, longitude + 2, latitude, latitude + 1, southwest, southeast, northwest, northeast, 131_000, 1);
       appendFieldQuad(longitude, longitude + 2, latitude, latitude + 1, southwest, southeast, northwest, northeast, 154_000, 0.28);
@@ -317,13 +316,21 @@ out float v_fold;
 out float v_phase;
 void main() {
   float heightRatio = clamp((a_position.z - ${curtainFloorMetres.toFixed(1)}) / ${(curtainCeilingMetres - curtainFloorMetres).toFixed(1)}, 0.0, 1.0);
-  float broadWave = sin(a_field.y * 0.56 + u_time * 0.085) * 0.68 + sin(a_field.y * 1.72 - u_time * 0.052) * 0.28;
-  float travellingFold = sin(a_field.y * 1.12 + heightRatio * 3.1 - u_time * 0.12);
-  float extraHeight = broadWave * (9000.0 + a_field.x * 24000.0) * mix(0.48, 1.0, smoothstep(0.05, 0.94, heightRatio));
+  // Long, slow swells set the whole oval in motion; the smaller height-aware
+  // folds let each curtain separate, braid and reconnect without shifting the
+  // NOAA-derived footprint across the Earth.
+  float broadWave = sin(a_field.y * 0.43 + u_time * 0.072) * 0.64 + sin(a_field.y * 1.31 - u_time * 0.043) * 0.28;
+  float travellingFold = sin(a_field.y * 0.94 + heightRatio * 8.4 - u_time * 0.17) * 0.12 + sin(a_field.y * 2.58 - heightRatio * 5.7 + u_time * 0.10) * 0.05;
+  float extraHeight = (broadWave + travellingFold) * (8500.0 + a_field.x * 24500.0) * mix(0.48, 1.0, smoothstep(0.05, 0.94, heightRatio));
+  // A restrained lateral sway keeps each high-altitude strand loose instead
+  // of drawing one perfect circular strip. It stays below roughly a third of
+  // a degree, so the live NOAA oval remains geographically truthful.
+  float lateralWander = sin(a_field.y * 0.51 + u_time * 0.064) * 0.55 + sin(a_field.y * 1.90 - heightRatio * 6.4 - u_time * 0.12) * 0.27 + sin(a_field.y * 3.60 + heightRatio * 12.0 + u_time * 0.08) * 0.13;
+  float lateralOffset = lateralWander * (0.00020 + a_field.x * 0.00080) * mix(0.44, 1.0, smoothstep(0.05, 0.94, heightRatio));
   // Preserve depth for a real 3D custom layer. MapLibre then handles the
   // Earth horizon correctly as the pilot orbits instead of clipping the
   // aurora as if it were a surface image.
-  gl_Position = projectTileFor3D(a_position.xy, a_position.z + extraHeight);
+  gl_Position = projectTileFor3D(a_position.xy + vec2(0.0, lateralOffset), a_position.z + extraHeight);
   v_strength = a_field.x;
   v_height = heightRatio;
   v_fold = travellingFold;
@@ -340,13 +347,16 @@ out vec4 fragColor;
 void main() {
   float lowerFade = smoothstep(0.01, 0.18, v_height);
   float upperFade = 1.0 - smoothstep(0.72, 1.0, v_height);
-  float filament = 0.82 + 0.18 * sin(v_fold * 1.15 + u_time * 0.075);
-  // Broad, drifting activity cells create natural quiet gaps and reconnecting
-  // arcs without moving the live NOAA oval away from its measured position.
+  float filament = 0.76 + 0.24 * sin(v_fold * 1.32 + u_time * 0.075);
+  // The interruption moves through the curtain height as well as around the
+  // oval. That avoids a single hard vertical edge and produces loose, dancing
+  // strands while the low-cost source mesh stays static.
   float driftingCells = sin(v_phase * 0.64 + u_time * 0.13 + sin(v_phase * 2.05 - u_time * 0.08) * 0.64);
-  float reconnectingArc = mix(0.08, 1.0, smoothstep(-0.42, 0.42, driftingCells));
+  float braidedCurtain = sin(v_phase * 0.96 + v_height * 8.6 - u_time * 0.17) * 0.40 + sin(v_phase * 2.65 - v_height * 6.1 + u_time * 0.10) * 0.16;
+  float reconnectingArc = mix(0.05, 1.0, smoothstep(-0.46, 0.48, driftingCells + braidedCurtain));
+  float fineRipples = 0.84 + 0.16 * sin(v_phase * 4.2 + v_height * 16.0 - u_time * 0.23);
   float energy = smoothstep(0.04, 0.78, v_strength);
-  float alpha = (0.08 + energy * 0.70) * pow(energy, 0.62) * lowerFade * upperFade * filament * reconnectingArc;
+  float alpha = (0.08 + energy * 0.70) * pow(energy, 0.62) * lowerFade * upperFade * filament * reconnectingArc * fineRipples;
   vec3 oxygenGreen = mix(vec3(0.03, 0.24, 0.22), vec3(0.36, 1.0, 0.56), clamp(v_strength * 1.2, 0.0, 1.0));
   vec3 nitrogenViolet = vec3(0.44, 0.26, 0.90);
   vec3 highAltitudeRed = vec3(0.95, 0.18, 0.36);
