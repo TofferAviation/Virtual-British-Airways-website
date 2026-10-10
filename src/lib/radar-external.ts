@@ -349,15 +349,15 @@ function normaliseAurora(value: unknown): RadarAuroraData {
     source: "NOAA SWPC OVATION Prime",
     observedAt: ovationTimestamp(record?.["Observation Time"]),
     forecastAt: ovationTimestamp(record?.["Forecast Time"]),
-    // The northern map only needs the meaningful part of the OVATION grid.
-    // Keeping cells at 5% and above preserves the observed oval without
-    // sending the transparent zero-probability world grid to each pilot.
+    // Keep the meaningful part of both OVATION ovals. Cells at 5% and above
+    // preserve NOAA's live spatial coverage without sending the transparent
+    // zero-probability world grid to every pilot.
     samples: coordinates.flatMap((entry) => {
       if (!Array.isArray(entry) || entry.length < 3) return [];
       const longitude = asNumber(entry[0]);
       const latitude = asNumber(entry[1]);
       const probability = asNumber(entry[2]);
-      if (longitude === null || latitude === null || probability === null || latitude < 45 || probability < 5) return [];
+      if (longitude === null || latitude === null || probability === null || Math.abs(latitude) < 45 || probability < 5) return [];
       return [{ longitude, latitude, probability: Math.max(0, Math.min(100, probability)) }];
     }),
     refreshedAt: new Date().toISOString(),
