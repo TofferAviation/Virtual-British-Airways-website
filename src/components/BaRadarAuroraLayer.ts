@@ -34,11 +34,11 @@ type ProgramBundle = {
 const POLAR_OVAL_FLOOR = 58;
 const POLAR_OVAL_CEILING = 82.5;
 const SECTOR_WIDTH_DEGREES = 12;
-const CURTAIN_COLUMN_SUBDIVISIONS = 4;
-const CURTAIN_HEIGHT_STEPS = 12;
+const CURTAIN_COLUMN_SUBDIVISIONS = 8;
+const CURTAIN_HEIGHT_STEPS = 18;
 const CURTAIN_FLOOR_METRES = 88_000;
 const CURTAIN_CEILING_METRES = 330_000;
-const CURTAIN_SHEETS = 2;
+const CURTAIN_SHEETS = 4;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -135,9 +135,10 @@ function makeColumns(run: AuroraSector[]) {
 }
 
 /**
- * Builds a pair of high-resolution, continuous curtain sheets from the NOAA
- * field. The sheets are a fraction of a degree apart and use interpolated
- * vertices across each forecast run, rather than independent sector cards.
+ * Builds several high-resolution, continuous curtain volumes from the NOAA
+ * field. The offset veils use interpolated vertices across each forecast run,
+ * rather than independent sector cards, so a close view reads as a stack of
+ * moving curtains instead of one projected plane.
  */
 function createAuroraMesh(data: RadarAuroraData | null) {
   if (!data?.samples.length) return new Float32Array();
@@ -178,26 +179,45 @@ function createAuroraMesh(data: RadarAuroraData | null) {
   for (const run of buildRuns(sectors)) {
     const columns = makeColumns(run);
     for (let sheet = 0; sheet < CURTAIN_SHEETS; sheet += 1) {
-      const sheetOffset = sheet === 0 ? -0.22 : 0.56;
-      const sheetAltitude = sheet === 0 ? 0 : 7_000;
+      // Four shallow, unevenly separated veils create parallax at low camera
+      // angles. They are not copies: every sheet gets a different geographic
+      // curl and an altitude offset before the GPU adds the animated motion.
+      const sheetOffset = [-1.38, -0.50, 0.34, 1.22][sheet] ?? 0;
+      const sheetAltitude = [0, 7_000, 16_000, 27_000][sheet] ?? 0;
       for (let columnIndex = 0; columnIndex < columns.length - 1; columnIndex += 1) {
         const left = columns[columnIndex];
         const right = columns[columnIndex + 1];
         const makePoint = (column: AuroraColumn, height: number) => {
-          // Geographic waves run across the entire strip, instead of restarting
-          // at every NOAA sector edge.
-          const coast = Math.sin(column.phase * Math.PI * 15 + sheet * 1.73) * 0.92
-            + Math.sin(column.phase * Math.PI * 31 - sheet * 0.81) * 0.38;
+          // Real curtains do not stop at one perfectly level ceiling. A
+          // stable combination of broad and fine crests gives each longitude
+          // its own physical extent; the GPU then makes those crests travel.
+          // Keeping this deterministic means the field remains anchored to
+          // the live forecast when a user rotates or selects a flight.
+          const crest = clamp(
+            0.68
+              + Math.sin(column.phase * Math.PI * (9.0 + sheet * 0.9) + sheet * 1.13) * 0.16
+              + Math.sin(column.phase * Math.PI * (25.0 + sheet * 1.8) - sheet * 0.57) * 0.11
+              + Math.sin(column.phase * Math.PI * (51.0 + sheet * 2.4) + sheet * 1.94) * 0.05,
+            0.34,
+            1,
+          );
+          const curtainHeight = height * crest;
+          // Geographic folds run across the entire forecast strip rather than
+          // restarting at every NOAA sector edge. The high part wanders more
+          // than the base, like an auroral curtain held to a magnetic oval.
+          const coast = Math.sin(column.phase * Math.PI * (13 + sheet * 1.7) + sheet * 1.73) * 0.82
+            + Math.sin(column.phase * Math.PI * (29 + sheet * 2.1) - sheet * 0.81) * 0.42;
+          const fold = Math.sin(column.phase * Math.PI * (47 + sheet * 3.3) + sheet * 0.94) * 0.26;
           const latitude = clamp(
-            column.latitude + sheetOffset + coast * (0.42 + height * 0.82),
-            POLAR_OVAL_FLOOR - 1.2,
-            POLAR_OVAL_CEILING + 1.5,
+            column.latitude + sheetOffset + coast * (0.34 + curtainHeight * 1.06) + fold * (0.08 + curtainHeight * 0.72),
+            POLAR_OVAL_FLOOR - 1.8,
+            POLAR_OVAL_CEILING + 2.0,
           );
           return {
-            longitude: column.longitude,
+            longitude: column.longitude + coast * (0.04 + curtainHeight * 0.30) + fold * (0.03 + curtainHeight * 0.20),
             latitude,
-            elevation: CURTAIN_FLOOR_METRES + (CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES) * height + sheetAltitude,
-            strength: column.strength * (sheet === 0 ? 1 : 0.72),
+            elevation: CURTAIN_FLOOR_METRES + (CURTAIN_CEILING_METRES - CURTAIN_FLOOR_METRES) * curtainHeight + sheetAltitude,
+            strength: column.strength * (sheet === 0 ? 1 : 0.76 - sheet * 0.04),
             phase: column.phase,
             height,
             edge: column.edge,
@@ -363,16 +383,18 @@ out float v_edge;
 void main() {
   float sheet = floor(a_field.w + 0.001);
   float edge = fract(a_field.w) * 4.1666667;
-  float largeWave = sin(a_field.y * 48.0 + u_time * 0.10 + sheet * 1.9) * 0.68
-    + sin(a_field.y * 91.0 - u_time * 0.055 + sheet * 0.6) * 0.32;
-  float foldingWave = sin(a_field.y * 166.0 + a_field.z * 8.6 - u_time * 0.27 + sheet * 2.7) * 0.72
-    + sin(a_field.y * 278.0 - a_field.z * 14.0 + u_time * 0.14) * 0.28;
-  float body = sin(3.14159265 * a_field.z);
-  // Tiny motion lets the sheets breathe, while keeping them within the
-  // northern oval selected from NOAA's live forecast field.
-  float latitudeDrift = (largeWave * 0.62 + foldingWave * 0.38) * (0.00005 + a_field.x * 0.00018) * mix(0.22, 1.0, body);
-  float elevationPulse = (largeWave * 0.58 + foldingWave * 0.42) * (2100.0 + a_field.x * 6400.0) * body;
-  gl_Position = projectTileFor3D(a_position.xy + vec2(0.0, latitudeDrift), a_position.z + elevationPulse);
+  float largeWave = sin(a_field.y * 39.0 + u_time * 0.18 + sheet * 1.9) * 0.58
+    + sin(a_field.y * 79.0 - u_time * 0.11 + sheet * 0.6) * 0.42;
+  float foldingWave = sin(a_field.y * 143.0 + a_field.z * 10.8 - u_time * 0.48 + sheet * 2.7) * 0.64
+    + sin(a_field.y * 271.0 - a_field.z * 17.4 + u_time * 0.27 + sheet) * 0.36;
+  // Keep the base stable, but let the higher part of every ribbon curl in
+  // both directions. This makes a genuine 3D, dancing curtain silhouette
+  // instead of a stationary sheet with an animated texture painted on it.
+  float heightEnvelope = 0.10 + 0.90 * smoothstep(0.03, 0.26, a_field.z);
+  float latitudeDrift = (largeWave * 0.54 + foldingWave * 0.46) * (0.00054 + a_field.x * 0.00162) * heightEnvelope;
+  float longitudeDrift = (largeWave * 0.44 - foldingWave * 0.56) * (0.00027 + a_field.x * 0.00092) * heightEnvelope;
+  float elevationPulse = (largeWave * 0.52 + foldingWave * 0.48) * (14000.0 + a_field.x * 36000.0) * heightEnvelope;
+  gl_Position = projectTileFor3D(a_position.xy + vec2(longitudeDrift, latitudeDrift), a_position.z + elevationPulse);
   v_strength = a_field.x;
   v_phase = a_field.y;
   v_height = a_field.z;
@@ -417,15 +439,26 @@ void main() {
   float edgeFade = smoothstep(0.02, 0.74, v_edge);
   vec2 slowFlow = vec2(v_phase * 11.0 - u_time * 0.035, v_height * 3.1 + u_time * 0.052 + v_sheet * 0.37);
   float cloud = fbm(slowFlow);
-  float broadFold = 0.5 + 0.5 * sin(v_phase * 105.0 + cloud * 6.2 - u_time * 0.19 + v_height * 5.6);
-  float innerFold = 0.5 + 0.5 * sin(v_phase * 242.0 - cloud * 8.0 + u_time * 0.31 - v_height * 11.0);
-  float upwardRay = pow(max(broadFold, innerFold), 1.75);
-  float veil = mix(0.62, 1.0, cloud) * mix(0.65, 1.0, upwardRay);
-  // A drifting disruption prevents a perfect circular ribbon without cutting
-  // the field into square forecast cells.
-  float breathing = 0.72 + 0.28 * sin(v_phase * 67.0 + cloud * 4.7 + u_time * 0.12);
-  float sheetWeight = mix(1.0, 0.52, v_sheet);
-  float alpha = (0.20 + energy * 0.34) * veil * breathing * lowerFade * upperFade * edgeFade * sheetWeight;
+  float broadFold = 0.5 + 0.5 * sin(v_phase * 89.0 + cloud * 6.2 - u_time * 0.31 + v_height * 7.9 + v_sheet * 1.7);
+  float innerFold = 0.5 + 0.5 * sin(v_phase * 211.0 - cloud * 8.6 + u_time * 0.51 - v_height * 15.8 - v_sheet * 2.4);
+  // The two filament fields slide through each other at different speeds.
+  // Their curved phase includes height, so this creates flowing folds and
+  // pillars rather than a texture travelling across a planar ribbon.
+  float filamentA = 0.5 + 0.5 * sin(v_phase * 331.0 + cloud * 10.4 - u_time * 0.62 + v_height * 17.4 + v_sheet * 3.1);
+  float filamentB = 0.5 + 0.5 * sin(v_phase * 487.0 - cloud * 7.2 + u_time * 0.39 - v_height * 24.8 + v_sheet * 2.2);
+  float foldField = max(broadFold * 0.72 + innerFold * 0.28, innerFold * 0.58 + filamentA * 0.42);
+  float filamentField = max(filamentA, filamentB * 0.86);
+  float upwardRay = pow(max(foldField, filamentField * 0.92), 1.04);
+  float veil = mix(0.64, 1.0, cloud) * mix(0.34, 1.0, upwardRay);
+  float pillar = smoothstep(0.37, 0.82, filamentField * 0.72 + foldField * 0.28);
+  // A low-frequency disruption makes the ribbons gather, split and softly
+  // reconnect. It has no grid-aligned threshold, so the result cannot return
+  // to the straight forecast-cell cut-offs seen in earlier versions.
+  float breakField = fbm(vec2(v_phase * 4.8 + u_time * 0.026, v_height * 2.4 - u_time * 0.068));
+  float gathering = smoothstep(0.12, 0.84, breakField + sin(v_phase * 52.0 - u_time * 0.17 + v_height * 7.0) * 0.18);
+  float breathing = 0.65 + 0.35 * sin(v_phase * 63.0 + cloud * 5.1 + u_time * 0.22 + v_sheet);
+  float sheetWeight = max(0.34, 1.0 - v_sheet * 0.22);
+  float alpha = (0.30 + energy * 0.44) * veil * mix(0.18, 1.0, pillar) * mix(0.34, 1.0, gathering) * breathing * lowerFade * upperFade * edgeFade * sheetWeight;
   if (alpha < 0.003) discard;
   vec3 green = mix(vec3(0.025, 0.33, 0.20), vec3(0.33, 1.0, 0.54), clamp(energy * 1.18, 0.0, 1.0));
   vec3 violet = vec3(0.56, 0.28, 0.94);
