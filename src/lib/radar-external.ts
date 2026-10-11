@@ -61,6 +61,46 @@ export type RadarWindGrid = {
   v: string;
 };
 
+/**
+ * A compact, browser-safe subset of a decoded NOAA GFS model analysis.
+ * Values remain model fields rather than satellite observations. The global
+ * one-degree grid is deliberate: it keeps live globe interaction practical
+ * while the renderer supplies only sub-grid visual structure.
+ */
+export type RadarCloudLayerId = "low" | "middle" | "high";
+
+export type RadarCloudLayer = {
+  id: RadarCloudLayerId;
+  label: string;
+  coverageField: "LCDC" | "MCDC" | "HCDC";
+  representativePressureHpa: number;
+  basePressureHpa: number;
+  topPressureHpa: number;
+  /** R=coverage %, G=RH %, B=combined cloud liquid/ice mixing ratio, A=valid sample. */
+  weather: string;
+  /** R=base geopotential height / 100 m, G=top / 100 m, B=U wind, A=V wind. */
+  geometry: string;
+};
+
+export type RadarCloudData = {
+  source: "NOAA GFS";
+  sourceResolutionDeg: number;
+  displayResolutionDeg: number;
+  cycleAt: string;
+  validAt: string;
+  fetchedAt: string;
+  stale: boolean;
+  width: number;
+  height: number;
+  west: number;
+  north: number;
+  stepDeg: number;
+  encoding: "rgba8-base64";
+  /** Present fields from the GFS run; optional microphysics can be unavailable. */
+  fields: string[];
+  layers: RadarCloudLayer[];
+};
+
 type GeoPosition = [number, number] | [number, number, number];
 type AdvisoryGeometry =
   | { type: "Polygon"; coordinates: GeoPosition[][] }

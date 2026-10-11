@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:clouds": "node --test src/lib/radar-cloud-math.test.mjs",
     "migrate:pilot-state": "node --env-file=.env.local scripts/migrate-pilot-state-to-supabase.mjs"
   },
   "dependencies": {
