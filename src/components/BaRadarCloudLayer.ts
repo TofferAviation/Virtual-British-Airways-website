@@ -54,9 +54,9 @@ const WIND_RANGE_METRES_PER_SECOND = 80;
 
 const QUALITY: Record<Exclude<CloudQuality, "auto">, QualityProfile> = {
   low: { stepDegrees: 10, slices: 2, repaintMs: 140 },
-  medium: { stepDegrees: 6, slices: 4, repaintMs: 96 },
-  high: { stepDegrees: 3, slices: 5, repaintMs: 66 },
-  ultra: { stepDegrees: 2, slices: 6, repaintMs: 46 },
+  medium: { stepDegrees: 4, slices: 4, repaintMs: 96 },
+  high: { stepDegrees: 2.5, slices: 5, repaintMs: 66 },
+  ultra: { stepDegrees: 1.5, slices: 6, repaintMs: 46 },
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -392,45 +392,6 @@ uniform float u_solarDeclination;
 out vec4 fragColor;
 const float CLOUD_PI = 3.14159265359;
 const float CLOUD_TAU = 6.28318530718;
-float hash(vec2 point) {
-  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
-}
-float noise(vec2 point) {
-  vec2 cell = floor(point);
-  vec2 fraction = fract(point);
-  fraction = fraction * fraction * (3.0 - 2.0 * fraction);
-  return mix(mix(hash(cell), hash(cell + vec2(1.0, 0.0)), fraction.x), mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), fraction.x), fraction.y);
-}
-float fbm(vec2 point) {
-  float total = 0.0;
-  float amplitude = 0.58;
-  for (int octave = 0; octave < 4; octave++) {
-    total += noise(point) * amplitude;
-    point = point * 2.04 + vec2(13.7, 7.1);
-    amplitude *= 0.5;
-  }
-  return total;
-}
-float cloudStructure(vec2 weatherSpace) {
-  // Synoptic cloud shields are broad, wind-sheared systems rather than a
-  // field of isotropic blobs. Two low-cost domain warps keep the form
-  // coherent while leaving the GFS coverage field in charge of where a cloud
-  // can exist.
-  // These frequencies are intentionally tied to synoptic, not pixel, scale.
-  // The earlier values reached hundreds of cells across the globe once fBm
-  // octaves were applied, which read as a repeated camouflage texture.
-  vec2 broadSpace = vec2(weatherSpace.x * 0.025, weatherSpace.y * 0.052);
-  vec2 warp = vec2(
-    fbm(broadSpace + vec2(u_time * 0.00065, 4.3)),
-    fbm(broadSpace + vec2(9.1, -u_time * 0.00042))
-  ) - 0.5;
-  float shields = fbm(broadSpace + warp * 1.35);
-  // The finer component is deliberately elongated along the prevailing
-  // longitudinal direction. It resolves wisps and broken edges without the
-  // repeated round cells that made the first pass look stamped-on.
-  float filaments = fbm(vec2(weatherSpace.x * 0.105, weatherSpace.y * 0.024) + warp * 2.1 + vec2(-u_time * 0.0012, u_time * 0.0003));
-  return mix(shields, filaments, 0.25);
-}
 void main() {
   vec4 weather = texture(u_weather, v_geo);
   float coverage = weather.r;
@@ -438,29 +399,21 @@ void main() {
   float condensate = weather.b;
   float valid = weather.a * v_valid;
   if (valid < 0.5 || coverage < 0.035 || u_opacity < 0.01) discard;
-  // GFS coverage is the strict mask. The procedural term only erodes and
-  // shapes coverage already present in the model—it must never turn a nearly
-  // clear model cell into a bright cloud.
-  vec2 weatherSpace = vec2(v_geo.x * 360.0, v_geo.y * 180.0);
-  float structure = cloudStructure(weatherSpace);
+  // The GFS coverage field is deliberately the whole horizontal shape. The
+  // prior procedural noise created a stamped, camouflage-like pattern that
+  // implied weather not present in the model. Linear texture filtering gives
+  // the 1-degree forecast its correct, smooth synoptic boundaries instead.
   float moisture = clamp(0.68 + humidity * 0.22 + condensate * 0.22, 0.55, 1.08);
   float modelCoverage = clamp(coverage * moisture, 0.0, 1.0);
-  float carved = smoothstep(0.24, 0.78, structure);
-  float layerCharacter = u_layerKind < 0.5 ? 0.20 : (u_layerKind < 1.5 ? 0.28 : 0.37);
-  float density = modelCoverage * mix(layerCharacter, 1.0, carved);
-  // Each shell samples a different part of a correlated vertical field. This
-  // breaks the old "same texture on every slice" appearance and produces
-  // changing internal parallax at an oblique camera angle.
-  float sliceDetail = fbm(vec2(
-    weatherSpace.x * 0.12 + v_densityHeight * 2.7 - u_time * 0.0015,
-    weatherSpace.y * 0.036 - v_densityHeight * 0.9 + u_time * 0.0004
-  ));
-  float verticalCore = mix(0.32, 1.0, pow(sin(CLOUD_PI * clamp(v_densityHeight, 0.0, 1.0)), 0.52));
-  float porousVolume = mix(0.26, 1.0, smoothstep(0.22, 0.79, sliceDetail));
-  // High ice clouds have the sparsest, most filamentary vertical body; low
-  // cloud retains a more continuous deck where the GFS layer is overcast.
-  float verticalCharacter = u_layerKind < 0.5 ? 0.88 : (u_layerKind < 1.5 ? 0.76 : 0.62);
-  density *= verticalCore * mix(verticalCharacter, 1.0, porousVolume);
+  float density = smoothstep(0.075, 0.82, modelCoverage);
+  // Give the model column real vertical extent without inventing a separate
+  // horizontal pattern at every slice. Low cloud is fuller; high ice cloud
+  // stays light and diffuse through its pressure-derived thickness.
+  float lowerFalloff = smoothstep(0.01, 0.18, v_densityHeight);
+  float upperFalloff = 1.0 - smoothstep(0.76, 1.0, v_densityHeight);
+  float verticalCore = mix(0.54, 1.0, pow(sin(CLOUD_PI * clamp(v_densityHeight, 0.0, 1.0)), 0.72));
+  float layerBody = u_layerKind < 0.5 ? 1.0 : (u_layerKind < 1.5 ? 0.84 : 0.67);
+  density *= lowerFalloff * upperFalloff * verticalCore * layerBody;
   if (density < 0.018) discard;
   float latitude = (0.5 - v_geo.y) * CLOUD_PI;
   float longitude = (v_geo.x - 0.5) * CLOUD_TAU;
