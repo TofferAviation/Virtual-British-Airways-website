@@ -6,6 +6,15 @@
 export const GFS_CLOUD_HEIGHT_SCALE_METRES = 100;
 export const GFS_CLOUD_MIN_THICKNESS_METRES = 120;
 
+export type CloudRendererQuality = "auto" | "low" | "medium" | "high" | "ultra";
+
+export type CloudRendererCapabilities = {
+  mobile: boolean;
+  /** Browsers may deliberately omit this value; unknown is not low-memory. */
+  memoryGb?: number;
+  cores?: number;
+};
+
 export function clampCloudValue(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -39,4 +48,23 @@ export function decodeCloudHeight(encoded: number) {
  */
 export function cloudPresentationHeight(baseMetres: number, modelMetres: number, enhanced = false) {
   return baseMetres + (modelMetres - baseMetres) * (enhanced ? 1.45 : 1);
+}
+
+/**
+ * Select a stable cloud mesh profile without treating an omitted browser hint
+ * as evidence of a low-end device. This runs only when settings change, so
+ * the mesh cannot flicker between levels of detail during an orbit gesture.
+ */
+export function resolveCloudRendererQuality(
+  requested: CloudRendererQuality,
+  capabilities: CloudRendererCapabilities,
+): Exclude<CloudRendererQuality, "auto"> {
+  if (requested !== "auto") return requested;
+  if (capabilities.mobile) return "low";
+
+  const cores = capabilities.cores ?? 4;
+  const memoryGb = capabilities.memoryGb;
+  if (memoryGb !== undefined && memoryGb <= 4 && cores <= 4) return "low";
+  if (cores >= 8 && (memoryGb === undefined || memoryGb >= 6)) return "high";
+  return "medium";
 }

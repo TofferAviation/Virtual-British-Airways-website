@@ -6,6 +6,7 @@ import {
   decodeCloudHeight,
   encodeCloudHeight,
   isValidCloudColumn,
+  resolveCloudRendererQuality,
 } from "./radar-cloud-math.ts";
 
 test("GFS cloud texture dimensions retain every grid edge", () => {
@@ -31,4 +32,13 @@ test("height packing clamps safely and stays within one texture quantisation ste
 test("enhanced presentation preserves the model cloud base", () => {
   assert.equal(cloudPresentationHeight(1_000, 4_000, false), 4_000);
   assert.equal(cloudPresentationHeight(1_000, 4_000, true), 5_350);
+});
+
+test("automatic cloud quality does not mistake missing device-memory hints for a low-end desktop", () => {
+  assert.equal(resolveCloudRendererQuality("auto", { mobile: true, cores: 12 }), "low");
+  assert.equal(resolveCloudRendererQuality("auto", { mobile: false, memoryGb: 2, cores: 2 }), "low");
+  assert.equal(resolveCloudRendererQuality("auto", { mobile: false, cores: 12 }), "high");
+  assert.equal(resolveCloudRendererQuality("auto", { mobile: false, memoryGb: 8, cores: 8 }), "high");
+  assert.equal(resolveCloudRendererQuality("auto", { mobile: false, memoryGb: 4, cores: 8 }), "medium");
+  assert.equal(resolveCloudRendererQuality("ultra", { mobile: true, memoryGb: 2, cores: 2 }), "ultra");
 });

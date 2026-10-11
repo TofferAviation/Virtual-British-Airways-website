@@ -1,7 +1,9 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarCloudData, RadarCloudLayerId } from "@/lib/radar-external";
+import { resolveCloudRendererQuality, type CloudRendererQuality } from "@/lib/radar-cloud-math";
 
-export type CloudQuality = "auto" | "low" | "medium" | "high" | "ultra";
+export type CloudQuality = CloudRendererQuality;
+export type CloudDebugMode = "lit" | "coverage" | "density" | "height" | "lighting" | "mesh";
 
 export type CloudSettings = {
   realWorld: boolean;
@@ -13,6 +15,8 @@ export type CloudSettings = {
   selfShadows: boolean;
   /** A deliberately opt-in, modest vertical relief boost for a full-globe view. */
   enhancedPresentation: boolean;
+  /** Available only in the development-only cloud inspector. */
+  debugMode: CloudDebugMode;
 };
 
 export const DEFAULT_CLOUD_SETTINGS: CloudSettings = {
@@ -24,10 +28,12 @@ export const DEFAULT_CLOUD_SETTINGS: CloudSettings = {
   high: true,
   selfShadows: true,
   enhancedPresentation: false,
+  debugMode: "lit",
 };
 
 type QualityProfile = { stepDegrees: number; slices: number; repaintMs: number };
 type TexturePair = { weather: WebGLTexture; geometry: WebGLTexture };
+type VolumeMesh = { vertices: Float32Array; verticesPerSlice: number; slices: number };
 type ProgramBundle = {
   program: WebGLProgram;
   position: number;
@@ -38,11 +44,13 @@ type ProgramBundle = {
   transition: WebGLUniformLocation | null;
   weather: WebGLUniformLocation | null;
   geometry: WebGLUniformLocation | null;
-  time: WebGLUniformLocation | null;
   opacity: WebGLUniformLocation | null;
   selfShadow: WebGLUniformLocation | null;
   enhancedPresentation: WebGLUniformLocation | null;
   layerKind: WebGLUniformLocation | null;
+  sliceCount: WebGLUniformLocation | null;
+  debugMode: WebGLUniformLocation | null;
+  meshStep: WebGLUniformLocation | null;
   solarTime: WebGLUniformLocation | null;
   solarDeclination: WebGLUniformLocation | null;
 };
@@ -50,7 +58,6 @@ type ProgramBundle = {
 const TAU = Math.PI * 2;
 const MAX_MERCATOR_LATITUDE = 85;
 const HEIGHT_SCALE_METRES = 100;
-const WIND_RANGE_METRES_PER_SECOND = 80;
 
 const QUALITY: Record<Exclude<CloudQuality, "auto">, QualityProfile> = {
   low: { stepDegrees: 10, slices: 2, repaintMs: 140 },
@@ -69,18 +76,20 @@ function mercatorY(latitude: number) {
 }
 
 function resolveQuality(requested: CloudQuality): Exclude<CloudQuality, "auto"> {
-  if (requested !== "auto") return requested;
   const device = navigator as Navigator & { deviceMemory?: number };
-  const memory = device.deviceMemory ?? 4;
-  const cores = navigator.hardwareConcurrency ?? 4;
-  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || memory <= 4 || cores <= 4) return "low";
-  return memory >= 8 && cores >= 8 ? "high" : "medium";
+  return resolveCloudRendererQuality(requested, {
+    mobile: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent),
+    memoryGb: device.deviceMemory,
+    cores: navigator.hardwareConcurrency,
+  });
 }
 
-function buildVolumeMesh(profile: QualityProfile) {
+function buildVolumeMesh(profile: QualityProfile): VolumeMesh {
   const columns = Math.ceil(360 / profile.stepDegrees);
   const rows = Math.ceil((MAX_MERCATOR_LATITUDE * 2) / profile.stepDegrees);
-  const vertices: number[] = [];
+  const verticesPerSlice = columns * rows * 6;
+  const vertices = new Float32Array(verticesPerSlice * profile.slices * 3);
+  let offset = 0;
   const appendShell = (leftLongitude: number, topLatitude: number, rightLongitude: number, bottomLatitude: number, slice: number) => {
     const left = (leftLongitude + 180) / 360;
     const right = (rightLongitude + 180) / 360;
@@ -89,25 +98,29 @@ function buildVolumeMesh(profile: QualityProfile) {
     // A single, level-normalised shell is used for each slice. Keeping all
     // four corners at the same fractional height preserves the model's
     // vertical column instead of turning a grid cell into a diagonal plane.
-    vertices.push(left, top, slice, right, top, slice, right, bottom, slice);
-    vertices.push(left, top, slice, right, bottom, slice, left, bottom, slice);
+    vertices[offset++] = left; vertices[offset++] = top; vertices[offset++] = slice;
+    vertices[offset++] = right; vertices[offset++] = top; vertices[offset++] = slice;
+    vertices[offset++] = right; vertices[offset++] = bottom; vertices[offset++] = slice;
+    vertices[offset++] = left; vertices[offset++] = top; vertices[offset++] = slice;
+    vertices[offset++] = right; vertices[offset++] = bottom; vertices[offset++] = slice;
+    vertices[offset++] = left; vertices[offset++] = bottom; vertices[offset++] = slice;
   };
-  for (let row = 0; row < rows; row += 1) {
-    const topLatitude = MAX_MERCATOR_LATITUDE - row * profile.stepDegrees;
-    const bottomLatitude = Math.max(-MAX_MERCATOR_LATITUDE, topLatitude - profile.stepDegrees);
-    for (let column = 0; column < columns; column += 1) {
-      const leftLongitude = -180 + column * profile.stepDegrees;
-      const rightLongitude = Math.min(180, leftLongitude + profile.stepDegrees);
-      for (let slice = 0; slice < profile.slices; slice += 1) {
-        // Separate curved shells are a bounded volume approximation. They
-        // use the real model base/top per cell, so they retain parallax at
-        // oblique views without CPU rebuilding as the camera moves.
-        const sliceCentre = (slice + 0.5) / profile.slices;
+  // Lay each shell out contiguously. Rendering outside-in then integrates
+  // the optically-thin volume in radial order instead of interleaving every
+  // cell's low and high samples (which caused unstable transparent fog).
+  for (let slice = 0; slice < profile.slices; slice += 1) {
+    const sliceCentre = (slice + 0.5) / profile.slices;
+    for (let row = 0; row < rows; row += 1) {
+      const topLatitude = MAX_MERCATOR_LATITUDE - row * profile.stepDegrees;
+      const bottomLatitude = Math.max(-MAX_MERCATOR_LATITUDE, topLatitude - profile.stepDegrees);
+      for (let column = 0; column < columns; column += 1) {
+        const leftLongitude = -180 + column * profile.stepDegrees;
+        const rightLongitude = Math.min(180, leftLongitude + profile.stepDegrees);
         appendShell(leftLongitude, topLatitude, rightLongitude, bottomLatitude, sliceCentre);
       }
     }
   }
-  return new Float32Array(vertices);
+  return { vertices, verticesPerSlice, slices: profile.slices };
 }
 
 function decodeRgba(value: string, expectedBytes: number) {
@@ -136,18 +149,27 @@ function createTexture(gl: WebGL2RenderingContext, width: number, height: number
   if (!texture) throw new Error("Unable to allocate GFS cloud texture.");
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  // Mip filtering stops the 1-degree GFS texture from aliasing into visible
+  // stripes and blocks when a globe tile is viewed at an oblique distance.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, values);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  const anisotropic = gl.getExtension("EXT_texture_filter_anisotropic");
+  if (anisotropic) {
+    const maximum = gl.getParameter(anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number;
+    gl.texParameterf(gl.TEXTURE_2D, anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(4, maximum));
+  }
   return texture;
 }
 
 /**
  * Model-driven cloud renderer. NOAA GFS controls coverage, vertical extent,
- * humidity, condensate and wind. The fragment shader adds only cloud-scale
- * erosion and lighting; it never creates coverage outside a valid GFS cell.
+ * humidity and condensate. It integrates the real model columns as ordered,
+ * optically-thin shells; it never generates fake cloud coverage or drifts the
+ * model across the globe between data refreshes.
  */
 export class BaRadarCloudLayer implements CustomLayerInterface {
   readonly id = "ba-radar-globe-gfs-cloud-volumes";
@@ -159,8 +181,10 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
   private buffer: WebGLBuffer | null = null;
   private programs = new Map<string, ProgramBundle>();
   private textures = new Map<RadarCloudLayerId, TexturePair>();
-  private mesh = new Float32Array();
+  private mesh: Float32Array<ArrayBufferLike> = new Float32Array();
   private vertexCount = 0;
+  private verticesPerSlice = 0;
+  private meshSlices = 0;
   private enabled = false;
   private data: RadarCloudData | null = null;
   private settings: CloudSettings = { ...DEFAULT_CLOUD_SETTINGS };
@@ -169,7 +193,6 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
   private textureKey = "";
   private repaintTimer: number | null = null;
   private disposed = false;
-  private startedAt = 0;
 
   update(data: RadarCloudData | null, enabled: boolean, settings: CloudSettings = DEFAULT_CLOUD_SETTINGS) {
     this.data = data;
@@ -181,8 +204,11 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     const meshKey = `${this.resolvedQuality}`;
     if (meshKey !== this.meshKey) {
       this.meshKey = meshKey;
-      this.mesh = buildVolumeMesh(QUALITY[this.resolvedQuality]);
+      const mesh = buildVolumeMesh(QUALITY[this.resolvedQuality]);
+      this.mesh = mesh.vertices;
       this.vertexCount = this.mesh.length / 3;
+      this.verticesPerSlice = mesh.verticesPerSlice;
+      this.meshSlices = mesh.slices;
       this.uploadMesh();
     }
     const textureKey = `${data?.fetchedAt ?? "empty"}:${data?.validAt ?? ""}:${data?.width ?? 0}:${data?.height ?? 0}`;
@@ -201,7 +227,6 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     }
     this.map = map;
     this.gl = context;
-    this.startedAt = performance.now();
     this.buffer = context.createBuffer();
     this.uploadMesh();
     this.uploadTextures();
@@ -245,10 +270,12 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     gl.uniform4f(bundle.tileMercatorCoordinates, ...projection.tileMercatorCoords);
     gl.uniform4f(bundle.clippingPlane, ...projection.clippingPlane);
     gl.uniform1f(bundle.transition, projection.projectionTransition);
-    gl.uniform1f(bundle.time, (performance.now() - this.startedAt) / 1_000);
     gl.uniform1f(bundle.opacity, clamp(this.settings.opacity, 0, 1));
     gl.uniform1f(bundle.selfShadow, this.settings.selfShadows ? 1 : 0);
     gl.uniform1f(bundle.enhancedPresentation, this.settings.enhancedPresentation ? 1 : 0);
+    gl.uniform1f(bundle.sliceCount, Math.max(1, this.meshSlices));
+    gl.uniform1i(bundle.debugMode, this.settings.debugMode === "coverage" ? 1 : this.settings.debugMode === "density" ? 2 : this.settings.debugMode === "height" ? 3 : this.settings.debugMode === "lighting" ? 4 : this.settings.debugMode === "mesh" ? 5 : 0);
+    gl.uniform1f(bundle.meshStep, QUALITY[this.resolvedQuality].stepDegrees);
     gl.uniform1f(bundle.solarTime, now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
     gl.uniform1f(bundle.solarDeclination, 0.409 * Math.sin(TAU * (dayOfYear - 81) / 365.25));
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
@@ -259,8 +286,9 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
-    for (const layer of this.data.layers) {
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    const layers = [...this.data.layers].sort((left, right) => this.layerRank(right.id) - this.layerRank(left.id));
+    for (const layer of layers) {
       if (!this.layerEnabled(layer.id)) continue;
       const textures = this.textures.get(layer.id);
       if (!textures) continue;
@@ -271,13 +299,21 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
       gl.bindTexture(gl.TEXTURE_2D, textures.geometry);
       gl.uniform1i(bundle.geometry, 1);
       gl.uniform1f(bundle.layerKind, layer.id === "low" ? 0 : layer.id === "middle" ? 1 : 2);
-      gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+      // The camera is outside the atmosphere, so descending radial shells are
+      // a stable back-to-front approximation for each model cloud column.
+      for (let slice = this.meshSlices - 1; slice >= 0; slice -= 1) {
+        gl.drawArrays(gl.TRIANGLES, slice * this.verticesPerSlice, this.verticesPerSlice);
+      }
     }
     gl.depthMask(true);
   }
 
   private layerEnabled(layer: RadarCloudLayerId) {
     return layer === "low" ? this.settings.low : layer === "middle" ? this.settings.middle : this.settings.high;
+  }
+
+  private layerRank(layer: RadarCloudLayerId) {
+    return layer === "high" ? 2 : layer === "middle" ? 1 : 0;
   }
 
   private uploadMesh() {
@@ -334,43 +370,26 @@ ${options.shaderData.vertexShaderPrelude}
 ${options.shaderData.define}
 in vec3 a_position;
 uniform sampler2D u_geometry;
-uniform float u_time;
 uniform float u_enhancedPresentation;
 out vec2 v_geo;
 out float v_densityHeight;
-out float v_humidity;
-out float v_condensate;
 out float v_valid;
 out float v_layerHeight;
-const float CLOUD_PI = 3.14159265359;
-float mercatorY(float latitude) {
-  float radians = clamp(latitude, -85.0, 85.0) * CLOUD_PI / 180.0;
-  return (1.0 - log(tan(CLOUD_PI * 0.25 + radians * 0.5)) / CLOUD_PI) * 0.5;
-}
 void main() {
-  float latitude = degrees(atan(sinh(CLOUD_PI * (1.0 - 2.0 * a_position.y))));
-  v_geo = vec2(fract(a_position.x), clamp((90.0 - latitude) / 180.0, 0.0, 1.0));
+  float latitude = degrees(atan(sinh(3.14159265359 * (1.0 - 2.0 * a_position.y))));
+  // Retain the east-edge value of 1.0. Fract() made the final longitude cell
+  // interpolate through half the planet before texture wrapping occurred.
+  v_geo = vec2(a_position.x, clamp((90.0 - latitude) / 180.0, 0.0, 1.0));
   vec4 geometry = texture(u_geometry, v_geo);
   float base = geometry.r * 255.0 * ${HEIGHT_SCALE_METRES.toFixed(1)};
   float top = geometry.g * 255.0 * ${HEIGHT_SCALE_METRES.toFixed(1)};
-  float windEast = geometry.b * 160.0 - ${WIND_RANGE_METRES_PER_SECOND.toFixed(1)};
-  float windNorth = geometry.a * 160.0 - ${WIND_RANGE_METRES_PER_SECOND.toFixed(1)};
-  // One visual second represents six seconds of steady model-wind drift.
-  // It only shifts sub-grid texture detail; GFS coverage and model heights
-  // stay fixed to the forecast grid until the next model refresh.
-  float driftSeconds = u_time * 6.0;
-  float latitudeDrift = windNorth * driftSeconds / 111000.0;
-  float longitudeDrift = windEast * driftSeconds / max(19000.0, 111000.0 * cos(latitude * CLOUD_PI / 180.0));
   // Keep the cloud base at its model altitude. The optional presentation mode
   // only expands thickness above that true base by a restrained 45%, making
   // deep layers legible from a full-globe camera without changing the data.
   float modelElevation = mix(base, top, a_position.z);
   float elevation = base + (modelElevation - base) * mix(1.0, 1.45, u_enhancedPresentation);
-  vec2 position = vec2(a_position.x + longitudeDrift / 360.0, mercatorY(latitude + latitudeDrift));
-  gl_Position = projectTileFor3D(position, elevation);
+  gl_Position = projectTileFor3D(a_position.xy, elevation);
   v_densityHeight = a_position.z;
-  v_humidity = geometry.r + geometry.g; // retained only to vary vertex interpolation continuously
-  v_condensate = geometry.b;
   v_valid = step(1.25, top / max(1.0, base));
   v_layerHeight = elevation;
 }`);
@@ -378,15 +397,15 @@ void main() {
 precision highp float;
 in vec2 v_geo;
 in float v_densityHeight;
-in float v_humidity;
-in float v_condensate;
 in float v_valid;
 in float v_layerHeight;
 uniform sampler2D u_weather;
-uniform float u_time;
 uniform float u_opacity;
 uniform float u_selfShadow;
 uniform float u_layerKind;
+uniform float u_sliceCount;
+uniform int u_debugMode;
+uniform float u_meshStep;
 uniform float u_solarTime;
 uniform float u_solarDeclination;
 out vec4 fragColor;
@@ -435,11 +454,36 @@ void main() {
   vec3 duskColour = vec3(0.38, 0.26, 0.19) * twilight * (0.32 + (1.0 - thickness) * 0.4);
   vec3 nightColour = baseColour * 0.075;
   vec3 colour = mix(nightColour, dayColour + duskColour, daylight + twilight * 0.58);
-  // More distant high clouds can remain thin; lower dense layers receive a
-  // little more opacity but never emit light on the night side.
-  float layerOpacity = u_layerKind < 0.5 ? 0.25 : (u_layerKind < 1.5 ? 0.19 : 0.13);
+  // Convert the column density to a per-shell transmittance. This makes a
+  // four- or six-slice profile retain the same overall opacity as a two-slice
+  // fallback instead of becoming a solid grey fog at higher quality.
+  float layerOpticalDepth = u_layerKind < 0.5 ? 0.76 : (u_layerKind < 1.5 ? 0.52 : 0.34);
   float atmosphericFade = 1.0 - smoothstep(15000.0, 24000.0, v_layerHeight);
-  float alpha = density * layerOpacity * u_opacity * (0.52 + daylight * 0.48) * atmosphericFade;
+  float opticalDepth = density * layerOpticalDepth * u_opacity * (0.52 + daylight * 0.48) * atmosphericFade;
+  float alpha = 1.0 - exp(-opticalDepth / max(1.0, u_sliceCount));
+  if (u_debugMode == 1) {
+    fragColor = vec4(vec3(coverage), max(alpha, 0.72));
+    return;
+  }
+  if (u_debugMode == 2) {
+    fragColor = vec4(vec3(density), max(alpha, 0.72));
+    return;
+  }
+  if (u_debugMode == 3) {
+    float relativeHeight = clamp(v_layerHeight / 24000.0, 0.0, 1.0);
+    fragColor = vec4(vec3(relativeHeight, 1.0 - relativeHeight, 0.22), max(alpha, 0.72));
+    return;
+  }
+  if (u_debugMode == 4) {
+    fragColor = vec4(vec3(daylight, twilight, 1.0 - daylight), max(alpha, 0.72));
+    return;
+  }
+  if (u_debugMode == 5) {
+    vec2 grid = abs(fract(vec2(v_geo.x * 360.0, v_geo.y * 180.0) / u_meshStep) - 0.5);
+    float edge = 1.0 - smoothstep(0.42, 0.49, max(grid.x, grid.y));
+    fragColor = vec4(mix(colour, vec3(1.0, 0.24, 0.08), edge), max(alpha, edge * 0.88));
+    return;
+  }
   fragColor = vec4(colour, alpha);
 }`);
     const program = gl.createProgram();
@@ -467,11 +511,13 @@ void main() {
       transition: gl.getUniformLocation(program, "u_projection_transition"),
       weather: gl.getUniformLocation(program, "u_weather"),
       geometry: gl.getUniformLocation(program, "u_geometry"),
-      time: gl.getUniformLocation(program, "u_time"),
       opacity: gl.getUniformLocation(program, "u_opacity"),
       selfShadow: gl.getUniformLocation(program, "u_selfShadow"),
       enhancedPresentation: gl.getUniformLocation(program, "u_enhancedPresentation"),
       layerKind: gl.getUniformLocation(program, "u_layerKind"),
+      sliceCount: gl.getUniformLocation(program, "u_sliceCount"),
+      debugMode: gl.getUniformLocation(program, "u_debugMode"),
+      meshStep: gl.getUniformLocation(program, "u_meshStep"),
       solarTime: gl.getUniformLocation(program, "u_solarTime"),
       solarDeclination: gl.getUniformLocation(program, "u_solarDeclination"),
     };
