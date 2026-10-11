@@ -8,8 +8,12 @@ type Cached<T> = { value: T; expiresAt: number };
 type MessageMap = Map<string, GribMessage | null>;
 
 const GFS_BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com";
-const GFS_RESOLUTION_DEGREES = 1;
-const DISPLAY_STRIDE = 1;
+// Ingest the operational 0.25° analysis, then retain every other model cell
+// for a 0.5° globe texture. This is materially sharper than the former 1°
+// grid without shipping satellite-sized imagery or inventing coverage between
+// the model's reported cloud columns.
+const GFS_RESOLUTION_DEGREES = 0.25;
+const DISPLAY_STRIDE = 2;
 const CACHE_FOR_MS = 25 * 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 const WIND_RANGE_METRES_PER_SECOND = 80;
@@ -36,11 +40,7 @@ const CLOUD_PROFILES: CloudProfile[] = [
 function gfsBaseUrl(cycle: Date) {
   const date = cycle.toISOString().slice(0, 10).replaceAll("-", "");
   const hour = String(cycle.getUTCHours()).padStart(2, "0");
-  // GFS also publishes a 0.25° product. The renderer deliberately ingests
-  // this official 1° product: it transports roughly 1/16 as many cells,
-  // keeping the live global globe responsive without pretending the fine
-  // procedural detail is observed weather.
-  return `${GFS_BUCKET}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.1p00.f000`;
+  return `${GFS_BUCKET}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.0p25.f000`;
 }
 
 function candidateCycles() {

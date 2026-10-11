@@ -13,6 +13,8 @@ test("GFS cloud texture dimensions retain every grid edge", () => {
   assert.equal(cloudGridDimension(181, 1), 181);
   assert.equal(cloudGridDimension(181, 2), 91);
   assert.equal(cloudGridDimension(360, 3), 120);
+  assert.equal(cloudGridDimension(721, 2), 361);
+  assert.equal(cloudGridDimension(1440, 2), 720);
 });
 
 test("GFS cloud columns reject inverted, missing, and unrealistically thin layers", () => {
