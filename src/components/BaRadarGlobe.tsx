@@ -85,6 +85,7 @@ export function BaRadarGlobe({
   cloudsEnabled,
   cloudData,
   cloudSettings,
+  satelliteCloudsEnabled,
   dayNightEnabled,
   initialCamera,
   onCameraChange,
@@ -101,6 +102,12 @@ export function BaRadarGlobe({
   cloudsEnabled: boolean;
   cloudData: RadarCloudData | null;
   cloudSettings: CloudSettings;
+  /**
+   * Daily MODIS imagery is an observation of the visible cloud field. It is
+   * deliberately separate from the GFS volume so forecast cells never get
+   * presented as a photographed weather system.
+   */
+  satelliteCloudsEnabled: boolean;
   dayNightEnabled: boolean;
   initialCamera: GlobeCamera | null;
   onCameraChange: (camera: GlobeCamera) => void;
@@ -115,8 +122,8 @@ export function BaRadarGlobe({
   const onCameraChangeRef = useRef(onCameraChange);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
-  const dataRef = useRef({ ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, dayNightEnabled });
-  dataRef.current = { ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, dayNightEnabled };
+  const dataRef = useRef({ ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, satelliteCloudsEnabled, dayNightEnabled });
+  dataRef.current = { ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, satelliteCloudsEnabled, dayNightEnabled };
   onSelectRef.current = onSelect;
   onSelectControllerRef.current = onSelectController;
   onCameraChangeRef.current = onCameraChange;
@@ -138,6 +145,9 @@ export function BaRadarGlobe({
       dayNightLayerRef.current?.update(current.dayNightEnabled);
       cloudLayerRef.current?.update(current.cloudData, current.cloudsEnabled, current.cloudSettings);
       auroraLayerRef.current?.update(current.aurora, current.auroraEnabled, current.auroraSettings);
+      if (map.getLayer("ba-radar-globe-satellite-clouds")) {
+        map.setPaintProperty("ba-radar-globe-satellite-clouds", "raster-opacity", current.satelliteCloudsEnabled ? 0.9 : 0);
+      }
     };
     const start = async () => {
       if (!container.current) return;
@@ -156,6 +166,16 @@ export function BaRadarGlobe({
               tileSize: 256,
               attribution: "NASA GIBS · Blue Marble",
             },
+            "ba-radar-globe-satellite-clouds": {
+              type: "raster",
+              // This is an observed daily MODIS true-colour scene. Its cloud
+              // forms come from the satellite, rather than from a noise field
+              // inferred from GFS forecast cells. The layer is intentionally
+              // named as daily imagery in the UI; it is not a live nowcast.
+              tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpeg"],
+              tileSize: 256,
+              attribution: "NASA GIBS · Terra/MODIS daily imagery",
+            },
           },
           layers: [{
             id: "ba-radar-osm",
@@ -166,6 +186,22 @@ export function BaRadarGlobe({
               "raster-brightness-max": 0.72,
               "raster-saturation": -0.18,
               "raster-contrast": 0.18,
+            },
+          }, {
+            id: "ba-radar-globe-satellite-clouds",
+            type: "raster",
+            source: "ba-radar-globe-satellite-clouds",
+            paint: {
+              // Preserve the photographed cloud morphology but blend its
+              // surface colours into the established globe palette.
+              // sync() applies the current React setting after the globe and
+              // its sources are ready. Starting transparent avoids closing
+              // over an outdated setting while MapLibre initialises.
+              "raster-opacity": 0,
+              "raster-brightness-min": 0.12,
+              "raster-brightness-max": 0.78,
+              "raster-saturation": -0.22,
+              "raster-contrast": 0.08,
             },
           }],
         },
