@@ -13,9 +13,13 @@ type ProgramBundle = {
 };
 
 const DAY_NIGHT_TAU = Math.PI * 2;
-const SURFACE_ELEVATION_METRES = 120;
-const LONGITUDE_SEGMENTS = 72;
-const LATITUDE_SEGMENTS = 34;
+// This is deliberately in the lower atmosphere rather than on the terrain.
+// A near-surface overlay z-fights the globe depth buffer at full-planet zoom,
+// producing tiled dark patches. At 20 km the shell remains visually attached
+// to Earth but has enough depth separation to render as one continuous shade.
+const ATMOSPHERE_ELEVATION_METRES = 20_000;
+const LONGITUDE_SEGMENTS = 96;
+const LATITUDE_SEGMENTS = 48;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -32,7 +36,7 @@ function createSurfaceMesh() {
   const vertices: number[] = [];
   const append = (longitude: number, latitude: number) => {
     const [x, y] = mercatorCoordinate(longitude, latitude);
-    vertices.push(x, y, SURFACE_ELEVATION_METRES);
+    vertices.push(x, y, ATMOSPHERE_ELEVATION_METRES);
   };
   for (let latitudeIndex = 0; latitudeIndex < LATITUDE_SEGMENTS; latitudeIndex += 1) {
     const south = -85 + latitudeIndex * 170 / LATITUDE_SEGMENTS;
