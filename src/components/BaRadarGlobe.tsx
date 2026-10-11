@@ -5,6 +5,7 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarAuroraData, VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight } from "@/lib/radar-live";
 import { BaRadarAuroraLayer, type AuroraSettings } from "@/components/BaRadarAuroraLayer";
+import { BaRadarDayNightLayer } from "@/components/BaRadarDayNightLayer";
 
 type GlobeReplay = { id: string; points: Array<{ latitude: number; longitude: number; headingDeg: number }>; activeIndex: number } | null;
 export type GlobeCamera = { center: [number, number]; zoom: number; bearing: number; pitch: number };
@@ -80,6 +81,7 @@ export function BaRadarGlobe({
   auroraEnabled,
   aurora,
   auroraSettings,
+  dayNightEnabled,
   initialCamera,
   onCameraChange,
 }: {
@@ -92,19 +94,21 @@ export function BaRadarGlobe({
   auroraEnabled: boolean;
   aurora: RadarAuroraData | null;
   auroraSettings: AuroraSettings;
+  dayNightEnabled: boolean;
   initialCamera: GlobeCamera | null;
   onCameraChange: (camera: GlobeCamera) => void;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const auroraLayerRef = useRef<BaRadarAuroraLayer | null>(null);
+  const dayNightLayerRef = useRef<BaRadarDayNightLayer | null>(null);
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
   const onCameraChangeRef = useRef(onCameraChange);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
-  const dataRef = useRef({ ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings });
-  dataRef.current = { ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings };
+  const dataRef = useRef({ ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, dayNightEnabled });
+  dataRef.current = { ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, dayNightEnabled };
   onSelectRef.current = onSelect;
   onSelectControllerRef.current = onSelectController;
   onCameraChangeRef.current = onCameraChange;
@@ -123,6 +127,7 @@ export function BaRadarGlobe({
       setGeoJson(map, "ba-radar-globe-aircraft", current.aircraft);
       setGeoJson(map, "ba-radar-globe-routes", current.routes);
       setGeoJson(map, "ba-radar-globe-controllers", current.controllers);
+      dayNightLayerRef.current?.update(current.dayNightEnabled);
       auroraLayerRef.current?.update(current.aurora, current.auroraEnabled, current.auroraSettings);
     };
     const start = async () => {
@@ -175,6 +180,10 @@ export function BaRadarGlobe({
         map.addSource("ba-radar-globe-aircraft", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-routes", { type: "geojson", data: emptyCollection as never });
         map.addSource("ba-radar-globe-controllers", { type: "geojson", data: emptyCollection as never });
+        const dayNightLayer = new BaRadarDayNightLayer();
+        dayNightLayerRef.current = dayNightLayer;
+        dayNightLayer.update(dataRef.current.dayNightEnabled);
+        map.addLayer(dayNightLayer);
         const auroraLayer = new BaRadarAuroraLayer();
         auroraLayerRef.current = auroraLayer;
         auroraLayer.update(dataRef.current.aurora, dataRef.current.auroraEnabled, dataRef.current.auroraSettings);
@@ -246,6 +255,7 @@ export function BaRadarGlobe({
         liveMap.remove();
       }
       mapRef.current = null;
+      dayNightLayerRef.current = null;
       auroraLayerRef.current = null;
     };
   }, []);
@@ -257,9 +267,10 @@ export function BaRadarGlobe({
       source?.setData(data.aircraft as never);
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
+      dayNightLayerRef.current?.update(dayNightEnabled);
       auroraLayerRef.current?.update(aurora, auroraEnabled, auroraSettings);
     }
-  }, [data, controllersGeoJson, aurora, auroraEnabled, auroraSettings]);
+  }, [data, controllersGeoJson, aurora, auroraEnabled, auroraSettings, dayNightEnabled]);
 
   return <div className="ba-radar-globe-map" ref={container} aria-label="BA-Radar interactive 3D globe">
     <div className="ba-radar-globe-caption"><strong>3D Globe</strong><span>Live BAV tracks · drag to orbit · scroll to zoom</span></div>
