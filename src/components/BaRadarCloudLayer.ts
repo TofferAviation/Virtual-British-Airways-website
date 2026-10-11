@@ -1,5 +1,5 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
-import type { RadarCloudData, RadarCloudLayer, RadarCloudLayerId } from "@/lib/radar-external";
+import type { RadarCloudData, RadarCloudLayerId } from "@/lib/radar-external";
 
 export type CloudQuality = "auto" | "low" | "medium" | "high" | "ultra";
 
@@ -48,16 +48,15 @@ type ProgramBundle = {
 };
 
 const TAU = Math.PI * 2;
-const MERCATOR_PI = Math.PI;
 const MAX_MERCATOR_LATITUDE = 85;
 const HEIGHT_SCALE_METRES = 100;
 const WIND_RANGE_METRES_PER_SECOND = 80;
 
 const QUALITY: Record<Exclude<CloudQuality, "auto">, QualityProfile> = {
   low: { stepDegrees: 10, slices: 2, repaintMs: 140 },
-  medium: { stepDegrees: 6, slices: 3, repaintMs: 96 },
-  high: { stepDegrees: 3, slices: 4, repaintMs: 66 },
-  ultra: { stepDegrees: 2, slices: 5, repaintMs: 46 },
+  medium: { stepDegrees: 6, slices: 4, repaintMs: 96 },
+  high: { stepDegrees: 3, slices: 5, repaintMs: 66 },
+  ultra: { stepDegrees: 2, slices: 6, repaintMs: 46 },
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -412,6 +411,26 @@ float fbm(vec2 point) {
   }
   return total;
 }
+float cloudStructure(vec2 weatherSpace) {
+  // Synoptic cloud shields are broad, wind-sheared systems rather than a
+  // field of isotropic blobs. Two low-cost domain warps keep the form
+  // coherent while leaving the GFS coverage field in charge of where a cloud
+  // can exist.
+  // These frequencies are intentionally tied to synoptic, not pixel, scale.
+  // The earlier values reached hundreds of cells across the globe once fBm
+  // octaves were applied, which read as a repeated camouflage texture.
+  vec2 broadSpace = vec2(weatherSpace.x * 0.025, weatherSpace.y * 0.052);
+  vec2 warp = vec2(
+    fbm(broadSpace + vec2(u_time * 0.00065, 4.3)),
+    fbm(broadSpace + vec2(9.1, -u_time * 0.00042))
+  ) - 0.5;
+  float shields = fbm(broadSpace + warp * 1.35);
+  // The finer component is deliberately elongated along the prevailing
+  // longitudinal direction. It resolves wisps and broken edges without the
+  // repeated round cells that made the first pass look stamped-on.
+  float filaments = fbm(vec2(weatherSpace.x * 0.105, weatherSpace.y * 0.024) + warp * 2.1 + vec2(-u_time * 0.0012, u_time * 0.0003));
+  return mix(shields, filaments, 0.25);
+}
 void main() {
   vec4 weather = texture(u_weather, v_geo);
   float coverage = weather.r;
@@ -419,18 +438,29 @@ void main() {
   float condensate = weather.b;
   float valid = weather.a * v_valid;
   if (valid < 0.5 || coverage < 0.035 || u_opacity < 0.01) discard;
-  // Large GFS coverage controls the threshold. Coherent Worley-like erosion
-  // opens transparent holes and soft boundaries without spawning clouds in a
-  // clear or invalid forecast cell.
+  // GFS coverage is the strict mask. The procedural term only erodes and
+  // shapes coverage already present in the model—it must never turn a nearly
+  // clear model cell into a bright cloud.
   vec2 weatherSpace = vec2(v_geo.x * 360.0, v_geo.y * 180.0);
-  float broad = fbm(weatherSpace * 0.23 + vec2(u_time * 0.002, -u_time * 0.0012));
-  float detail = fbm(weatherSpace * 1.45 + vec2(-u_time * 0.008, u_time * 0.004));
-  float cellCoverage = coverage * (0.67 + humidity * 0.19 + condensate * 0.28);
-  float erosion = mix(broad, detail, 0.47);
-  float density = smoothstep(0.30, 0.87, cellCoverage + erosion * 0.39);
-  float bottom = smoothstep(0.01, 0.18, v_densityHeight);
-  float top = 1.0 - smoothstep(0.78, 1.0, v_densityHeight);
-  density *= bottom * top;
+  float structure = cloudStructure(weatherSpace);
+  float moisture = clamp(0.68 + humidity * 0.22 + condensate * 0.22, 0.55, 1.08);
+  float modelCoverage = clamp(coverage * moisture, 0.0, 1.0);
+  float carved = smoothstep(0.24, 0.78, structure);
+  float layerCharacter = u_layerKind < 0.5 ? 0.20 : (u_layerKind < 1.5 ? 0.28 : 0.37);
+  float density = modelCoverage * mix(layerCharacter, 1.0, carved);
+  // Each shell samples a different part of a correlated vertical field. This
+  // breaks the old "same texture on every slice" appearance and produces
+  // changing internal parallax at an oblique camera angle.
+  float sliceDetail = fbm(vec2(
+    weatherSpace.x * 0.12 + v_densityHeight * 2.7 - u_time * 0.0015,
+    weatherSpace.y * 0.036 - v_densityHeight * 0.9 + u_time * 0.0004
+  ));
+  float verticalCore = mix(0.32, 1.0, pow(sin(CLOUD_PI * clamp(v_densityHeight, 0.0, 1.0)), 0.52));
+  float porousVolume = mix(0.26, 1.0, smoothstep(0.22, 0.79, sliceDetail));
+  // High ice clouds have the sparsest, most filamentary vertical body; low
+  // cloud retains a more continuous deck where the GFS layer is overcast.
+  float verticalCharacter = u_layerKind < 0.5 ? 0.88 : (u_layerKind < 1.5 ? 0.76 : 0.62);
+  density *= verticalCore * mix(verticalCharacter, 1.0, porousVolume);
   if (density < 0.018) discard;
   float latitude = (0.5 - v_geo.y) * CLOUD_PI;
   float longitude = (v_geo.x - 0.5) * CLOUD_TAU;
@@ -439,14 +469,14 @@ void main() {
     + cos(latitude) * cos(u_solarDeclination) * cos(longitude - solarLongitude);
   float daylight = smoothstep(-0.13, 0.12, solarElevation);
   float twilight = smoothstep(-0.23, 0.03, solarElevation) * (1.0 - smoothstep(0.03, 0.24, solarElevation));
-  float thickness = clamp(density * (0.62 + coverage * 0.75), 0.0, 1.0);
+  float thickness = clamp(density * (0.38 + coverage * 0.55), 0.0, 1.0);
   // A cloud casts some of its own light into nearby volume slices. Keeping
   // self-shadow intentionally restrained avoids a dark, flat overcast sheet.
   float selfShadow = mix(1.0, 0.54 + 0.46 * exp(-thickness * 1.15), u_selfShadow);
   float silver = pow(max(0.0, solarElevation), 0.35) * (0.24 + (1.0 - thickness) * 0.76) * 0.34;
-  vec3 lowCloud = vec3(0.64, 0.68, 0.70);
-  vec3 middleCloud = vec3(0.72, 0.74, 0.75);
-  vec3 highCloud = vec3(0.73, 0.78, 0.83);
+  vec3 lowCloud = vec3(0.71, 0.74, 0.76);
+  vec3 middleCloud = vec3(0.78, 0.79, 0.80);
+  vec3 highCloud = vec3(0.83, 0.86, 0.89);
   vec3 baseColour = u_layerKind < 0.5 ? lowCloud : (u_layerKind < 1.5 ? middleCloud : highCloud);
   vec3 dayColour = baseColour * (0.47 + daylight * 0.63) * selfShadow + vec3(0.24) * silver;
   vec3 duskColour = vec3(0.38, 0.26, 0.19) * twilight * (0.32 + (1.0 - thickness) * 0.4);
@@ -454,7 +484,7 @@ void main() {
   vec3 colour = mix(nightColour, dayColour + duskColour, daylight + twilight * 0.58);
   // More distant high clouds can remain thin; lower dense layers receive a
   // little more opacity but never emit light on the night side.
-  float layerOpacity = u_layerKind < 0.5 ? 0.34 : (u_layerKind < 1.5 ? 0.27 : 0.19);
+  float layerOpacity = u_layerKind < 0.5 ? 0.25 : (u_layerKind < 1.5 ? 0.19 : 0.13);
   float atmosphericFade = 1.0 - smoothstep(15000.0, 24000.0, v_layerHeight);
   float alpha = density * layerOpacity * u_opacity * (0.52 + daylight * 0.48) * atmosphericFade;
   fragColor = vec4(colour, alpha);
