@@ -11,5 +11,5 @@ export const metadata: Metadata = { title: "Crew Lounge host desk" };
 export default async function CrewLoungeSettingsPage() {
   await requireStaffPermission("settings.edit");
   const experience = await getCrewRoomExperience();
-  return <><SiteHeader /><CrewLoungeControl initialSettings={experience.settings} initialEvents={experience.events} /><SiteFooter /></>;
+  return <><SiteHeader /><CrewLoungeControl initialSettings={experience.settings} initialEvents={experience.events} initialHero={experience.featuredHero} /><SiteFooter /></>;
 }

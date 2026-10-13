@@ -18,20 +18,36 @@ type CrewLoungeSettings = {
   welcomePrompt: string;
 };
 
-type Props = { initialSettings: CrewLoungeSettings; initialEvents: CrewLoungeEvent[] };
+type CrewLoungeHero = {
+  eventId: string;
+  updatedAt: string;
+};
+
+type Props = {
+  initialSettings: CrewLoungeSettings;
+  initialEvents: CrewLoungeEvent[];
+  initialHero: CrewLoungeHero | null;
+};
 
 function eventLabel(event: CrewLoungeEvent) {
   return `${event.date} · ${event.title} · ${event.route.from}–${event.route.to}`;
 }
 
-export function CrewLoungeControl({ initialSettings, initialEvents }: Props) {
+export function CrewLoungeControl({ initialSettings, initialEvents, initialHero }: Props) {
   const [featuredEventId, setFeaturedEventId] = useState(initialSettings.featuredEventId ?? "");
+  const [savedFeaturedEventId, setSavedFeaturedEventId] = useState(initialSettings.featuredEventId ?? "");
   const [hostName, setHostName] = useState(initialSettings.hostName);
   const [hostMessage, setHostMessage] = useState(initialSettings.hostMessage);
   const [welcomePrompt, setWelcomePrompt] = useState(initialSettings.welcomePrompt);
+  const [featuredHero, setFeaturedHero] = useState<CrewLoungeHero | null>(initialHero);
   const [saving, setSaving] = useState(false);
+  const [heroBusy, setHeroBusy] = useState(false);
   const [message, setMessage] = useState("");
   const chosenEvent = useMemo(() => initialEvents.find((event) => event.id === featuredEventId) ?? null, [featuredEventId, initialEvents]);
+  const heroCanBeManaged = Boolean(chosenEvent && savedFeaturedEventId === featuredEventId);
+  const heroPreviewUrl = featuredHero && heroCanBeManaged
+    ? "/api/staff/crew-room/hero?eventId=" + encodeURIComponent(featuredHero.eventId) + "&v=" + encodeURIComponent(featuredHero.updatedAt)
+    : "";
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -43,13 +59,64 @@ export function CrewLoungeControl({ initialSettings, initialEvents }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ settings: { featuredEventId: featuredEventId || null, hostName, hostMessage, welcomePrompt } }),
       });
-      const body = await response.json().catch(() => null) as { error?: string } | null;
+      const body = await response.json().catch(() => null) as {
+        error?: string;
+        settings?: CrewLoungeSettings;
+        featuredHero?: CrewLoungeHero | null;
+      } | null;
       if (!response.ok) throw new Error(body?.error || "The Crew Lounge settings could not be saved.");
-      setMessage("Crew Lounge settings saved. Ember will use this event and host note after its next refresh.");
+      const savedEventId = body?.settings?.featuredEventId ?? featuredEventId;
+      setSavedFeaturedEventId(savedEventId ?? "");
+      setFeaturedHero(body?.featuredHero ?? null);
+      setMessage("Crew Lounge settings saved. Ember will use this event, host note and any community hero after its next refresh.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The Crew Lounge settings could not be saved.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function uploadHero(file: File) {
+    if (!savedFeaturedEventId || savedFeaturedEventId !== featuredEventId) {
+      setMessage("Save the selected featured event before uploading its Ember hero.");
+      return;
+    }
+    setHeroBusy(true);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.set("eventId", savedFeaturedEventId);
+      form.set("file", file);
+      const response = await fetch("/api/staff/crew-room/hero", { method: "POST", body: form });
+      const body = await response.json().catch(() => null) as { error?: string; hero?: CrewLoungeHero } | null;
+      if (!response.ok || !body?.hero) throw new Error(body?.error || "The Ember event hero could not be uploaded.");
+      setFeaturedHero(body.hero);
+      setMessage("Community event hero uploaded. It will appear in Ember for signed-in pilots after their next Crew Room refresh.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The Ember event hero could not be uploaded.");
+    } finally {
+      setHeroBusy(false);
+    }
+  }
+
+  async function removeHero() {
+    if (!savedFeaturedEventId) return;
+    setHeroBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/staff/crew-room/hero", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId: savedFeaturedEventId }),
+      });
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(body?.error || "The Ember event hero could not be removed.");
+      setFeaturedHero(null);
+      setMessage("Community event hero removed. Ember will return to the Crew Room’s warm default backdrop.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The Ember event hero could not be removed.");
+    } finally {
+      setHeroBusy(false);
     }
   }
 
@@ -63,6 +130,25 @@ export function CrewLoungeControl({ initialSettings, initialEvents }: Props) {
             <div><span className="staff-kicker">Featured crew table</span><h2>Pick the table pilots see first</h2><p>Only published calendar events appear here. The table is a social planning space; official registration remains on BAV.</p></div>
             <label className="crew-lounge-field"><span>Featured BAV event</span><select value={featuredEventId} onChange={(event) => setFeaturedEventId(event.target.value)}><option value="">No featured event — general lounge only</option>{initialEvents.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}</select></label>
             {chosenEvent ? <aside className="crew-lounge-event-preview"><strong>{chosenEvent.title}</strong><span>{chosenEvent.typeLabel} · {chosenEvent.date} · {chosenEvent.startUtc} UTC</span><small>{chosenEvent.route.fromName} ({chosenEvent.route.from}) → {chosenEvent.route.toName} ({chosenEvent.route.to})</small></aside> : null}
+          </div>
+          <div className="crew-lounge-settings-section">
+            <div><span className="staff-kicker">Community event hero</span><h2>Give the featured event its own welcome</h2><p>This optional staff-approved image appears only in Ember&apos;s Crew Room. It never replaces the official BAV calendar image.</p></div>
+            <div className="crew-lounge-hero-control">
+              {heroCanBeManaged ? <>
+                <div className={"crew-lounge-hero-preview " + (featuredHero ? "has-image" : "")}>
+                  {featuredHero ? (
+                    /* eslint-disable-next-line @next/next/no-img-element -- the private, cookie-authenticated preview cannot use Next's public image optimizer */
+                    <img src={heroPreviewUrl} alt={"Community-selected hero for " + (chosenEvent?.title ?? "the featured event")} />
+                  ) : null}
+                  <div><strong>{featuredHero ? "Community hero selected" : "No community hero yet"}</strong><span>{featuredHero ? "Ember will use this image behind the event welcome." : "Ember will keep its warm Crew Room backdrop until staff adds an image."}</span></div>
+                </div>
+                <div className="crew-lounge-hero-actions">
+                  <label className={"staff-primary-button crew-lounge-upload-button " + (heroBusy ? "is-busy" : "")}>Upload JPG or PNG<input type="file" accept="image/jpeg,image/png" disabled={heroBusy} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadHero(file); }} /></label>
+                  {featuredHero ? <button className="staff-secondary-button" type="button" disabled={heroBusy} onClick={() => void removeHero()}>Remove hero</button> : null}
+                  <small>Maximum 5 MB. Choose a community-approved image with room for the Crew Room title.</small>
+                </div>
+              </> : <div className="crew-lounge-hero-empty"><strong>Save the featured event first</strong><span>Select an event above, save the Crew Lounge, then choose its Ember-only community hero.</span></div>}
+            </div>
           </div>
           <div className="crew-lounge-settings-section">
             <div><span className="staff-kicker">Pinned host note</span><h2>Make the room feel looked after</h2><p>This appears as a BAV Community note, not as a message from an individual pilot.</p></div>

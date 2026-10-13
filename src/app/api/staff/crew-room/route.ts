@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStaffSession } from "@/lib/staff-auth";
 import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
-import { CrewRoomExperienceError, getCrewRoomExperience, saveCrewRoomSettings } from "@/lib/crew-room-store";
+import { CrewRoomExperienceError, getCrewRoomEventHero, getCrewRoomExperience, saveCrewRoomSettings } from "@/lib/crew-room-store";
 
 async function authorize() {
   const session = await getStaffSession();
@@ -51,7 +51,10 @@ export async function PUT(request: NextRequest) {
         : "Updated the Crew Lounge host note and cleared the featured event table.",
     });
     await saveStaffState(auth.state);
-    return NextResponse.json({ settings });
+    const featuredHero = settings.featuredEventId
+      ? await getCrewRoomEventHero(settings.featuredEventId)
+      : null;
+    return NextResponse.json({ settings, featuredHero });
   } catch (error) {
     return errorResponse(error);
   }
