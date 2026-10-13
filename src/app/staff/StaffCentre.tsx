@@ -10,6 +10,7 @@ type Props = {
   initialRoutes: ManagedRoute[];
   staffName: string;
   operationsQueue?: ReactNode;
+  workspaceDirectory?: ReactNode;
 };
 
 function isoToday() {
@@ -74,7 +75,7 @@ function eventStatus(event: VirtualEvent) {
   return { label: "Published", className: "published" };
 }
 
-export function StaffCentre({ initialEvents, initialRoutes, staffName, operationsQueue }: Props) {
+export function StaffCentre({ initialEvents, initialRoutes, staffName, operationsQueue, workspaceDirectory }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [routes, setRoutes] = useState(initialRoutes);
   const [eventDraft, setEventDraft] = useState<VirtualEvent | null>(null);
@@ -287,6 +288,7 @@ export function StaffCentre({ initialEvents, initialRoutes, staffName, operation
             </table>
           </div>
           {operationsQueue}
+          {workspaceDirectory}
         </div>
 
         <div className="staff-panel" id="route-tools">

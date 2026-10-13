@@ -58,54 +58,12 @@ export default async function StaffPage() {
         <div className="staff-page-content">
           <div className="staff-breadcrumb-band">
             <div className="staff-shell staff-breadcrumbs">
-              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong><span>·</span><Link href="/staff/sop">Staff SOP</Link><span>·</span><Link href="/handbook#staff">Staff handbook</Link>
-              {canViewRoutes ? <><span>·</span><Link href="/staff/live-operations">Live Operations</Link><span>·</span><Link href="/staff/pireps">PIREP Centre</Link></> : null}
-              {canViewNews ? <><span>·</span><Link href="/staff/news">News & announcements</Link></> : null}
-              {canViewSupport ? <><span>·</span><Link href="/staff/tickets">Ticket Centre</Link></> : null}
-              {canViewPermissions ? <><span>·</span><Link href="/staff/pilots">Pilot Management</Link>{canEditPilots ? <><span>·</span><Link href="/staff/hour-transfers">Transfer credit review</Link><span>·</span><Link href="/staff/mentoring">Mentoring</Link></> : null}<span>·</span><Link href="/staff/permissions">User permissions</Link></> : null}
-              {canViewServiceStatus ? <><span>·</span><Link href="/staff/service-status">Service status</Link></> : null}
-              {canViewFleet ? <><span>·</span><Link href="/staff/fleet">Fleet management</Link></> : null}
-              {canViewTraffic ? <><span>·</span><Link href="/staff/traffic">Website traffic</Link></> : null}
-              {canEditSettings ? <><span>·</span><Link href="/staff/rewards">Reward settings</Link><span>·</span><Link href="/staff/economy">Pilot economy</Link><span>·</span><Link href="/staff/crew-lounge">Ember systems</Link></> : null}
-              {canEditPilots ? <><span>·</span><Link href="/staff/training">Training & qualifications</Link><span>·</span><Link href="/staff/finances">Pilot finances</Link></> : null}
-              {canAccessServiceSettings ? <><span>·</span><Link href="/staff/service-settings">Service settings</Link></> : null}
+              <Link href="/">Home</Link><span>›</span><span>British Airways Virtual</span><span>›</span><span>Manage</span><span>›</span><strong>Staff centre</strong>
+              <span className="staff-breadcrumb-note">Secure staff area</span>
+              <Link href="/staff/sop">Staff SOP</Link>
+              <Link href="/handbook#staff">Staff handbook</Link>
             </div>
           </div>
-          <div className="staff-shell staff-permissions-launch-wrap">
-            <Link className="staff-permissions-launch" href="/staff/sop">
-              <span className="staff-permissions-launch-icon" aria-hidden="true">▤</span>
-              <span><strong>Staff Centre Standard Operating Procedure</strong><small>Start here for secure, consistent procedures for PIREPs, pilots, fleet, events, support and shift handover.</small></span>
-              <b aria-hidden="true">→</b>
-            </Link>
-          </div>
-          {canViewRoutes ? (
-            <>
-              <div className="staff-shell staff-permissions-launch-wrap">
-                <Link className="staff-permissions-launch" href="/staff/live-operations">
-                  <span className="staff-permissions-launch-icon" aria-hidden="true">◉</span>
-                  <span><strong>Live Operations</strong><small>Watch active BAV ACARS flights, simulator source, connection health and live telemetry.</small></span>
-                  <b aria-hidden="true">→</b>
-                </Link>
-              </div>
-              <div className="staff-shell staff-permissions-launch-wrap">
-                <Link className="staff-permissions-launch" href="/staff/pireps">
-                  <span className="staff-permissions-launch-icon" aria-hidden="true">✈</span>
-                  <span><strong>PIREP Centre</strong><small>Review automatic Ember ACARS and manual fallback reports, request corrections and approve career credit.</small></span>
-                  <b aria-hidden="true">→</b>
-                </Link>
-              </div>
-            </>
-          ) : null}
-          {canViewSupport ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/tickets"><span className="staff-permissions-launch-icon" aria-hidden="true">✉</span><span><strong>Ticket Centre</strong><small>Review pilot support requests, reply, assign ownership and manage ticket status.</small></span><b aria-hidden="true">→</b></Link></div> : null}
-          {canViewNews ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/news"><span className="staff-permissions-launch-icon" aria-hidden="true">⚑</span><span><strong>News & announcements</strong><small>Create, edit and publish the stories shown on the public What&apos;s New page.</small></span><b aria-hidden="true">→</b></Link></div> : null}
-          {canViewPermissions ? <><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/pilots"><span className="staff-permissions-launch-icon" aria-hidden="true">♙</span><span><strong>Pilot Management</strong><small>Search native BAV pilot accounts, review career activity, add exceptional career credit and suspend or reactivate pilots.</small></span><b aria-hidden="true">→</b></Link></div>{canEditPilots ? <><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/hour-transfers"><span className="staff-permissions-launch-icon" aria-hidden="true">↟</span><span><strong>Transfer credit review</strong><small>Manually verify former virtual-airline hours, approve career credit or leave a clear decline decision.</small></span><b aria-hidden="true">→</b></Link></div><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/mentoring"><span className="staff-permissions-launch-icon" aria-hidden="true">◎</span><span><strong>Mentoring</strong><small>Match mentor volunteers with pilots who requested support, record check-ins and close time-limited matches.</small></span><b aria-hidden="true">→</b></Link></div></> : null}<div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/permissions"><span className="staff-permissions-launch-icon" aria-hidden="true">⚙</span><span><strong>User permissions</strong><small>Manage staff roles, individual permissions and access controls.</small></span><b aria-hidden="true">→</b></Link></div></> : null}
-          {canViewServiceStatus ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/service-status"><span className="staff-permissions-launch-icon" aria-hidden="true">◔</span><span><strong>Service status manager</strong><small>Manage system health, public incidents, maintenance and uptime information.</small></span><b aria-hidden="true">→</b></Link></div> : null}
-          {canViewFleet ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/fleet"><span className="staff-permissions-launch-icon" aria-hidden="true">✈</span><span><strong>Fleet management</strong><small>Review the live aircraft fleet, technical condition and dispatch availability.</small></span><b aria-hidden="true">→</b></Link></div> : null}
-          {canViewTraffic ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/traffic"><span className="staff-permissions-launch-icon" aria-hidden="true">◫</span><span><strong>Website traffic</strong><small>Review private, first-party visit totals and the public pages pilots use most.</small></span><b aria-hidden="true">→</b></Link></div> : null}
-          {canEditPilots ? <><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/training"><span className="staff-permissions-launch-icon" aria-hidden="true">◫</span><span><strong>Training & qualifications</strong><small>Configure virtual type-rating programmes, issue grandfathered records and complete recurrent checks.</small></span><b aria-hidden="true">→</b></Link></div><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/finances"><span className="staff-permissions-launch-icon" aria-hidden="true">£</span><span><strong>Pilot finance operations</strong><small>Review the immutable virtual ledger and make audited refunds, reversals or corrections.</small></span><b aria-hidden="true">→</b></Link></div></> : null}
-          {canEditSettings ? <><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/rewards"><span className="staff-permissions-launch-icon" aria-hidden="true">★</span><span><strong>Reward settings</strong><small>Configure future PIREP VA Points, Tier Points and membership thresholds.</small></span><b aria-hidden="true">→</b></Link></div><div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch" href="/staff/crew-lounge"><span className="staff-permissions-launch-icon" aria-hidden="true">☕</span><span><strong>Ember systems · Crew Lounge</strong><small>Choose the featured calendar event and set the host note and conversation prompt seen by Ember pilots.</small></span><b aria-hidden="true">→</b></Link></div></> : null}
-          {canAccessServiceSettings ? <div className="staff-shell staff-permissions-launch-wrap"><Link className="staff-permissions-launch staff-service-launch" href="/staff/service-settings"><span className="staff-permissions-launch-icon" aria-hidden="true">⌘</span><span><strong>Service settings</strong><small>Open the protected website source workspace for maintenance and direct code changes.</small></span><b aria-hidden="true">→</b></Link></div> : null}
-          <StaffBackgroundControl initialBackground={staffBackground} />
           <StaffCentre
             initialEvents={events}
             initialRoutes={routes}
@@ -122,7 +80,54 @@ export default async function StaffPage() {
                 activeStaffCount={activeStaffCount}
               />
             }
+            workspaceDirectory={
+              <section className="staff-workspace-directory" aria-labelledby="staff-workspace-directory-title">
+                <div className="staff-workspace-directory-heading">
+                  <div>
+                    <span className="staff-kicker">Staff workspaces</span>
+                    <h2 id="staff-workspace-directory-title">Find the right place, quickly</h2>
+                    <p>Only the tools available to your staff role are shown here.</p>
+                  </div>
+                  <Link href="/staff/sop">Staff SOP →</Link>
+                </div>
+                <div className="staff-workspace-grid">
+                  {canViewRoutes || canViewFleet || canEditPilots ? <section className="staff-workspace-group">
+                    <h3>Flight operations</h3>
+                    <div className="staff-workspace-links">
+                      {canViewRoutes ? <Link href="/staff/live-operations"><span aria-hidden="true">◉</span><b>Live Operations</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewRoutes ? <Link href="/staff/pireps"><span aria-hidden="true">✈</span><b>PIREP Centre</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewFleet ? <Link href="/staff/fleet"><span aria-hidden="true">▤</span><b>Fleet management</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewRoutes ? <Link href="#route-tools"><span aria-hidden="true">⌁</span><b>Schedules</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditPilots ? <Link href="/staff/hour-transfers"><span aria-hidden="true">↟</span><b>Transfer credit</b><i aria-hidden="true">›</i></Link> : null}
+                    </div>
+                  </section> : null}
+                  {canViewSupport || canViewPermissions || canEditPilots ? <section className="staff-workspace-group">
+                    <h3>People &amp; support</h3>
+                    <div className="staff-workspace-links">
+                      {canViewSupport ? <Link href="/staff/tickets"><span aria-hidden="true">✉</span><b>Ticket Centre</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewPermissions ? <Link href="/staff/pilots"><span aria-hidden="true">♙</span><b>Pilot management</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditPilots ? <Link href="/staff/mentoring"><span aria-hidden="true">◎</span><b>Mentoring</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewPermissions ? <Link href="/staff/permissions"><span aria-hidden="true">⚙</span><b>User permissions</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditPilots ? <Link href="/staff/finances"><span aria-hidden="true">£</span><b>Pilot finance</b><i aria-hidden="true">›</i></Link> : null}
+                    </div>
+                  </section> : null}
+                  {canViewNews || canViewTraffic || canEditPilots || canEditSettings || canViewServiceStatus || canAccessServiceSettings ? <section className="staff-workspace-group staff-workspace-group-wide">
+                    <h3>Communications &amp; systems</h3>
+                    <div className="staff-workspace-links">
+                      {canViewNews ? <Link href="/staff/news"><span aria-hidden="true">⚑</span><b>News &amp; announcements</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditPilots ? <Link href="/staff/training"><span aria-hidden="true">▥</span><b>Training &amp; qualifications</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewTraffic ? <Link href="/staff/traffic"><span aria-hidden="true">◫</span><b>Website traffic</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditSettings ? <Link href="/staff/rewards"><span aria-hidden="true">★</span><b>Reward settings</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditSettings ? <Link href="/staff/crew-lounge"><span aria-hidden="true">☕</span><b>Ember systems</b><i aria-hidden="true">›</i></Link> : null}
+                      {canViewServiceStatus ? <Link href="/staff/service-status"><span aria-hidden="true">◔</span><b>Service status</b><i aria-hidden="true">›</i></Link> : null}
+                      {canAccessServiceSettings ? <Link href="/staff/service-settings"><span aria-hidden="true">⌘</span><b>Service settings</b><i aria-hidden="true">›</i></Link> : null}
+                    </div>
+                  </section> : null}
+                </div>
+              </section>
+            }
           />
+          <StaffBackgroundControl initialBackground={staffBackground} />
         </div>
       </main>
       <SiteFooter />

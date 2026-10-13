@@ -143,7 +143,9 @@ export async function StaffOperationsInbox({
 
   if (!items.length) return null;
 
-  const outstanding = items.reduce((total, item) => total + item.count, 0);
+  const outstanding = items
+    .filter((item) => item.tone !== "clear")
+    .reduce((total, item) => total + item.count, 0);
   const overall = serviceStatus ? overallServiceStatus(serviceStatus) : null;
 
   return (
