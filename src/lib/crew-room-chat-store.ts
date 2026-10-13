@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getEvents } from "@/lib/event-store";
 
 export const CREW_ROOM_CHANNEL = "crew-lounge" as const;
-export type CrewRoomChannel = typeof CREW_ROOM_CHANNEL;
+export type CrewRoomChannel = string;
+
+const eventChannelPattern = /^event:([a-z0-9][a-z0-9-]{0,79})$/;
 
 type CrewRoomMessageRow = {
   id: string;
@@ -41,11 +44,36 @@ function client(): SupabaseClient {
   });
 }
 
-function parseChannel(value: unknown): CrewRoomChannel {
-  if (value !== CREW_ROOM_CHANNEL) {
-    throw new CrewRoomChatError("That Crew Lounge channel is not available.", 404);
+export function createCrewRoomEventChannel(eventId: string): CrewRoomChannel {
+  const normalized = eventId.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(normalized)) {
+    throw new CrewRoomChatError("That event cannot open a Crew Table.", 400);
   }
-  return CREW_ROOM_CHANNEL;
+  return `event:${normalized}`;
+}
+
+export function eventIdFromCrewRoomChannel(channel: CrewRoomChannel): string | null {
+  return eventChannelPattern.exec(channel)?.[1] ?? null;
+}
+
+function parseChannel(value: unknown): CrewRoomChannel {
+  if (value === CREW_ROOM_CHANNEL) return CREW_ROOM_CHANNEL;
+  if (typeof value === "string" && eventChannelPattern.test(value.trim().toLowerCase())) {
+    return value.trim().toLowerCase();
+  }
+  throw new CrewRoomChatError("That Crew Lounge channel is not available.", 404);
+}
+
+/** Event tables exist only for published BAV calendar events. */
+export async function assertCrewRoomChannelIsAvailable(channelValue: unknown) {
+  const channel = parseChannel(channelValue);
+  const eventId = eventIdFromCrewRoomChannel(channel);
+  if (!eventId) return channel;
+  const events = await getEvents();
+  if (!events.some((event) => event.id.toLowerCase() === eventId && event.published)) {
+    throw new CrewRoomChatError("That event table is not currently open.", 404);
+  }
+  return channel;
 }
 
 function cleanMessage(value: unknown) {
@@ -77,7 +105,7 @@ function toMessage(row: CrewRoomMessageRow): CrewRoomMessage {
 }
 
 export async function listCrewRoomMessages(channelValue: unknown, requestedLimit: unknown) {
-  const channel = parseChannel(channelValue);
+  const channel = await assertCrewRoomChannelIsAvailable(channelValue);
   const requested = typeof requestedLimit === "number" ? requestedLimit : Number(requestedLimit);
   const limit = Number.isFinite(requested) ? Math.max(1, Math.min(Math.trunc(requested), 60)) : 60;
   const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -102,7 +130,7 @@ export async function createCrewRoomMessage(input: {
   pilotName: string;
   pilotRank: string | null | undefined;
 }) {
-  const channel = parseChannel(input.channel);
+  const channel = await assertCrewRoomChannelIsAvailable(input.channel);
   const body = cleanMessage(input.body);
   const db = client();
   const cutoff = new Date(Date.now() - 30 * 1000).toISOString();
