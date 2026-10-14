@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PeerVoiceCall } from "./PeerVoiceCall";
 
 type VoiceRoomStatus = "scheduled" | "open" | "closed";
@@ -8,14 +8,14 @@ type VoiceRoom = { id: string; name: string; description: string; startsAt: stri
 type Pilot = { id: string; name: string; pilotNumber: string; profileImage: string | null };
 type ChatMessage = { id: string; pilotId: string; pilotNumber: string; pilotName: string; rank: string; body: string; createdAt: string };
 type Portrait = { pilotId: string; profileImage: string | null };
-type Props = { pilot: Pilot; initialRooms: VoiceRoom[] };
+type Props = { pilot: Pilot; initialRooms: VoiceRoom[]; canManageRooms: boolean };
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BA";
 }
 
 function roomTime(room: VoiceRoom) {
-  if (!room.startsAt) return room.status === "open" ? "Open now" : "Schedule to be confirmed";
+  if (!room.startsAt) return room.status === "open" ? "Open now" : "Waiting for the host";
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(room.startsAt)) + " UTC";
 }
 
@@ -27,17 +27,71 @@ function profileImage(image: string | null | undefined) {
   return image && image.trim() ? image : null;
 }
 
-export function CrewLounge({ pilot, initialRooms }: Props) {
+export function CrewLounge({ pilot, initialRooms, canManageRooms }: Props) {
   const firstRoom = initialRooms.find((room) => room.status === "open") ?? initialRooms[0] ?? null;
+  const [rooms, setRooms] = useState(initialRooms);
   const [selectedRoomId, setSelectedRoomId] = useState(firstRoom?.id ?? "");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [portraits, setPortraits] = useState<Record<string, string | null>>({});
   const [chatStatus, setChatStatus] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [refreshingRooms, setRefreshingRooms] = useState(false);
+  const [roomBoardStatus, setRoomBoardStatus] = useState("");
+  const [openingRoom, setOpeningRoom] = useState(false);
 
-  const selectedRoom = useMemo(() => initialRooms.find((room) => room.id === selectedRoomId) ?? null, [initialRooms, selectedRoomId]);
+  const selectedRoom = useMemo(() => rooms.find((room) => room.id === selectedRoomId) ?? null, [rooms, selectedRoomId]);
   const roomIsOpen = selectedRoom?.status === "open";
+
+  const applyRoomBoard = useCallback((nextRooms: VoiceRoom[]) => {
+    setRooms(nextRooms);
+    setSelectedRoomId((current) => {
+      if (nextRooms.some((room) => room.id === current)) return current;
+      return nextRooms.find((room) => room.status === "open")?.id ?? nextRooms[0]?.id ?? "";
+    });
+  }, []);
+
+  const refreshRoomBoard = useCallback(async (quiet = false) => {
+    if (!quiet) setRefreshingRooms(true);
+    try {
+      const response = await fetch("/api/crew-lounge/rooms", { cache: "no-store" });
+      const data = await response.json().catch(() => null) as { error?: string; rooms?: VoiceRoom[] } | null;
+      if (!response.ok || !Array.isArray(data?.rooms)) throw new Error(data?.error || "The crew-room board could not be refreshed.");
+      applyRoomBoard(data.rooms);
+      if (!quiet) setRoomBoardStatus("The crew-room board is up to date.");
+    } catch (error) {
+      if (!quiet) setRoomBoardStatus(error instanceof Error ? error.message : "The crew-room board could not be refreshed.");
+    } finally {
+      if (!quiet) setRefreshingRooms(false);
+    }
+  }, [applyRoomBoard]);
+
+  useEffect(() => {
+    void refreshRoomBoard(true);
+    const timer = window.setInterval(() => void refreshRoomBoard(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, [refreshRoomBoard]);
+
+  async function openSelectedRoom() {
+    if (!selectedRoom || !canManageRooms) return;
+    setOpeningRoom(true);
+    setRoomBoardStatus("");
+    try {
+      const response = await fetch("/api/staff/voice-rooms", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: selectedRoom.id, status: "open" }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string; room?: VoiceRoom } | null;
+      if (!response.ok || !data?.room) throw new Error(data?.error || "The room could not be opened.");
+      applyRoomBoard(rooms.map((room) => room.id === data.room!.id ? data.room! : room));
+      setRoomBoardStatus(`“${data.room.name}” is open. Pilots can join voice and chat now.`);
+    } catch (error) {
+      setRoomBoardStatus(error instanceof Error ? error.message : "The room could not be opened.");
+    } finally {
+      setOpeningRoom(false);
+    }
+  }
 
   useEffect(() => {
     if (!selectedRoom || !roomIsOpen) {
@@ -108,14 +162,14 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
         <aside className="crew-voice-rail" aria-label="Crew rooms">
           <div className="crew-voice-rail-heading"><span className="crew-voice-eyebrow">Crew spaces</span><h2>Find a seat</h2></div>
           <div className="crew-voice-room-list">
-            {initialRooms.length ? initialRooms.map((room) => (
+            {rooms.length ? rooms.map((room) => (
               <button key={room.id} className={room.id === selectedRoomId ? "selected" : ""} type="button" onClick={() => setSelectedRoomId(room.id)}>
                 <span className={`crew-voice-room-indicator ${room.status}`} aria-hidden="true" />
                 <span><b>{room.name}</b><small>{room.status === "open" ? "Open for crew" : roomTime(room)}</small></span>
               </button>
             )) : <div className="crew-voice-empty-rail"><strong>No rooms on the board yet</strong><span>Staff will add the next crew space here.</span></div>}
           </div>
-          <div className="crew-voice-rail-note"><span>✦</span><p><strong>New to BAV?</strong> You can drop into an open room, listen first and decide what to share. There is never pressure to turn on your camera.</p></div>
+          <div className="crew-voice-rail-note"><span>✦</span><p><strong>New to BAV?</strong> You can drop into an open room, listen first and decide what to share. There is never pressure to turn on your camera.</p><button type="button" className="crew-voice-refresh-button" onClick={() => void refreshRoomBoard()} disabled={refreshingRooms}>{refreshingRooms ? "Refreshing…" : "Refresh rooms"}</button></div>
         </aside>
 
         <section className="crew-voice-main-panel">
@@ -124,7 +178,7 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
               <div><span className={`crew-voice-status ${selectedRoom.status}`}>{selectedRoom.status === "open" ? "Open crew space" : "Upcoming crew space"}</span><h2>{selectedRoom.name}</h2><p>{selectedRoom.description}</p></div>
               <div className="crew-voice-room-time"><span>{roomTime(selectedRoom)}</span>{selectedRoom.endsAt ? <small>Ends {new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(selectedRoom.endsAt))} UTC</small> : null}</div>
             </header>
-            {roomIsOpen ? <PeerVoiceCall key={selectedRoom.id} room={selectedRoom} pilot={pilot} /> : <section className="crew-voice-stage" aria-label="Voice room availability"><div className="crew-voice-stage-copy"><span className="crew-voice-eyebrow">Your preflight</span><h3>This room is on the departure board</h3><p>Staff have scheduled this room. Voice, chat and its crew table will become available here once they open it.</p></div></section>}
+            {roomIsOpen ? <PeerVoiceCall key={selectedRoom.id} room={selectedRoom} pilot={pilot} /> : <section className="crew-voice-stage" aria-label="Voice room availability"><div className="crew-voice-stage-copy"><span className="crew-voice-eyebrow">Room status</span><h3>This room is waiting for its host</h3><p>Voice and chat unlock the moment a staff host opens this room. You can keep this page open: the board checks for changes about every 15 seconds.</p><div className="crew-voice-stage-actions">{canManageRooms ? <><button type="button" className="crew-voice-primary" onClick={() => void openSelectedRoom()} disabled={openingRoom}>{openingRoom ? "Opening room…" : "Open room now"}</button><a href="/staff/voice-rooms">Manage crew rooms</a></> : <button type="button" className="crew-voice-secondary" onClick={() => void refreshRoomBoard()} disabled={refreshingRooms}>{refreshingRooms ? "Checking…" : "Check if room is open"}</button>}</div>{roomBoardStatus ? <p className="crew-voice-room-board-status" role="status">{roomBoardStatus}</p> : null}</div></section>}
             <section className="crew-voice-chat" aria-labelledby="crew-voice-chat-title">
               <header><div><span className="crew-voice-eyebrow">Room conversation</span><h3 id="crew-voice-chat-title">The crew chat</h3></div><span>Text is separate from voice · last 14 days shown</span></header>
               <div className="crew-voice-messages">

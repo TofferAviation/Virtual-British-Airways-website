@@ -1,0 +1,7 @@
+.crew-voice-stage-actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:17px}
+.crew-voice-stage-actions a{color:#075aaa;font-size:11px;font-weight:700}
+.crew-voice-room-board-status{margin-top:12px!important;color:#496277!important;font-size:10px!important}
+.crew-voice-refresh-button{margin-top:9px;border:0;padding:0;background:transparent;color:#075aaa;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+.crew-voice-refresh-button:disabled{opacity:.55;cursor:wait}
+html[data-theme="dark"] .crew-voice-room-board-status{color:#b7cce0!important}
+html[data-theme="dark"] .crew-voice-stage-actions a,html[data-theme="dark"] .crew-voice-refresh-button{color:#9bd5ff}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { requirePilotSession } from "@/lib/pilot-auth";
+import { staffHasPermission } from "@/lib/staff-auth";
 import { listVoiceRooms } from "@/lib/voice-room-store";
 import { CrewLounge } from "./CrewLounge";
 
@@ -13,12 +14,17 @@ export const metadata: Metadata = {
 };
 
 export default async function CrewLoungePage() {
-  const [pilot, rooms] = await Promise.all([requirePilotSession(), listVoiceRooms()]);
+  const [pilot, rooms, canManageRooms] = await Promise.all([
+    requirePilotSession(),
+    listVoiceRooms(),
+    staffHasPermission("settings.edit"),
+  ]);
   return (
     <>
       <SiteHeader />
       <CrewLounge
         pilot={{ id: pilot.pilotId, name: pilot.name, pilotNumber: pilot.pilotNumber, profileImage: pilot.profileImage ?? null }}
+        canManageRooms={canManageRooms}
         initialRooms={rooms.map((room) => ({
           id: room.id,
           name: room.name,
