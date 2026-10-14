@@ -119,6 +119,7 @@ export default async function StaffPage() {
                       {canViewTraffic ? <Link href="/staff/traffic"><span aria-hidden="true">◫</span><b>Website traffic</b><i aria-hidden="true">›</i></Link> : null}
                       {canEditSettings ? <Link href="/staff/rewards"><span aria-hidden="true">★</span><b>Reward settings</b><i aria-hidden="true">›</i></Link> : null}
                       {canEditSettings ? <Link href="/staff/crew-lounge"><span aria-hidden="true">☕</span><b>Ember systems</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditSettings ? <Link href="/staff/voice-rooms"><span aria-hidden="true">◌</span><b>Website voice rooms</b><i aria-hidden="true">›</i></Link> : null}
                       {canViewServiceStatus ? <Link href="/staff/service-status"><span aria-hidden="true">◔</span><b>Service status</b><i aria-hidden="true">›</i></Link> : null}
                       {canAccessServiceSettings ? <Link href="/staff/service-settings"><span aria-hidden="true">⌘</span><b>Service settings</b><i aria-hidden="true">›</i></Link> : null}
                     </div>

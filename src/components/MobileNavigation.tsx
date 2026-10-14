@@ -51,6 +51,7 @@ export function MobileNavigation({ accountHref, accountLabel, isPilotLoggedIn, l
               <Link href="/" onClick={close}>Home <span aria-hidden="true">›</span></Link>
               <Link href="/book" onClick={close}>Book a flight <span aria-hidden="true">›</span></Link>
               <Link href="/ba-radar" onClick={close}>BA-Radar live map <span aria-hidden="true">›</span></Link>
+              <Link href={isPilotLoggedIn ? "/crew-lounge" : "/login"} onClick={close}>Crew Lounge <span aria-hidden="true">›</span></Link>
               <Link href="/destinations" onClick={close}>Destinations & network <span aria-hidden="true">›</span></Link>
               <Link href="/search" onClick={close}>Search BAV <span aria-hidden="true">›</span></Link>
             </div>

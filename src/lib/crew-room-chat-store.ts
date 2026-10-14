@@ -7,6 +7,7 @@ export const CREW_ROOM_CHANNEL = "crew-lounge" as const;
 export type CrewRoomChannel = string;
 
 const eventChannelPattern = /^event:([a-z0-9][a-z0-9-]{0,79})$/;
+const voiceRoomChannelPattern = /^voice:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 type CrewRoomMessageRow = {
   id: string;
@@ -63,9 +64,16 @@ export function eventIdFromCrewRoomChannel(channel: CrewRoomChannel): string | n
   return eventChannelPattern.exec(channel)?.[1] ?? null;
 }
 
+export function voiceRoomIdFromCrewRoomChannel(channel: CrewRoomChannel): string | null {
+  return voiceRoomChannelPattern.exec(channel)?.[1] ?? null;
+}
+
 function parseChannel(value: unknown): CrewRoomChannel {
   if (value === CREW_ROOM_CHANNEL) return CREW_ROOM_CHANNEL;
   if (typeof value === "string" && eventChannelPattern.test(value.trim().toLowerCase())) {
+    return value.trim().toLowerCase();
+  }
+  if (typeof value === "string" && voiceRoomChannelPattern.test(value.trim().toLowerCase())) {
     return value.trim().toLowerCase();
   }
   throw new CrewRoomChatError("That Crew Lounge channel is not available.", 404);
@@ -75,11 +83,24 @@ function parseChannel(value: unknown): CrewRoomChannel {
 export async function assertCrewRoomChannelIsAvailable(channelValue: unknown) {
   const channel = parseChannel(channelValue);
   const eventId = eventIdFromCrewRoomChannel(channel);
-  if (!eventId) return channel;
-  const events = await getEvents();
-  if (!events.some((event) => event.id.toLowerCase() === eventId && event.published)) {
-    throw new CrewRoomChatError("That event table is not currently open.", 404);
+  if (eventId) {
+    const events = await getEvents();
+    if (!events.some((event) => event.id.toLowerCase() === eventId && event.published)) {
+      throw new CrewRoomChatError("That event table is not currently open.", 404);
+    }
+    return channel;
   }
+
+  const voiceRoomId = voiceRoomIdFromCrewRoomChannel(channel);
+  if (!voiceRoomId) return channel;
+  const { data, error } = await client()
+    .from("crew_voice_rooms")
+    .select("id, status")
+    .eq("id", voiceRoomId)
+    .neq("status", "closed")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new CrewRoomChatError("That voice room is not currently open.", 404);
   return channel;
 }
 
