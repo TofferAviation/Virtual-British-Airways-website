@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAcarsBearer } from "@/lib/acars-auth";
-import { CrewRoomChatError, createCrewRoomMessage, listCrewRoomMessages } from "@/lib/crew-room-chat-store";
+import { CrewRoomChatError, createCrewRoomMessage, listCrewRoomMessagePortraits, listCrewRoomMessages } from "@/lib/crew-room-chat-store";
 
 function errorResponse(error: unknown, fallback: string) {
   if (error instanceof CrewRoomChatError) {
@@ -22,7 +22,16 @@ export async function GET(request: Request) {
       url.searchParams.get("channel") ?? "crew-lounge",
       url.searchParams.get("limit"),
     );
-    return NextResponse.json({ messages });
+    const portraits = await listCrewRoomMessagePortraits(messages);
+    return NextResponse.json(
+      { messages, portraits },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Vary": "Authorization",
+        },
+      },
+    );
   } catch (error) {
     return errorResponse(error, "Crew Lounge is unavailable.");
   }

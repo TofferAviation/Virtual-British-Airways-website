@@ -804,6 +804,28 @@ export async function getPilotById(id: string) {
   return state.pilots.find((pilot) => pilot.id === id) ?? null;
 }
 
+/**
+ * Resolves only the current, shareable profile portraits for a bounded set of
+ * pilots. Crew Lounge messages deliberately keep their authored snapshot
+ * separate from profile media, so a portrait is always looked up at display
+ * time and never copied into message history.
+ */
+export async function getPilotProfileImagesById(ids: Iterable<string>) {
+  const requested = new Set(
+    Array.from(ids, (id) => id.trim()).filter(Boolean),
+  );
+  const images = new Map<string, string | null>();
+  if (requested.size === 0) return images;
+
+  const state = await readState();
+  for (const pilot of state.pilots) {
+    if (requested.has(pilot.id)) {
+      images.set(pilot.id, normaliseStoredProfileImage(pilot.profileImage));
+    }
+  }
+  return images;
+}
+
 const ACARS_DEVICE_SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 function acarsDeviceSessionSecret() {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getEvents } from "@/lib/event-store";
+import { getPilotProfileImagesById } from "@/lib/pilot-store";
 
 export const CREW_ROOM_CHANNEL = "crew-lounge" as const;
 export type CrewRoomChannel = string;
@@ -27,6 +28,12 @@ export type CrewRoomMessage = {
   rank: string;
   body: string;
   createdAt: string;
+};
+
+/** A current profile portrait, returned separately from immutable chat rows. */
+export type CrewRoomMessagePortrait = {
+  pilotId: string;
+  profileImage: string | null;
 };
 
 export class CrewRoomChatError extends Error {
@@ -120,6 +127,20 @@ export async function listCrewRoomMessages(channelValue: unknown, requestedLimit
     .limit(limit);
   if (error) throw error;
   return ((data ?? []) as CrewRoomMessageRow[]).reverse().map(toMessage);
+}
+
+/**
+ * Looks up current portraits for the conversation without storing media in
+ * crew_room_messages. The ACARS route is authenticated and marks its response
+ * private; Ember keeps these display images in memory only.
+ */
+export async function listCrewRoomMessagePortraits(messages: readonly CrewRoomMessage[]): Promise<CrewRoomMessagePortrait[]> {
+  const pilotIds = [...new Set(messages.map((message) => message.pilotId))];
+  const profiles = await getPilotProfileImagesById(pilotIds);
+  return pilotIds.map((pilotId) => ({
+    pilotId,
+    profileImage: profiles.get(pilotId) ?? null,
+  }));
 }
 
 export async function createCrewRoomMessage(input: {
