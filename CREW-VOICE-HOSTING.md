@@ -1,26 +1,29 @@
 # BAV Crew Lounge voice
 
-## Day-one pilot-to-pilot beta
+## Pilot privacy and room scope
 
-The first Crew Lounge release deliberately keeps the service inside BAV's existing footprint:
+Crew Lounge voice is for small, staff-managed rooms of up to four pilots. A browser asks for microphone access only after a pilot presses **Join voice**, and starts muted. Camera and screen-share access are requested only when that pilot selects the relevant control. Leaving the room stops local media tracks.
 
-- **Supabase** stores staff-managed room metadata and the separate room-chat history.
-- **The BAV website on Render** verifies each pilot's signed BAV session, keeps a short-lived in-memory list of people in an open room, and relays only WebRTC connection invitations.
-- **Participating browsers** send microphone, camera and screen media directly to one another. BAV does not record, relay or persist that media.
+BAV does not record or retain voice, camera, or screen-share content. Text chat is separate from media and the lounge displays the most recent 14 days of messages from `crew_room_messages`.
 
-A browser asks for microphone access only after a pilot presses **Join voice**. It begins muted. Camera and screen-sharing permissions are requested only when that pilot selects the relevant control. Leaving the room stops all local media tracks.
+## Reliable connection routing
 
-The beta is capped at four pilots in each open room. Its signals expire after 90 seconds without a heartbeat and are held only in the running website process; a deploy or service restart simply ends the call and pilots can reconnect. Connection setup uses STUN, which may expose normal network-routing metadata such as an IP address to the STUN operator, but it never carries the call's audio, video or shared screen.
+The BAV website verifies a pilot's signed session, room access, and signalling messages. Browsers try to connect directly first. When their networks cannot make a direct WebRTC connection, the configured Cloudflare Realtime TURN relay carries the encrypted audio, video, or shared screen between participants. This is routing only: it does not add recording or transcription.
 
-This is an intentionally modest, no-extra-cost starting point. It is suitable for route planning, an event briefing and a small social call. It is not a replacement for a hosted Discord-scale service: pilots behind restrictive or symmetric-NAT networks can fail to connect because there is no TURN relay.
+The browser never receives BAV's long-lived Cloudflare secret. For every room join, the website asks Cloudflare for short-lived ICE credentials that expire after two hours.
 
-## Future BAV-hosted service
+## One-time production setup
 
-When consistent larger rooms are worth funding, replace the in-memory setup layer with a BAV-operated WebRTC service behind a BAV-owned hostname such as `voice.virtualairline.co.uk`.
+1. In Cloudflare, create a **Realtime TURN** key named `bav-crew-lounge-production`.
+2. Give the key an API token permitted to generate TURN credentials.
+3. In Render, add these encrypted environment variables to the BAV website service:
+   - `BAV_CLOUDFLARE_TURN_KEY_ID`
+   - `BAV_CLOUDFLARE_TURN_KEY_TOKEN`
+4. Redeploy the service after saving the values.
+5. Test with two signed-in pilot accounts on separate networks, first voice-only and then camera and screen share.
 
-1. Run a maintained SFU and authenticated TURN relay in the selected region.
-2. Have the website issue a short-lived BAV-signed room token only after it verifies both the pilot session and the room status.
-3. Keep recording, transcription and analytics disabled until BAV has a separate policy and explicit pilot consent.
-4. Test desktop and mobile Safari with voice-only, camera and screen-sharing before lifting the four-pilot limit.
+Without these settings, the beta uses direct peer-to-peer routing with a STUN service. That can fail on restrictive or symmetric-NAT networks and should only be used as a development fallback.
 
-Text conversation is separate from media. The website currently displays the most recent 14 days of messages from `crew_room_messages`; that display window is not a claim that audio, camera or screen data is stored.
+## Operational boundary
+
+Cloudflare TURN keeps small rooms dependable, but it is not a Discord-scale media platform. A future larger-room service should use an authenticated SFU, BAV-owned room tokens, an explicit retention policy, and mobile Safari testing before the four-pilot cap is raised.

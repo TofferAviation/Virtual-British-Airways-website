@@ -128,7 +128,7 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: Pilot }
       if (connection.connectionState === "failed" || connection.connectionState === "closed") {
         connectionsRef.current.delete(peer.sessionId);
         if (mounted.current) setRemoteStreams((current) => { const next = { ...current }; delete next[peer.sessionId]; return next; });
-        if (connection.connectionState === "failed" && mounted.current) setNotice("A direct connection could not be completed on this network. The room chat is still available; you can retry voice.");
+        if (connection.connectionState === "failed" && mounted.current) setNotice("Your voice connection could not be completed on this network. The room chat is still available; you can retry voice.");
       }
     };
     connectionsRef.current.set(peer.sessionId, entry);
@@ -199,7 +199,7 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: Pilot }
       for (const signal of reply.signals ?? []) await processSignal(signal);
       await synchroniseParticipants(reply.participants ?? []);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The direct call lost its connection.";
+      const message = error instanceof Error ? error.message : "The voice call lost its connection.";
       if (mounted.current) setNotice(message);
     } finally {
       pollingRef.current = false;
@@ -322,7 +322,7 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: Pilot }
   return <section className="crew-p2p-call" aria-label="Private Crew Lounge voice room">
     <header className="crew-p2p-call-heading"><div><span className="crew-voice-eyebrow">Private direct call · beta</span><h3>{phase === "connected" ? "You are in the crew room" : "Join the crew voice room"}</h3></div><span className="crew-p2p-capacity">{memberCount}/4 pilots</span></header>
     {phase === "idle" || phase === "error" ? <div className="crew-p2p-intro"><p>Join muted, then decide whether to speak, turn on your camera, or share a screen. BAV does not record or retain your media.</p><button type="button" className="crew-voice-primary" onClick={() => void join()}>Join voice</button></div> : null}
-    {phase === "joining" ? <div className="crew-p2p-intro"><span className="crew-p2p-spinner" aria-hidden="true" /><p>Asking your browser for microphone permission and preparing a direct connection…</p></div> : null}
+    {phase === "joining" ? <div className="crew-p2p-intro"><span className="crew-p2p-spinner" aria-hidden="true" /><p>Asking your browser for microphone permission and preparing a secure voice connection…</p></div> : null}
     {phase === "connected" ? <>
       <div className={`crew-p2p-grid crew-p2p-grid-${Math.min(Math.max(memberCount, 1), 4)}`}>
         <article className="crew-p2p-tile crew-p2p-self">{localMedia && previewStream ? <StreamVideo stream={previewStream} className="crew-p2p-video" muted /> : <span className="crew-p2p-avatar">{pilot.profileImage ? <img src={pilot.profileImage} alt="" /> : initials(pilot.name)}</span>}<footer><strong>You</strong><span>{screenOn ? "Sharing screen" : cameraOn ? "Camera on" : muted ? "Muted" : "Speaking"}</span></footer></article>
@@ -333,7 +333,7 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: Pilot }
         })}
       </div>
       <div className="crew-p2p-controls"><button type="button" className={muted ? "active" : ""} onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button><button type="button" className={cameraOn ? "active" : ""} onClick={() => void toggleCamera()}>{cameraOn ? "Camera off" : "Camera"}</button><button type="button" className={screenOn ? "active" : ""} onClick={() => void toggleScreen()}>{screenOn ? "Stop share" : "Share screen"}</button><button type="button" className="leave" onClick={() => void leave()}>Leave voice</button></div>
-      <p className="crew-p2p-privacy">Direct pilot-to-pilot media · no BAV recording · standard connection setup may use a public STUN service to find a route, but it never carries your call.</p>
+      <p className="crew-p2p-privacy">Encrypted pilot-to-pilot media · no BAV recording · calls connect directly when possible and use BAV’s Cloudflare relay only when a network requires it.</p>
     </> : null}
     {notice ? <div className="crew-p2p-notice" role="status"><p>{notice}</p>{phase === "connected" ? <button type="button" onClick={() => { void leave().then(() => join()); }}>Reconnect voice</button> : null}</div> : null}
   </section>;

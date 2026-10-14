@@ -41,6 +41,12 @@ type VoicePeerSnapshot = {
   signals: VoiceSignal[];
 };
 
+type VoiceIceServer = {
+  urls: string[];
+  username?: string;
+  credential?: string;
+};
+
 export class VoicePeerError extends Error {
   constructor(message: string, public readonly status: number) {
     super(message);
@@ -207,7 +213,78 @@ export function leaveVoicePeerRoom(input: { roomId: string; pilotId: string; ses
   deleteSession(session.sessionId);
 }
 
-export function voicePeerIceServers() {
+function configuredCloudflareTurn() {
+  const keyId = process.env.BAV_CLOUDFLARE_TURN_KEY_ID?.trim();
+  const apiToken = process.env.BAV_CLOUDFLARE_TURN_KEY_TOKEN?.trim();
+  if (!keyId && !apiToken) return null;
+  if (!keyId || !apiToken) {
+    throw new VoicePeerError("BAV's voice relay is only partly configured. Please ask staff to complete the setup.", 503);
+  }
+  return { keyId, apiToken };
+}
+
+function cloudflareIceServers(value: unknown): VoiceIceServer[] {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { iceServers?: unknown }).iceServers)) {
+    throw new VoicePeerError("BAV's voice relay returned an invalid connection setup. Please try again shortly.", 503);
+  }
+
+  const servers = (value as { iceServers: unknown[] }).iceServers.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const raw = entry as { urls?: unknown; username?: unknown; credential?: unknown };
+    const urls = (Array.isArray(raw.urls) ? raw.urls : [raw.urls])
+      .filter((url): url is string => typeof url === "string")
+      .map((url) => url.trim())
+      .filter((url) => /^(stuns?|turns?):[^\s]+$/i.test(url));
+    if (!urls.length) return [];
+    const server: VoiceIceServer = { urls };
+    if (typeof raw.username === "string" && typeof raw.credential === "string") {
+      server.username = raw.username;
+      server.credential = raw.credential;
+    }
+    return [server];
+  });
+
+  const hasRelay = servers.some((server) => server.urls.some((url) => /^turns?:/i.test(url)) && server.username && server.credential);
+  if (!hasRelay) {
+    throw new VoicePeerError("BAV's voice relay returned no usable relay route. Please try again shortly.", 503);
+  }
+  return servers;
+}
+
+async function managedVoiceRelayIceServers(config: { keyId: string; apiToken: string }) {
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(config.keyId)}/credentials/generate-ice-servers`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ttl: 7200 }),
+        cache: "no-store",
+      },
+    );
+  } catch {
+    throw new VoicePeerError("BAV's voice relay is temporarily unavailable. Please try again shortly.", 503);
+  }
+
+  if (!response.ok) {
+    throw new VoicePeerError("BAV's voice relay is temporarily unavailable. Please try again shortly.", 503);
+  }
+  try {
+    return cloudflareIceServers(await response.json());
+  } catch (error) {
+    if (error instanceof VoicePeerError) throw error;
+    throw new VoicePeerError("BAV's voice relay returned an unreadable connection setup. Please try again shortly.", 503);
+  }
+}
+
+export async function voicePeerIceServers(): Promise<VoiceIceServer[]> {
+  const cloudflareTurn = configuredCloudflareTurn();
+  if (cloudflareTurn) return managedVoiceRelayIceServers(cloudflareTurn);
+
   const configured = process.env.BAV_P2P_STUN_URL?.trim();
   const fallback = "stun:stun.l.google.com:19302";
   const urls = (configured ? configured.split(",") : [fallback])
@@ -217,5 +294,7 @@ export function voicePeerIceServers() {
 
   // A malformed optional setting must not take the approved beta offline.
   // STUN supplies only connection-routing metadata; media stays P2P.
+  // Production should configure the managed TURN relay above so restrictive
+  // networks can still complete an encrypted media connection.
   return [{ urls: urls.length ? urls : [fallback] }];
 }

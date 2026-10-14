@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, context: Context) {
         name: auth.pilot.name,
         profileImage: auth.pilot.profileImage,
       });
-      return response({ ...joined, iceServers: voicePeerIceServers() });
+      return response({ ...joined, iceServers: await voicePeerIceServers() });
     }
     if (body.action === "poll") {
       return response(pollVoicePeerRoom({ roomId: auth.room.id, pilotId: auth.pilot.pilotId, sessionId: body.sessionId, token: body.token }));
