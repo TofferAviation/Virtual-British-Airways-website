@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { PeerVoiceCall } from "./PeerVoiceCall";
 
 type VoiceRoomStatus = "scheduled" | "open" | "closed";
 type VoiceRoom = { id: string; name: string; description: string; startsAt: string | null; endsAt: string | null; status: VoiceRoomStatus };
@@ -8,8 +9,6 @@ type Pilot = { id: string; name: string; pilotNumber: string; profileImage: stri
 type ChatMessage = { id: string; pilotId: string; pilotNumber: string; pilotName: string; rank: string; body: string; createdAt: string };
 type Portrait = { pilotId: string; profileImage: string | null };
 type Props = { pilot: Pilot; initialRooms: VoiceRoom[] };
-
-type PermissionState = "idle" | "checking" | "ready" | "blocked" | "unsupported";
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BA";
@@ -28,10 +27,6 @@ function profileImage(image: string | null | undefined) {
   return image && image.trim() ? image : null;
 }
 
-function stopStream(stream: MediaStream | null) {
-  stream?.getTracks().forEach((track) => track.stop());
-}
-
 export function CrewLounge({ pilot, initialRooms }: Props) {
   const firstRoom = initialRooms.find((room) => room.status === "open") ?? initialRooms[0] ?? null;
   const [selectedRoomId, setSelectedRoomId] = useState(firstRoom?.id ?? "");
@@ -40,19 +35,9 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
   const [chatStatus, setChatStatus] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [microphone, setMicrophone] = useState<PermissionState>("idle");
-  const [camera, setCamera] = useState<PermissionState>("idle");
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   const selectedRoom = useMemo(() => initialRooms.find((room) => room.id === selectedRoomId) ?? null, [initialRooms, selectedRoomId]);
   const roomIsOpen = selectedRoom?.status === "open";
-
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = cameraStream;
-  }, [cameraStream]);
-
-  useEffect(() => () => stopStream(cameraStream), [cameraStream]);
 
   useEffect(() => {
     if (!selectedRoom || !roomIsOpen) {
@@ -79,32 +64,6 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
     const timer = window.setInterval(() => void load(), 30000);
     return () => { live = false; window.clearInterval(timer); };
   }, [selectedRoom?.id, roomIsOpen, selectedRoom]);
-
-  async function checkMicrophone() {
-    if (!navigator.mediaDevices?.getUserMedia) { setMicrophone("unsupported"); return; }
-    setMicrophone("checking");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      stopStream(stream);
-      setMicrophone("ready");
-    } catch {
-      setMicrophone("blocked");
-    }
-  }
-
-  async function toggleCameraPreview() {
-    if (cameraStream) {
-      stopStream(cameraStream); setCameraStream(null); setCamera("idle"); return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) { setCamera("unsupported"); return; }
-    setCamera("checking");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-      setCameraStream(stream); setCamera("ready");
-    } catch {
-      setCamera("blocked");
-    }
-  }
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -139,8 +98,8 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
           </div>
           <aside className="crew-voice-privacy-card">
             <span className="crew-voice-live-dot" aria-hidden="true" />
-            <strong>BAV voice service, safely in preparation</strong>
-            <p>Rooms are run by BAV staff. Camera and microphone tests stay in your browser and are never recorded by BAV.</p>
+            <strong>Private pilot-to-pilot voice beta</strong>
+            <p>Rooms are run by BAV staff. Audio, camera and screen sharing are opt-in and are never recorded by BAV.</p>
           </aside>
         </div>
       </section>
@@ -156,7 +115,7 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
               </button>
             )) : <div className="crew-voice-empty-rail"><strong>No rooms on the board yet</strong><span>Staff will add the next crew space here.</span></div>}
           </div>
-          <div className="crew-voice-rail-note"><span>✦</span><p><strong>New to BAV?</strong> You can drop into an open room when the voice service goes live. There is no pressure to turn on your camera.</p></div>
+          <div className="crew-voice-rail-note"><span>✦</span><p><strong>New to BAV?</strong> You can drop into an open room, listen first and decide what to share. There is never pressure to turn on your camera.</p></div>
         </aside>
 
         <section className="crew-voice-main-panel">
@@ -165,23 +124,7 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
               <div><span className={`crew-voice-status ${selectedRoom.status}`}>{selectedRoom.status === "open" ? "Open crew space" : "Upcoming crew space"}</span><h2>{selectedRoom.name}</h2><p>{selectedRoom.description}</p></div>
               <div className="crew-voice-room-time"><span>{roomTime(selectedRoom)}</span>{selectedRoom.endsAt ? <small>Ends {new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(selectedRoom.endsAt))} UTC</small> : null}</div>
             </header>
-            <section className="crew-voice-stage" aria-label="Voice room preflight">
-              <div className="crew-voice-stage-copy">
-                <span className="crew-voice-eyebrow">Your preflight</span>
-                <h3>{roomIsOpen ? "Check in at your own pace" : "This room is on the departure board"}</h3>
-                <p>{roomIsOpen ? "The private BAV call layer will be switched on after its hosted service and security checks are complete. You can test your devices here without joining a call or sending any media." : "Staff have scheduled this room. It will become available here once they open it."}</p>
-                {roomIsOpen ? <div className="crew-voice-device-actions">
-                  <button type="button" className="crew-voice-primary" onClick={() => void checkMicrophone()} disabled={microphone === "checking"}>{microphone === "checking" ? "Checking microphone…" : microphone === "ready" ? "Microphone checked" : "Check microphone"}</button>
-                  <button type="button" className="crew-voice-secondary" onClick={() => void toggleCameraPreview()} disabled={camera === "checking"}>{camera === "checking" ? "Opening camera…" : cameraStream ? "Close camera preview" : "Try camera preview"}</button>
-                </div> : null}
-                {microphone === "blocked" || camera === "blocked" ? <p className="crew-voice-device-message">Your browser did not grant that permission. You can change it later in your browser settings—nothing has been sent to BAV.</p> : null}
-                {microphone === "unsupported" || camera === "unsupported" ? <p className="crew-voice-device-message">This browser does not offer media permissions. Try the latest Safari, Chrome, Edge or Firefox.</p> : null}
-              </div>
-              <div className="crew-voice-preview-card">
-                {cameraStream ? <video className="crew-voice-camera-preview" ref={videoRef} autoPlay muted playsInline aria-label="Your local camera preview" /> : <div className="crew-voice-preview-placeholder"><span aria-hidden="true">◌</span><strong>Camera stays off by default</strong><p>Only you can see a local preview. It closes when you leave this page.</p></div>}
-                <footer><span className={microphone === "ready" ? "is-ready" : ""}>● Microphone {microphone === "ready" ? "ready" : "not connected"}</span><span className={cameraStream ? "is-ready" : ""}>● Camera {cameraStream ? "previewing locally" : "off"}</span></footer>
-              </div>
-            </section>
+            {roomIsOpen ? <PeerVoiceCall key={selectedRoom.id} room={selectedRoom} pilot={pilot} /> : <section className="crew-voice-stage" aria-label="Voice room availability"><div className="crew-voice-stage-copy"><span className="crew-voice-eyebrow">Your preflight</span><h3>This room is on the departure board</h3><p>Staff have scheduled this room. Voice, chat and its crew table will become available here once they open it.</p></div></section>}
             <section className="crew-voice-chat" aria-labelledby="crew-voice-chat-title">
               <header><div><span className="crew-voice-eyebrow">Room conversation</span><h3 id="crew-voice-chat-title">The crew chat</h3></div><span>Text is separate from voice · last 14 days shown</span></header>
               <div className="crew-voice-messages">
@@ -205,7 +148,7 @@ export function CrewLounge({ pilot, initialRooms }: Props) {
             <div>{profileImage(pilot.profileImage) ? <img src={pilot.profileImage!} alt="" /> : <span className="crew-voice-pilot-avatar">{initials(pilot.name)}</span>}<span><strong>{pilot.name}</strong><small>Pilot {pilot.pilotNumber}</small></span></div>
             <p>You are welcome to listen first. Your camera, microphone and screen are always opt-in.</p>
           </section>
-          <section className="crew-voice-guide-card"><span className="crew-voice-eyebrow">How BAV voice will work</span><ol><li><b>Choose an open crew room</b><span>Staff set up spaces around events, planning and social flying.</span></li><li><b>Decide what to share</b><span>Start muted; turn on your microphone, camera or screen only when you choose.</span></li><li><b>Fly together</b><span>The BAV-hosted call will reshape its layout as people join, without changing your flight tools.</span></li></ol></section>
+          <section className="crew-voice-guide-card"><span className="crew-voice-eyebrow">How BAV voice works</span><ol><li><b>Choose an open crew room</b><span>Staff set up spaces around events, planning and social flying.</span></li><li><b>Decide what to share</b><span>Start muted; turn on your microphone, camera or screen only when you choose.</span></li><li><b>Fly together</b><span>Small rooms connect pilots directly and reshape the view as people join, without changing your flight tools.</span></li></ol></section>
           <section className="crew-voice-host-note"><span>✦</span><p><strong>Privacy by design</strong> BAV will not record or retain your camera, microphone or shared screen. Device checks run only in this browser tab.</p></section>
         </aside>
       </section>
