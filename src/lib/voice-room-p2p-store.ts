@@ -209,9 +209,13 @@ export function leaveVoicePeerRoom(input: { roomId: string; pilotId: string; ses
 
 export function voicePeerIceServers() {
   const configured = process.env.BAV_P2P_STUN_URL?.trim();
-  const urls = (configured ? configured.split(",") : ["stun:stun.l.google.com:19302"])
+  const fallback = "stun:stun.l.google.com:19302";
+  const urls = (configured ? configured.split(",") : [fallback])
     .map((value) => value.trim())
-    .filter((value) => /^stuns?:\/\/[^\s]+$/i.test(value));
-  if (!urls.length) throw new VoicePeerError("The direct-call route helper is not configured.", 503);
-  return [{ urls }];
+    // WebRTC ICE uses `stun:host:port`, rather than a `stun://` web URL.
+    .filter((value) => /^stuns?:[^\s]+$/i.test(value));
+
+  // A malformed optional setting must not take the approved beta offline.
+  // STUN supplies only connection-routing metadata; media stays P2P.
+  return [{ urls: urls.length ? urls : [fallback] }];
 }
