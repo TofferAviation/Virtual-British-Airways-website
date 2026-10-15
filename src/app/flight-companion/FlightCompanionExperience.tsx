@@ -78,9 +78,11 @@ export function FlightCompanionExperience({ pilot, assignment, flightPlan, initi
   return <main className="flight-companion-page">
     <section className="flight-companion-hero">
       <div className="flight-companion-shell">
-        <span className="flight-companion-kicker">BAV FLIGHT COMPANION</span>
-        <h1>{assignment ? "Your next flight, together." : "Make your next flight feel shared."}</h1>
-        <p>{assignment ? `Your ${assignment.flightNumber} briefing, crew board and Lounge are all in one place.` : "Choose a BAV flight, find a community event, and meet the people flying alongside you."}</p>
+        <div className="flight-companion-hero-accessible-copy">
+          <span className="flight-companion-kicker">BAV Flight Companion</span>
+          <h1>{assignment ? "Your next flight, together." : "Make your next flight feel shared."}</h1>
+          <p>{assignment ? `Your ${assignment.flightNumber} briefing, crew board and Lounge are all in one place.` : "Choose a BAV flight, find a community event, and meet the people flying alongside you."}</p>
+        </div>
         <div className="flight-companion-hero-actions">
           <Link className="flight-companion-primary" href={assignment ? `/flight-plans/${encodeURIComponent(assignment.id)}` : "/book"}>{assignment ? "Open flight briefing" : "Find a BAV flight"}</Link>
           <Link className="flight-companion-secondary" href="/crew-lounge">Open Crew Lounge</Link>
