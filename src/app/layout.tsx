@@ -17,6 +17,7 @@ import "./crew-voice-p2p.css";
 import "./crew-voice-dock.css";
 import "./crew-voice-live.css";
 import "./crew-lounge-redesign.css";
+import "./flight-companion.css";
 import "./dark-shell.css";
 import "./ba-reference-header.css";
 import "./oneworld.css";
