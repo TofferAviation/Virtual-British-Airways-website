@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FirstVisitWelcome } from "@/components/FirstVisitWelcome";
+import { CrewVoiceProvider } from "@/components/CrewVoiceProvider";
 import { SiteTrafficTracker } from "@/components/SiteTrafficTracker";
 import "./globals.css";
 import "./portal.css";
@@ -13,6 +14,7 @@ import "./home-ember.css";
 import "./hub-traffic.css";
 import "./crew-voice.css";
 import "./crew-voice-p2p.css";
+import "./crew-voice-dock.css";
 import "./crew-voice-live.css";
 import "./dark-shell.css";
 import "./ba-reference-header.css";
@@ -97,7 +99,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         <SiteTrafficTracker />
-        {children}
+        <CrewVoiceProvider>{children}</CrewVoiceProvider>
         <FirstVisitWelcome />
       </body>
     </html>
