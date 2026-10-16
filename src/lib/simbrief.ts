@@ -14,6 +14,7 @@ const aircraftIcao: Record<string, string> = {
   "Airbus A320neo": "A20N",
   "Airbus A321neo": "A21N",
   "Airbus A350-1000": "A35K",
+  "Airbus A380-800": "A388",
   "Boeing 777-200ER": "B772",
   "Boeing 777-300ER": "B77W",
   "Boeing 787-8": "B788",
