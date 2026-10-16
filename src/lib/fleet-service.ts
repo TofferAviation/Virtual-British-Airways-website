@@ -175,6 +175,23 @@ export type FleetStatusTransitionInput = {
   effectiveAt?: string;
 };
 
+export type FleetAircraftRelocationInput = {
+  /** Optimistic-concurrency value displayed with the aircraft record. */
+  expectedVersion: number;
+  /** ICAO, IATA, or another short operational station code. */
+  station: string;
+  /** Required operational record explaining the manual relocation. */
+  reason: string;
+};
+
+export type FleetFleetRelocationInput = Omit<FleetAircraftRelocationInput, "expectedVersion">;
+
+export type FleetFleetRelocationResult = {
+  relocated: number;
+  skippedActive: number;
+  alreadyAtStation: number;
+};
+
 export type FleetDefectInput = {
   category: string;
   description: string;
@@ -1091,6 +1108,58 @@ export async function transitionFleetAircraftStatus(aircraftId: string, actor: F
   });
   rpcError("Could not update aircraft status", error);
   return asDetail(data as AircraftRow);
+}
+
+export async function relocateFleetAircraft(aircraftId: string, actor: FleetActor, input: FleetAircraftRelocationInput) {
+  const station = requiredText(input.station, "Destination station", 3).toUpperCase();
+  if (!/^[A-Z0-9]{3,8}$/.test(station)) {
+    throw new FleetServiceError("Destination station must contain 3–8 letters or numbers.", 400);
+  }
+  requiredText(input.reason, "Relocation reason", 3);
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+    throw new FleetServiceError("The aircraft record has changed. Refresh and try again.", 409);
+  }
+
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const { data, error } = await client.rpc("fleet_relocate_aircraft", {
+    p_organization_id: organization,
+    p_aircraft_id: aircraftId,
+    p_expected_version: input.expectedVersion,
+    p_station: station,
+    p_reason: input.reason.trim(),
+    p_actor_subject: actor.subject,
+    p_actor_role: actor.fleetRole,
+    p_request_id: requestId(),
+  });
+  rpcError("Could not relocate aircraft", error);
+  return asDetail(data as AircraftRow);
+}
+
+export async function relocateEligibleFleetAircraft(actor: FleetActor, input: FleetFleetRelocationInput) {
+  const station = requiredText(input.station, "Destination station", 3).toUpperCase();
+  if (!/^[A-Z0-9]{3,8}$/.test(station)) {
+    throw new FleetServiceError("Destination station must contain 3–8 letters or numbers.", 400);
+  }
+  requiredText(input.reason, "Relocation reason", 3);
+
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const { data, error } = await client.rpc("fleet_relocate_eligible_fleet", {
+    p_organization_id: organization,
+    p_station: station,
+    p_reason: input.reason.trim(),
+    p_actor_subject: actor.subject,
+    p_actor_role: actor.fleetRole,
+    p_request_id: requestId(),
+  });
+  rpcError("Could not relocate fleet", error);
+  const result = data as Partial<FleetFleetRelocationResult> | null;
+  return {
+    relocated: Number(result?.relocated ?? 0),
+    skippedActive: Number(result?.skippedActive ?? 0),
+    alreadyAtStation: Number(result?.alreadyAtStation ?? 0),
+  } satisfies FleetFleetRelocationResult;
 }
 
 export async function reportFleetDefect(aircraftId: string, actor: FleetActor, input: FleetDefectInput) {

@@ -133,6 +133,7 @@ export function FleetBoard({ initialAircraft, canManage }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const importDialog = useRef<HTMLDialogElement>(null);
   const photoImportDialog = useRef<HTMLDialogElement>(null);
+  const relocationDialog = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<CreateFleetAircraftInput>(blankAircraft);
   const [saving, setSaving] = useState(false);
@@ -151,6 +152,13 @@ export function FleetBoard({ initialAircraft, canManage }: Props) {
   const [syncingPlanespottersPhotos, setSyncingPlanespottersPhotos] = useState(false);
   const [planespottersPhotoStatus, setPlanespottersPhotoStatus] = useState("");
   const [planespottersPhotoError, setPlanespottersPhotoError] = useState("");
+  const [relocationScope, setRelocationScope] = useState<"aircraft" | "fleet">("aircraft");
+  const [relocationAircraftId, setRelocationAircraftId] = useState(initialAircraft[0]?.id ?? "");
+  const [relocationStation, setRelocationStation] = useState("");
+  const [relocationReason, setRelocationReason] = useState("");
+  const [relocationError, setRelocationError] = useState("");
+  const [relocationStatus, setRelocationStatus] = useState("");
+  const [relocating, setRelocating] = useState(false);
   const aircraft = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return initialAircraft;
@@ -280,6 +288,47 @@ export function FleetBoard({ initialAircraft, canManage }: Props) {
     }
   }
 
+  function openRelocation() {
+    const suggestedAircraft = aircraft[0] ?? initialAircraft[0];
+    setRelocationScope("aircraft");
+    setRelocationAircraftId(suggestedAircraft?.id ?? "");
+    setRelocationStation("");
+    setRelocationReason("");
+    setRelocationError("");
+    relocationDialog.current?.showModal();
+  }
+
+  async function submitRelocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const selectedAircraft = initialAircraft.find((item) => item.id === relocationAircraftId);
+    setRelocating(true);
+    setRelocationError("");
+    try {
+      const relocation = relocationScope === "fleet"
+        ? { scope: "fleet" as const, station: relocationStation, reason: relocationReason }
+        : { scope: "aircraft" as const, aircraftId: selectedAircraft?.id, expectedVersion: selectedAircraft?.statusVersion, station: relocationStation, reason: relocationReason };
+      const response = await fetch("/api/staff/fleet/relocate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relocation }),
+      });
+      const result = await response.json() as { error?: string; result?: { relocated: number; skippedActive: number; alreadyAtStation: number } };
+      if (!response.ok) throw new Error(result.error || "Could not relocate aircraft.");
+      if (relocationScope === "fleet") {
+        const summary = result.result;
+        setRelocationStatus(`${summary?.relocated ?? 0} aircraft relocated to ${relocationStation.toUpperCase()}. ${summary?.skippedActive ?? 0} active or assigned aircraft protected; ${summary?.alreadyAtStation ?? 0} already at that station.`);
+      } else {
+        setRelocationStatus(`${selectedAircraft?.registration ?? "Aircraft"} relocated to ${relocationStation.toUpperCase()}.`);
+      }
+      relocationDialog.current?.close();
+      router.refresh();
+    } catch (caught) {
+      setRelocationError(caught instanceof Error ? caught.message : "Could not relocate aircraft.");
+    } finally {
+      setRelocating(false);
+    }
+  }
+
   return <>
     <div className="fleet-board-heading">
       <div><span className="staff-kicker">Fleet board</span><h2>Current aircraft</h2></div>
@@ -288,12 +337,14 @@ export function FleetBoard({ initialAircraft, canManage }: Props) {
         {canManage && initialAircraft.length === 0 ? <button className="fleet-primary-action" type="button" onClick={() => { setImportError(""); setImportStatus(""); setImportRows([]); importDialog.current?.showModal(); }}>Import fleet workbook</button> : null}
         {canManage ? <button type="button" disabled={syncingPlanespottersPhotos} onClick={syncPlanespottersPhotos}>{syncingPlanespottersPhotos ? "Syncing Planespotters…" : "Sync Planespotters photos"}</button> : null}
         {canManage ? <button type="button" onClick={() => { setPhotoImportError(""); setPhotoImportStatus(""); setPhotoRows([]); photoImportDialog.current?.showModal(); }}>Import photo catalogue</button> : null}
+        {canManage && initialAircraft.length ? <button type="button" onClick={openRelocation}>Relocate aircraft</button> : null}
         {canManage ? <button className="fleet-primary-action" type="button" onClick={() => { setError(""); dialog.current?.showModal(); }}>Add aircraft</button> : null}
         <span>{aircraft.length} aircraft</span>
       </div>
     </div>
     {planespottersPhotoStatus ? <p className="fleet-import-status" role="status">{planespottersPhotoStatus}</p> : null}
     {planespottersPhotoError ? <p className="fleet-form-error" role="alert">{planespottersPhotoError}</p> : null}
+    {relocationStatus ? <p className="fleet-import-status" role="status">{relocationStatus}</p> : null}
     {!aircraft.length ? <div className="fleet-empty"><strong>{initialAircraft.length ? "No matching aircraft" : "No aircraft records yet"}</strong><p>{initialAircraft.length ? "Try a different registration, type or fleet search." : "The shared fleet is ready. Add verified aircraft master records through the controlled onboarding workflow."}</p></div> : <div className="fleet-table-wrap"><table className="fleet-table">
       <thead><tr><th>Registration</th><th>Type</th><th>Station</th><th>Operations</th><th>Technical</th><th>Dispatch</th><th>Utilization</th></tr></thead>
       <tbody>{aircraft.map((item) => <tr key={item.id}>
@@ -322,6 +373,18 @@ export function FleetBoard({ initialAircraft, canManage }: Props) {
         <label>Airframe cycles<input min="0" type="number" value={form.airframeCycles ?? ""} onChange={(event) => setForm({ ...form, airframeCycles: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>
         {error ? <p className="fleet-form-error" role="alert">{error}</p> : null}
         <div className="fleet-dialog-actions"><button type="button" onClick={() => dialog.current?.close()}>Cancel</button><button className="fleet-primary-action" disabled={saving} type="submit">{saving ? "Saving…" : "Create aircraft record"}</button></div>
+      </form>
+    </dialog>
+
+    <dialog ref={relocationDialog} className="fleet-dialog" onClose={() => setRelocationError("")}>
+      <form method="dialog" className="fleet-dialog-head"><div><span className="staff-kicker">Controlled fleet movement</span><h2>Relocate aircraft position</h2><p>Update one registration or all unassigned aircraft. This records a position only—it does not change technical status, usage or flight history.</p></div><button className="fleet-icon-button" aria-label="Close" type="submit">×</button></form>
+      <form className="fleet-form fleet-form-single" onSubmit={submitRelocation}>
+        <label>Relocation scope<select value={relocationScope} onChange={(event) => setRelocationScope(event.target.value as "aircraft" | "fleet")}><option value="aircraft">One aircraft registration</option><option value="fleet">All unassigned fleet aircraft</option></select></label>
+        {relocationScope === "aircraft" ? <label>Aircraft registration<select required value={relocationAircraftId} onChange={(event) => setRelocationAircraftId(event.target.value)}>{initialAircraft.map((item) => <option key={item.id} value={item.id}>{item.registration} · {item.currentStation ?? "Station unknown"}</option>)}</select></label> : <p className="fleet-alert"><strong>Fleet-wide safeguard</strong><br />Aircraft with a reservation, live operation or planned operating movement are excluded automatically.</p>}
+        <label>Destination station<input required value={relocationStation} onChange={(event) => setRelocationStation(event.target.value.toUpperCase())} maxLength={8} placeholder="EGLL" /></label>
+        <label>Operational reason<textarea required minLength={3} value={relocationReason} onChange={(event) => setRelocationReason(event.target.value)} placeholder="For example: seasonal deployment or completed positioning plan." /></label>
+        {relocationError ? <p className="fleet-form-error" role="alert">{relocationError}</p> : null}
+        <div className="fleet-dialog-actions"><button type="button" onClick={() => relocationDialog.current?.close()}>Cancel</button><button className="fleet-primary-action" disabled={relocating} type="submit">{relocating ? "Relocating…" : relocationScope === "fleet" ? "Relocate eligible fleet" : "Relocate aircraft"}</button></div>
       </form>
     </dialog>
 
