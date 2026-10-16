@@ -5,6 +5,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 export type VoiceRoom = { id: string; name: string; status: "scheduled" | "open" | "closed" };
 export type VoicePilot = { id: string; name: string; pilotNumber: string; profileImage: string | null };
 export type VoiceParticipant = { sessionId: string; pilotId: string; pilotNumber: string; name: string; profileImage: string | null };
+export type VoiceDevice = { id: string; label: string };
 type Signal = { id: string; from: VoiceParticipant; kind: "offer" | "answer" | "candidate"; payload: Record<string, unknown> };
 type JoinReply = { session: VoiceParticipant; token: string; participants: VoiceParticipant[]; maxParticipants: number; iceServers: RTCIceServer[] };
 type PollReply = { participants: VoiceParticipant[]; signals: Signal[] };
@@ -24,11 +25,23 @@ type CrewVoiceContextValue = {
   waitingRoomCount: number;
   remoteStreams: Record<string, MediaStream>;
   previewStream: MediaStream | null;
+  inputDevices: VoiceDevice[];
+  outputDevices: VoiceDevice[];
+  cameraDevices: VoiceDevice[];
+  selectedInputId: string;
+  selectedOutputId: string;
+  selectedCameraId: string;
+  outputSelectionSupported: boolean;
   join: (room: VoiceRoom, pilot: VoicePilot) => Promise<void>;
   leave: () => Promise<void>;
+  reconnect: () => Promise<void>;
   toggleMuted: () => void;
   toggleCamera: () => Promise<void>;
   toggleScreen: () => Promise<void>;
+  refreshDevices: () => Promise<void>;
+  selectInput: (deviceId: string) => Promise<void>;
+  selectOutput: (deviceId: string) => void;
+  selectCamera: (deviceId: string) => void;
   previewRoom: (room: VoiceRoom) => Promise<void>;
 };
 
@@ -42,9 +55,44 @@ function jsonObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function RemoteAudio({ stream }: { stream: MediaStream }) {
+function deviceError(error: unknown, device: "microphone" | "camera" | "screen") {
+  const name = error && typeof error === "object" && "name" in error && typeof error.name === "string" ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return `Your browser or operating system blocked ${device} access. Open this site's permissions, choose Allow, then try again.`;
+  }
+  if (name === "NotFoundError") return `No ${device} was found. Connect one, then refresh your device list.`;
+  if (name === "NotReadableError") return `That ${device} is busy in another app or browser tab. Close it there, then try again.`;
+  if (name === "OverconstrainedError") return `The selected ${device} is no longer available. Choose another one in call settings.`;
+  if (name === "AbortError") return `${device[0]?.toUpperCase()}${device.slice(1)} setup was interrupted. Please try again.`;
+  return `Your ${device} could not be started. Check its permission and connection, then try again.`;
+}
+
+function audioConstraints(deviceId: string): MediaTrackConstraints {
+  return {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+}
+
+function RemoteAudio({ stream, outputDeviceId, onPlaybackBlocked }: { stream: MediaStream; outputDeviceId: string; onPlaybackBlocked: () => void }) {
   const ref = useRef<HTMLAudioElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
+  useEffect(() => {
+    const audio = ref.current;
+    if (!audio) return;
+    audio.srcObject = stream;
+    const output = audio as HTMLAudioElement & { setSinkId?: (deviceId: string) => Promise<void> };
+    const start = async () => {
+      try {
+        if (outputDeviceId && output.setSinkId) await output.setSinkId(outputDeviceId);
+        await audio.play();
+      } catch {
+        onPlaybackBlocked();
+      }
+    };
+    void start();
+  }, [onPlaybackBlocked, outputDeviceId, stream]);
   return <audio ref={ref} autoPlay playsInline />;
 }
 
@@ -60,9 +108,17 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
   const [waitingRoomCount, setWaitingRoomCount] = useState(0);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [inputDevices, setInputDevices] = useState<VoiceDevice[]>([]);
+  const [outputDevices, setOutputDevices] = useState<VoiceDevice[]>([]);
+  const [cameraDevices, setCameraDevices] = useState<VoiceDevice[]>([]);
+  const [selectedInputId, setSelectedInputId] = useState("");
+  const [selectedOutputId, setSelectedOutputId] = useState("");
+  const [selectedCameraId, setSelectedCameraId] = useState("");
+  const [outputSelectionSupported, setOutputSelectionSupported] = useState(false);
 
   const mounted = useRef(true);
   const activeRoomRef = useRef<VoiceRoom | null>(null);
+  const activePilotRef = useRef<VoicePilot | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const iceServersRef = useRef<RTCIceServer[]>([]);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
@@ -82,6 +138,37 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
     if (!response.ok) throw new Error(data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The voice room could not complete that request.");
     return data as Record<string, unknown>;
   }, []);
+
+  const refreshDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (!mounted.current) return;
+      const toList = (kind: MediaDeviceKind, fallback: string) => devices
+        .filter((device) => device.kind === kind)
+        .map((device, index) => ({ id: device.deviceId, label: device.label || `${fallback} ${index + 1}` }));
+      setInputDevices(toList("audioinput", "Microphone"));
+      setOutputDevices(toList("audiooutput", "Speaker"));
+      setCameraDevices(toList("videoinput", "Camera"));
+      setOutputSelectionSupported(typeof (HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: unknown }).setSinkId === "function");
+    } catch {
+      // Device discovery is optional; joining with the browser default remains available.
+    }
+  }, []);
+
+  const selectOutput = useCallback((deviceId: string) => {
+    setSelectedOutputId(deviceId);
+    if (deviceId && !outputSelectionSupported) {
+      setNotice("This browser uses its system-selected speaker for calls. Choose a different output in your device or browser settings.");
+    } else if (deviceId) {
+      setNotice("Speaker output updated for incoming call audio.");
+    }
+  }, [outputSelectionSupported]);
+
+  const selectCamera = useCallback((deviceId: string) => {
+    setSelectedCameraId(deviceId);
+    if (cameraOn) setNotice("Camera selection saved. Turn your camera off, then on again to use it.");
+  }, [cameraOn]);
 
   const previewRoom = useCallback(async (room: VoiceRoom) => {
     try {
@@ -133,7 +220,9 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
       if (connection.connectionState === "failed" || connection.connectionState === "closed") {
         connectionsRef.current.delete(peer.sessionId);
         if (mounted.current) setRemoteStreams((current) => { const next = { ...current }; delete next[peer.sessionId]; return next; });
-        if (connection.connectionState === "failed" && mounted.current) setNotice("Your voice connection could not be completed on this network. The room chat is still available; you can retry voice.");
+        if (connection.connectionState === "failed" && mounted.current) {
+          setNotice("Your call route could not be completed on this network. Reconnect voice will rebuild the room session and ask the relay for a fresh route.");
+        }
       }
     };
     connectionsRef.current.set(peer.sessionId, entry);
@@ -212,12 +301,18 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
   const leave = useCallback(async (quiet = false) => {
     if (pollTimerRef.current) { window.clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
     const session = sessionRef.current;
+    if (session) {
+      try {
+        await request({ action: "leave", sessionId: session.id, token: session.token });
+      } catch {
+        // A stale server session expires quickly. Local media must still be released.
+      }
+    }
     sessionRef.current = null;
-    if (session) void request({ action: "leave", sessionId: session.id, token: session.token }).catch(() => undefined);
     closeConnections();
     stop(microphoneStreamRef.current); stop(cameraStreamRef.current); stop(screenStreamRef.current);
     microphoneStreamRef.current = null; cameraStreamRef.current = null; screenStreamRef.current = null;
-    activeRoomRef.current = null;
+    activeRoomRef.current = null; activePilotRef.current = null;
     if (mounted.current) {
       setActiveRoom(null); setActivePilot(null); setPreviewStream(null); setParticipants([]); setMuted(true); setCameraOn(false); setScreenOn(false);
       if (!quiet) { setPhase("idle"); setNotice(""); }
@@ -231,11 +326,15 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
     if (sessionRef.current && activeRoomRef.current?.id === room.id) return;
     if (sessionRef.current) await leave();
     activeRoomRef.current = room;
+    activePilotRef.current = pilot;
     setActiveRoom(room); setActivePilot(pilot); setPhase("joining"); setNotice("");
+    let microphoneReady = false;
     try {
-      const microphone = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const microphone = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(selectedInputId), video: false });
       microphone.getAudioTracks().forEach((track) => { track.enabled = false; });
       microphoneStreamRef.current = microphone;
+      microphoneReady = true;
+      void refreshDevices();
       const reply = await request({ action: "join" }) as JoinReply;
       sessionRef.current = { id: reply.session.sessionId, token: reply.token };
       iceServersRef.current = reply.iceServers;
@@ -247,15 +346,53 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       stop(microphoneStreamRef.current); microphoneStreamRef.current = null;
       if (mounted.current) setPhase("error");
-      if (mounted.current) setNotice(error instanceof Error ? error.message : "Your microphone could not be connected.");
+      if (mounted.current) {
+        setNotice(microphoneReady ? (error instanceof Error ? error.message : "Your voice call could not be connected.") : deviceError(error, "microphone"));
+      }
     }
-  }, [leave, poll, request, synchroniseParticipants]);
+  }, [leave, poll, refreshDevices, request, selectedInputId, synchroniseParticipants]);
+
+  const reconnect = useCallback(async () => {
+    const room = activeRoomRef.current;
+    const pilot = activePilotRef.current;
+    if (!room || !pilot) return;
+    setPhase("joining");
+    setNotice("Rebuilding your secure call route…");
+    await leave(true);
+    await join(room, pilot);
+  }, [join, leave]);
 
   const toggleMuted = useCallback(() => {
     const next = !muted;
     microphoneStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !next; });
     setMuted(next);
   }, [muted]);
+
+  const selectInput = useCallback(async (deviceId: string) => {
+    setSelectedInputId(deviceId);
+    if (!sessionRef.current || !microphoneStreamRef.current) return;
+    try {
+      const next = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(deviceId), video: false });
+      next.getAudioTracks().forEach((track) => { track.enabled = !muted; });
+      const previous = microphoneStreamRef.current;
+      microphoneStreamRef.current = next;
+      let needsNegotiation = false;
+      for (const entry of connectionsRef.current.values()) {
+        const sender = entry.connection.getSenders().find((candidate) => candidate.track?.kind === "audio");
+        const track = next.getAudioTracks()[0] ?? null;
+        if (sender) await sender.replaceTrack(track);
+        else if (track) { entry.connection.addTrack(track, next); needsNegotiation = true; }
+      }
+      if (needsNegotiation) {
+        for (const entry of connectionsRef.current.values()) await sendOffer(entry);
+      }
+      stop(previous);
+      void refreshDevices();
+      setNotice("Microphone updated for this call.");
+    } catch (error) {
+      setNotice(deviceError(error, "microphone"));
+    }
+  }, [muted, refreshDevices, sendOffer]);
 
   const toggleCamera = useCallback(async () => {
     if (cameraOn) {
@@ -264,12 +401,13 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
       setCameraOn(false); return;
     }
     try {
-      const camera = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      const camera = await navigator.mediaDevices.getUserMedia({ audio: false, video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true });
       cameraStreamRef.current = camera;
+      void refreshDevices();
       if (!screenOn) { setPreviewStream(camera); await negotiateVideo(camera.getVideoTracks()[0] ?? null, camera); }
       setCameraOn(true);
-    } catch { setNotice("Camera permission was not granted. Nothing has been shared."); }
-  }, [cameraOn, negotiateVideo, screenOn]);
+    } catch (error) { setNotice(deviceError(error, "camera")); }
+  }, [cameraOn, negotiateVideo, refreshDevices, screenOn, selectedCameraId]);
 
   const stopScreenShare = useCallback(async () => {
     const previous = screenStreamRef.current; screenStreamRef.current = null; stop(previous);
@@ -287,7 +425,7 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
       screenStreamRef.current = screen;
       track.addEventListener("ended", () => { void stopScreenShare(); }, { once: true });
       setPreviewStream(screen); await negotiateVideo(track, screen); setScreenOn(true);
-    } catch { setNotice("Screen sharing was not started. Nothing has been shared."); }
+    } catch (error) { setNotice(deviceError(error, "screen")); }
   }, [negotiateVideo, screenOn, stopScreenShare]);
 
   useEffect(() => {
@@ -295,9 +433,17 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
     return () => { mounted.current = false; void leave(true); };
   }, [leave]);
 
-  const value = useMemo<CrewVoiceContextValue>(() => ({ activeRoom, activePilot, phase, notice, muted, cameraOn, screenOn, participants, waitingRoomCount, remoteStreams, previewStream, join, leave: () => leave(), toggleMuted, toggleCamera, toggleScreen, previewRoom }), [activePilot, activeRoom, cameraOn, join, leave, muted, notice, participants, phase, previewRoom, previewStream, remoteStreams, screenOn, toggleCamera, toggleMuted, toggleScreen, waitingRoomCount]);
+  useEffect(() => {
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+    const handleChange = () => { void refreshDevices(); };
+    mediaDevices.addEventListener("devicechange", handleChange);
+    return () => mediaDevices.removeEventListener("devicechange", handleChange);
+  }, [refreshDevices]);
 
-  return <CrewVoiceContext.Provider value={value}>{children}{phase === "connected" && activeRoom && activePilot ? <aside className="crew-voice-dock" aria-label="Active Crew Lounge voice call"><div className="crew-voice-dock-summary"><span className="crew-voice-dock-dot" aria-hidden="true" /><span><strong>In voice · {activeRoom.name}</strong><small>{participants.length}/4 pilots · {muted ? "Muted" : "Microphone on"}</small></span></div><div className="crew-voice-dock-actions"><button type="button" onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button><button type="button" onClick={() => void toggleCamera()}>{cameraOn ? "Camera off" : "Camera"}</button><button type="button" onClick={() => void toggleScreen()}>{screenOn ? "Stop share" : "Share"}</button><button type="button" className="leave" onClick={() => void leave()}>Leave</button></div>{Object.entries(remoteStreams).map(([sessionId, stream]) => <RemoteAudio key={sessionId} stream={stream} />)}</aside> : null}</CrewVoiceContext.Provider>;
+  const value = useMemo<CrewVoiceContextValue>(() => ({ activeRoom, activePilot, phase, notice, muted, cameraOn, screenOn, participants, waitingRoomCount, remoteStreams, previewStream, inputDevices, outputDevices, cameraDevices, selectedInputId, selectedOutputId, selectedCameraId, outputSelectionSupported, join, leave: () => leave(), reconnect, toggleMuted, toggleCamera, toggleScreen, refreshDevices, selectInput, selectOutput, selectCamera, previewRoom }), [activePilot, activeRoom, cameraDevices, cameraOn, inputDevices, join, leave, muted, notice, outputDevices, outputSelectionSupported, participants, phase, previewRoom, previewStream, reconnect, refreshDevices, remoteStreams, screenOn, selectCamera, selectInput, selectOutput, selectedCameraId, selectedInputId, selectedOutputId, toggleCamera, toggleMuted, toggleScreen, waitingRoomCount]);
+
+  return <CrewVoiceContext.Provider value={value}>{children}{phase === "connected" && activeRoom && activePilot ? <aside className="crew-voice-dock" aria-label="Active Crew Lounge voice call"><div className="crew-voice-dock-summary"><span className="crew-voice-dock-dot" aria-hidden="true" /><span><strong>In voice · {activeRoom.name}</strong><small>{participants.length}/4 pilots · {muted ? "Muted" : "Microphone on"}</small></span></div><div className="crew-voice-dock-actions"><button type="button" onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button><button type="button" onClick={() => void toggleCamera()}>{cameraOn ? "Camera off" : "Camera"}</button><button type="button" onClick={() => void toggleScreen()}>{screenOn ? "Stop share" : "Share"}</button><button type="button" className="leave" onClick={() => void leave()}>Leave</button></div>{Object.entries(remoteStreams).map(([sessionId, stream]) => <RemoteAudio key={sessionId} stream={stream} outputDeviceId={selectedOutputId} onPlaybackBlocked={() => setNotice("Your browser paused incoming call audio. Interact with this page, then press Reconnect voice or check your selected speaker.")} />)}</aside> : null}</CrewVoiceContext.Provider>;
 }
 
 export function useCrewVoice() {

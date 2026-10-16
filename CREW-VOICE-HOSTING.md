@@ -14,13 +14,14 @@ The browser never receives BAV's long-lived Cloudflare secret. For every room jo
 
 ## One-time production setup
 
-1. In Cloudflare, create a **Realtime TURN** key named `bav-crew-lounge-production`.
-2. Give the key an API token permitted to generate TURN credentials.
-3. In Render, add these encrypted environment variables to the BAV website service:
+1. Apply both Crew Lounge voice migrations in Supabase, including `20261016195000_crew_voice_peer_signalling.sql`. This stores only short-lived encrypted-call setup messages; it does not store media.
+2. In Cloudflare, create a **Realtime TURN** key named `bav-crew-lounge-production`.
+3. Give the key an API token permitted to generate TURN credentials.
+4. In Render, add these encrypted environment variables to the BAV website service:
    - `BAV_CLOUDFLARE_TURN_KEY_ID`
    - `BAV_CLOUDFLARE_TURN_KEY_TOKEN`
-4. Redeploy the service after saving the values.
-5. Test with two signed-in pilot accounts on separate networks, first voice-only and then camera and screen share.
+5. Redeploy the service after saving the values.
+6. Test with two signed-in pilot accounts on separate networks, first voice-only and then camera and screen share. In **Call settings**, test switching microphone, speaker (on supported browsers), and camera.
 
 Without these settings, the beta uses direct peer-to-peer routing with a STUN service. That can fail on restrictive or symmetric-NAT networks and should only be used as a development fallback.
 

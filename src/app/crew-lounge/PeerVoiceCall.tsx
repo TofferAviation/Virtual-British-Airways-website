@@ -45,8 +45,18 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: VoicePi
         })}
       </div>
       <div className="crew-p2p-controls"><button type="button" className={voice.muted ? "active" : ""} onClick={voice.toggleMuted}>{voice.muted ? "Unmute" : "Mute"}</button><button type="button" className={voice.cameraOn ? "active" : ""} onClick={() => void voice.toggleCamera()}>{voice.cameraOn ? "Camera off" : "Camera"}</button><button type="button" className={voice.screenOn ? "active" : ""} onClick={() => void voice.toggleScreen()}>{voice.screenOn ? "Stop share" : "Share screen"}</button><button type="button" className="leave" onClick={() => void voice.leave()}>Leave voice</button></div>
+      <details className="crew-p2p-devices">
+        <summary>Call settings <span>Choose microphone, speaker and camera</span></summary>
+        <div className="crew-p2p-device-grid">
+          <label>Microphone<select value={voice.selectedInputId} onChange={(event) => void voice.selectInput(event.target.value)}><option value="">Browser default microphone</option>{voice.inputDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
+          <label>Speaker<select value={voice.selectedOutputId} onChange={(event) => voice.selectOutput(event.target.value)} disabled={!voice.outputSelectionSupported}><option value="">Browser or system default speaker</option>{voice.outputDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
+          <label>Camera<select value={voice.selectedCameraId} onChange={(event) => voice.selectCamera(event.target.value)}><option value="">Browser default camera</option>{voice.cameraDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
+          <button type="button" className="crew-p2p-refresh-devices" onClick={() => void voice.refreshDevices()}>Refresh devices</button>
+        </div>
+        <p>{voice.outputSelectionSupported ? "Your selected speaker is used for incoming call audio in this browser." : "This browser keeps call audio on its system-selected output. Change it in your device or browser settings."} BAV does not record your microphone, camera or screen.</p>
+      </details>
       <p className="crew-p2p-privacy">Encrypted pilot-to-pilot media · no BAV recording · calls connect directly when possible and use BAV’s Cloudflare relay only when a network requires it.</p>
     </> : null}
-    {isThisRoom && voice.notice ? <div className="crew-p2p-notice" role="status"><p>{voice.notice}</p>{phase === "connected" ? <button type="button" onClick={() => { void voice.leave().then(() => voice.join(room, pilot)); }}>Reconnect voice</button> : null}</div> : null}
+    {isThisRoom && voice.notice ? <div className="crew-p2p-notice" role="status"><p>{voice.notice}</p>{phase === "connected" ? <button type="button" onClick={() => void voice.reconnect()}>Reconnect voice</button> : null}</div> : null}
   </section>;
 }

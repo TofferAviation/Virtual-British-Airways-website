@@ -1,6 +1,7 @@
 import "server-only";
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const MAX_PARTICIPANTS = 4;
 const SESSION_IDLE_MS = 90_000;
@@ -24,16 +25,23 @@ export type VoiceSignal = {
   payload: Record<string, unknown>;
 };
 
-type VoicePeerSession = VoicePeer & {
-  roomId: string;
-  token: string;
-  joinedAt: number;
-  lastSeenAt: number;
+type VoicePeerSessionRow = {
+  id: string;
+  room_id: string;
+  pilot_id: string;
+  pilot_number: string;
+  name: string;
+  profile_image: string | null;
+  token_hash: string;
+  joined_at: string;
+  last_seen_at: string;
 };
 
-type VoicePeerState = {
-  sessions: Map<string, VoicePeerSession>;
-  queues: Map<string, VoiceSignal[]>;
+type VoiceSignalRow = {
+  id: string;
+  sender_session_id: string;
+  kind: VoiceSignalKind;
+  payload: Record<string, unknown>;
 };
 
 type VoicePeerSnapshot = {
@@ -53,11 +61,29 @@ export class VoicePeerError extends Error {
   }
 }
 
-const root = globalThis as typeof globalThis & { __bavVoicePeerState?: VoicePeerState };
+function client(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secret) throw new VoicePeerError("BAV's voice service is not configured yet. Please ask staff to complete the private-call setup.", 503);
+  return createClient(url, secret, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+}
 
-function state() {
-  if (!root.__bavVoicePeerState) root.__bavVoicePeerState = { sessions: new Map(), queues: new Map() };
-  return root.__bavVoicePeerState;
+function isMissingVoicePeerSchema(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const detail = error as { code?: unknown; message?: unknown };
+  const code = typeof detail.code === "string" ? detail.code : "";
+  const message = typeof detail.message === "string" ? detail.message : "";
+  return code === "42P01" || code === "PGRST205" || message.includes("crew_voice_peer_sessions") || message.includes("crew_voice_peer_signals");
+}
+
+function rethrowStoreError(error: unknown): never {
+  if (error instanceof VoicePeerError) throw error;
+  if (isMissingVoicePeerSchema(error)) {
+    throw new VoicePeerError("BAV voice needs its reliability database update before calls can start. Ask staff to apply the latest Crew Lounge migration.", 503);
+  }
+  throw new VoicePeerError("BAV's call setup service is temporarily unavailable. Please try again shortly.", 503);
 }
 
 function safeEqual(left: string, right: string) {
@@ -66,53 +92,35 @@ function safeEqual(left: string, right: string) {
   return first.length === second.length && timingSafeEqual(first, second);
 }
 
-function publicPeer(session: VoicePeerSession): VoicePeer {
+function publicPeer(session: VoicePeerSessionRow): VoicePeer {
   return {
-    sessionId: session.sessionId,
-    pilotId: session.pilotId,
-    pilotNumber: session.pilotNumber,
+    sessionId: session.id,
+    pilotId: session.pilot_id,
+    pilotNumber: session.pilot_number,
     name: session.name,
-    profileImage: session.profileImage,
+    profileImage: session.profile_image,
   };
 }
 
-function deleteSession(sessionId: string) {
-  const current = state();
-  current.sessions.delete(sessionId);
-  current.queues.delete(sessionId);
-  for (const [targetId, signals] of current.queues) {
-    const remaining = signals.filter((signal) => signal.from.sessionId !== sessionId);
-    if (remaining.length) current.queues.set(targetId, remaining);
-    else current.queues.delete(targetId);
-  }
+function sessionColumns() {
+  return "id, room_id, pilot_id, pilot_number, name, profile_image, token_hash, joined_at, last_seen_at";
 }
 
-function purgeExpired() {
-  const oldestAllowed = Date.now() - SESSION_IDLE_MS;
-  for (const session of state().sessions.values()) {
-    if (session.lastSeenAt < oldestAllowed) deleteSession(session.sessionId);
-  }
+function cleanText(value: unknown, maximum: number, fallback = "") {
+  if (typeof value !== "string") return fallback;
+  return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, maximum) || fallback;
 }
 
-function roomParticipants(roomId: string) {
-  purgeExpired();
-  return [...state().sessions.values()]
-    .filter((session) => session.roomId === roomId)
-    .sort((left, right) => left.joinedAt - right.joinedAt)
-    .map(publicPeer);
+function opaqueToken() {
+  return randomBytes(32).toString("base64url");
 }
 
-function requireSession(input: { roomId: string; pilotId: string; sessionId: unknown; token: unknown }) {
-  purgeExpired();
-  if (typeof input.sessionId !== "string" || typeof input.token !== "string") {
-    throw new VoicePeerError("Your voice session is missing. Join the room again.", 401);
-  }
-  const session = state().sessions.get(input.sessionId);
-  if (!session || session.roomId !== input.roomId || session.pilotId !== input.pilotId || !safeEqual(session.token, input.token)) {
-    throw new VoicePeerError("Your voice session has expired. Join the room again.", 401);
-  }
-  session.lastSeenAt = Date.now();
-  return session;
+function sessionId() {
+  return randomBytes(18).toString("base64url");
+}
+
+function tokenHash(token: string) {
+  return createHash("sha256").update(token).digest("base64url");
 }
 
 function cleanSignalPayload(value: unknown) {
@@ -136,57 +144,142 @@ function cleanSignalKind(value: unknown): VoiceSignalKind {
   throw new VoicePeerError("That call setup message has an unknown type.", 400);
 }
 
-function opaqueToken() {
-  return randomBytes(32).toString("base64url");
+async function purgeExpired(db: SupabaseClient) {
+  const cutoff = new Date(Date.now() - SESSION_IDLE_MS).toISOString();
+  const { error } = await db.from("crew_voice_peer_sessions").delete().lt("last_seen_at", cutoff);
+  if (error) rethrowStoreError(error);
 }
 
-function sessionId() {
-  return randomBytes(18).toString("base64url");
+async function roomParticipants(db: SupabaseClient, roomId: string) {
+  const cutoff = new Date(Date.now() - SESSION_IDLE_MS).toISOString();
+  const { data, error } = await db
+    .from("crew_voice_peer_sessions")
+    .select(sessionColumns())
+    .eq("room_id", roomId)
+    .gte("last_seen_at", cutoff)
+    .order("joined_at", { ascending: true });
+  if (error) rethrowStoreError(error);
+  return ((data ?? []) as unknown as VoicePeerSessionRow[]).map(publicPeer);
 }
 
-/** This is routing data only. Media stays directly between participating browsers. */
-export function joinVoicePeerRoom(input: {
+async function requireSession(db: SupabaseClient, input: { roomId: string; pilotId: string; sessionId: unknown; token: unknown }) {
+  if (typeof input.sessionId !== "string" || typeof input.token !== "string") {
+    throw new VoicePeerError("Your voice session is missing. Join the room again.", 401);
+  }
+  const { data, error } = await db
+    .from("crew_voice_peer_sessions")
+    .select(sessionColumns())
+    .eq("id", input.sessionId)
+    .maybeSingle();
+  if (error) rethrowStoreError(error);
+  const session = data as VoicePeerSessionRow | null;
+  if (!session || session.room_id !== input.roomId || session.pilot_id !== input.pilotId || !safeEqual(session.token_hash, tokenHash(input.token))) {
+    throw new VoicePeerError("Your voice session has expired. Join the room again.", 401);
+  }
+  const { error: updateError } = await db.from("crew_voice_peer_sessions").update({ last_seen_at: new Date().toISOString() }).eq("id", session.id);
+  if (updateError) rethrowStoreError(updateError);
+  return session;
+}
+
+/** Durable routing data only. Audio, camera and screen media stay in WebRTC. */
+export async function joinVoicePeerRoom(input: {
   roomId: string;
   pilotId: string;
   pilotNumber: string;
   name: string;
   profileImage?: string | null;
 }) {
-  purgeExpired();
-  for (const existing of state().sessions.values()) {
-    if (existing.roomId === input.roomId && existing.pilotId === input.pilotId) deleteSession(existing.sessionId);
+  try {
+    const db = client();
+    await purgeExpired(db);
+    const { error: removeError } = await db.from("crew_voice_peer_sessions").delete().eq("room_id", input.roomId).eq("pilot_id", input.pilotId);
+    if (removeError) rethrowStoreError(removeError);
+
+    const { count, error: countError } = await db
+      .from("crew_voice_peer_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("room_id", input.roomId);
+    if (countError) rethrowStoreError(countError);
+    if ((count ?? 0) >= MAX_PARTICIPANTS) {
+      throw new VoicePeerError("This small-room beta is at its four-pilot limit. Try again when a seat opens.", 409);
+    }
+
+    const token = opaqueToken();
+    const now = new Date().toISOString();
+    const { data, error } = await db
+      .from("crew_voice_peer_sessions")
+      .insert({
+        id: sessionId(),
+        room_id: input.roomId,
+        pilot_id: cleanText(input.pilotId, 128),
+        pilot_number: cleanText(input.pilotNumber, 64, "BAV pilot"),
+        name: cleanText(input.name, 160, "BAV pilot"),
+        profile_image: cleanText(input.profileImage, 2_048) || null,
+        token_hash: tokenHash(token),
+        joined_at: now,
+        last_seen_at: now,
+      })
+      .select(sessionColumns())
+      .single();
+    if (error) rethrowStoreError(error);
+    const session = data as unknown as VoicePeerSessionRow;
+    return { session: publicPeer(session), token, participants: await roomParticipants(db, input.roomId), maxParticipants: MAX_PARTICIPANTS };
+  } catch (error) {
+    rethrowStoreError(error);
   }
-  if (roomParticipants(input.roomId).length >= MAX_PARTICIPANTS) {
-    throw new VoicePeerError("This small-room beta is at its four-pilot limit. Try again when a seat opens.", 409);
+}
+
+export async function pollVoicePeerRoom(input: { roomId: string; pilotId: string; sessionId: unknown; token: unknown }): Promise<VoicePeerSnapshot> {
+  try {
+    const db = client();
+    await purgeExpired(db);
+    const session = await requireSession(db, input);
+    const { data, error } = await db
+      .from("crew_voice_peer_signals")
+      .select("id, sender_session_id, kind, payload")
+      .eq("target_session_id", session.id)
+      .order("created_at", { ascending: true })
+      .limit(MAX_QUEUED_SIGNALS);
+    if (error) rethrowStoreError(error);
+    const rows = (data ?? []) as VoiceSignalRow[];
+    const senderIds = [...new Set(rows.map((row) => row.sender_session_id))];
+    const senders = new Map<string, VoicePeer>();
+    if (senderIds.length) {
+      const { data: senderRows, error: senderError } = await db
+        .from("crew_voice_peer_sessions")
+        .select(sessionColumns())
+        .in("id", senderIds);
+      if (senderError) rethrowStoreError(senderError);
+      for (const sender of (senderRows ?? []) as unknown as VoicePeerSessionRow[]) senders.set(sender.id, publicPeer(sender));
+    }
+    if (rows.length) {
+      const { error: clearError } = await db.from("crew_voice_peer_signals").delete().in("id", rows.map((row) => row.id));
+      if (clearError) rethrowStoreError(clearError);
+    }
+    return {
+      participants: await roomParticipants(db, session.room_id),
+      signals: rows.flatMap((row) => {
+        const from = senders.get(row.sender_session_id);
+        return from ? [{ id: row.id, from, kind: row.kind, payload: row.payload }] : [];
+      }),
+    };
+  } catch (error) {
+    rethrowStoreError(error);
   }
-  const now = Date.now();
-  const session: VoicePeerSession = {
-    sessionId: sessionId(),
-    token: opaqueToken(),
-    roomId: input.roomId,
-    pilotId: input.pilotId,
-    pilotNumber: input.pilotNumber,
-    name: input.name,
-    profileImage: input.profileImage?.trim() || null,
-    joinedAt: now,
-    lastSeenAt: now,
-  };
-  state().sessions.set(session.sessionId, session);
-  return { session: publicPeer(session), token: session.token, participants: roomParticipants(input.roomId), maxParticipants: MAX_PARTICIPANTS };
 }
 
-export function pollVoicePeerRoom(input: { roomId: string; pilotId: string; sessionId: unknown; token: unknown }): VoicePeerSnapshot {
-  const session = requireSession(input);
-  const queue = state().queues.get(session.sessionId) ?? [];
-  state().queues.delete(session.sessionId);
-  return { participants: roomParticipants(session.roomId), signals: queue };
+export async function previewVoicePeerRoom(roomId: string) {
+  try {
+    const db = client();
+    await purgeExpired(db);
+    const participants = await roomParticipants(db, roomId);
+    return { participantCount: participants.length, maxParticipants: MAX_PARTICIPANTS };
+  } catch (error) {
+    rethrowStoreError(error);
+  }
 }
 
-export function previewVoicePeerRoom(roomId: string) {
-  return { participantCount: roomParticipants(roomId).length, maxParticipants: MAX_PARTICIPANTS };
-}
-
-export function sendVoicePeerSignal(input: {
+export async function sendVoicePeerSignal(input: {
   roomId: string;
   pilotId: string;
   sessionId: unknown;
@@ -195,22 +288,61 @@ export function sendVoicePeerSignal(input: {
   kind: unknown;
   payload: unknown;
 }) {
-  const sender = requireSession(input);
-  if (typeof input.targetSessionId !== "string" || input.targetSessionId === sender.sessionId) {
-    throw new VoicePeerError("Choose another pilot in this room.", 400);
+  try {
+    const db = client();
+    const sender = await requireSession(db, input);
+    if (typeof input.targetSessionId !== "string" || input.targetSessionId === sender.id) {
+      throw new VoicePeerError("Choose another pilot in this room.", 400);
+    }
+    const { data: target, error: targetError } = await db
+      .from("crew_voice_peer_sessions")
+      .select("id, room_id")
+      .eq("id", input.targetSessionId)
+      .maybeSingle();
+    if (targetError) rethrowStoreError(targetError);
+    if (!target || target.room_id !== sender.room_id) return { delivered: false };
+
+    const { count, error: countError } = await db
+      .from("crew_voice_peer_signals")
+      .select("id", { count: "exact", head: true })
+      .eq("target_session_id", input.targetSessionId);
+    if (countError) rethrowStoreError(countError);
+    if ((count ?? 0) >= MAX_QUEUED_SIGNALS) {
+      const { data: oldest, error: oldestError } = await db
+        .from("crew_voice_peer_signals")
+        .select("id")
+        .eq("target_session_id", input.targetSessionId)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (oldestError) rethrowStoreError(oldestError);
+      if (oldest?.[0]?.id) {
+        const { error: removeError } = await db.from("crew_voice_peer_signals").delete().eq("id", oldest[0].id);
+        if (removeError) rethrowStoreError(removeError);
+      }
+    }
+
+    const { error } = await db.from("crew_voice_peer_signals").insert({
+      target_session_id: input.targetSessionId,
+      sender_session_id: sender.id,
+      kind: cleanSignalKind(input.kind),
+      payload: cleanSignalPayload(input.payload),
+    });
+    if (error) rethrowStoreError(error);
+    return { delivered: true };
+  } catch (error) {
+    rethrowStoreError(error);
   }
-  const target = state().sessions.get(input.targetSessionId);
-  if (!target || target.roomId !== sender.roomId) return { delivered: false };
-  const queue = state().queues.get(target.sessionId) ?? [];
-  if (queue.length >= MAX_QUEUED_SIGNALS) queue.shift();
-  queue.push({ id: opaqueToken(), from: publicPeer(sender), kind: cleanSignalKind(input.kind), payload: cleanSignalPayload(input.payload) });
-  state().queues.set(target.sessionId, queue);
-  return { delivered: true };
 }
 
-export function leaveVoicePeerRoom(input: { roomId: string; pilotId: string; sessionId: unknown; token: unknown }) {
-  const session = requireSession(input);
-  deleteSession(session.sessionId);
+export async function leaveVoicePeerRoom(input: { roomId: string; pilotId: string; sessionId: unknown; token: unknown }) {
+  try {
+    const db = client();
+    const session = await requireSession(db, input);
+    const { error } = await db.from("crew_voice_peer_sessions").delete().eq("id", session.id);
+    if (error) rethrowStoreError(error);
+  } catch (error) {
+    rethrowStoreError(error);
+  }
 }
 
 function configuredCloudflareTurn() {
@@ -289,12 +421,6 @@ export async function voicePeerIceServers(): Promise<VoiceIceServer[]> {
   const fallback = "stun:stun.l.google.com:19302";
   const urls = (configured ? configured.split(",") : [fallback])
     .map((value) => value.trim())
-    // WebRTC ICE uses `stun:host:port`, rather than a `stun://` web URL.
     .filter((value) => /^stuns?:[^\s]+$/i.test(value));
-
-  // A malformed optional setting must not take the approved beta offline.
-  // STUN supplies only connection-routing metadata; media stays P2P.
-  // Production should configure the managed TURN relay above so restrictive
-  // networks can still complete an encrypted media connection.
   return [{ urls: urls.length ? urls : [fallback] }];
 }

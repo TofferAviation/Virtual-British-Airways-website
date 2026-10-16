@@ -14,6 +14,7 @@ import "./home-ember.css";
 import "./hub-traffic.css";
 import "./crew-voice.css";
 import "./crew-voice-p2p.css";
+import "./crew-voice-devices.css";
 import "./crew-voice-dock.css";
 import "./crew-voice-live.css";
 import "./crew-lounge-redesign.css";

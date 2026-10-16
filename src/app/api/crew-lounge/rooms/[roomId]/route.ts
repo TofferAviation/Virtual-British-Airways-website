@@ -41,10 +41,10 @@ export async function POST(request: NextRequest, context: Context) {
     if (!body || typeof body.action !== "string") return response({ error: "Choose a voice action." }, 400);
 
     if (body.action === "preview") {
-      return response(previewVoicePeerRoom(auth.room.id));
+      return response(await previewVoicePeerRoom(auth.room.id));
     }
     if (body.action === "join") {
-      const joined = joinVoicePeerRoom({
+      const joined = await joinVoicePeerRoom({
         roomId: auth.room.id,
         pilotId: auth.pilot.pilotId,
         pilotNumber: auth.pilot.pilotNumber,
@@ -54,10 +54,10 @@ export async function POST(request: NextRequest, context: Context) {
       return response({ ...joined, iceServers: await voicePeerIceServers() });
     }
     if (body.action === "poll") {
-      return response(pollVoicePeerRoom({ roomId: auth.room.id, pilotId: auth.pilot.pilotId, sessionId: body.sessionId, token: body.token }));
+      return response(await pollVoicePeerRoom({ roomId: auth.room.id, pilotId: auth.pilot.pilotId, sessionId: body.sessionId, token: body.token }));
     }
     if (body.action === "signal") {
-      return response(sendVoicePeerSignal({
+      return response(await sendVoicePeerSignal({
         roomId: auth.room.id,
         pilotId: auth.pilot.pilotId,
         sessionId: body.sessionId,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest, context: Context) {
       }));
     }
     if (body.action === "leave") {
-      leaveVoicePeerRoom({ roomId: auth.room.id, pilotId: auth.pilot.pilotId, sessionId: body.sessionId, token: body.token });
+      await leaveVoicePeerRoom({ roomId: auth.room.id, pilotId: auth.pilot.pilotId, sessionId: body.sessionId, token: body.token });
       return response({ ok: true });
     }
     return response({ error: "That voice action is not available." }, 400);
