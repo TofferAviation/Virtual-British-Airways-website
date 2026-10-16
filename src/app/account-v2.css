@@ -67,13 +67,14 @@
 .account-v2-card{background:#fff;border:1px solid #d9e0e9;border-radius:2px;box-shadow:0 2px 5px rgba(12,35,72,.06);padding:14px}
 .account-v2-card h3{font-size:14px;font-weight:400;margin:0 0 10px;color:#071d49}
 .account-v2-flight-list{width:100%}
-.account-v2-flight-row{display:grid;grid-template-columns:.64fr .92fr 1.35fr .72fr .72fr .52fr;gap:6px;align-items:center;padding:7px 0;border-top:1px solid #e8ecf1;font-size:7.5px;line-height:1.2;color:#14233f}
+.account-v2-flight-row{display:grid;grid-template-columns:.58fr .83fr 1.19fr .64fr .64fr .56fr auto;gap:6px;align-items:center;padding:7px 0;border-top:1px solid #e8ecf1;font-size:7.5px;line-height:1.2;color:#14233f}
 .account-v2-flight-row:first-child{border-top:0}
 .account-v2-flight-row strong{color:#071d49;font-size:8px}
 .account-v2-flight-row span{min-width:0;white-space:nowrap}
 .account-v2-flight-debrief{display:block;min-width:0}.account-v2-flight-debrief strong{display:block;color:#075aaa}.account-v2-flight-debrief small{display:block;color:#718096;font-size:6.5px;line-height:1.25;margin-top:2px}.account-v2-flight-debrief:hover strong{text-decoration:underline}
 .account-v2-flight-row .ops-pirep-chip{display:inline-flex;align-items:center;justify-content:center;justify-self:end;align-self:center;box-sizing:border-box;min-height:16px;padding:3px 6px;border:1px solid currentColor;border-radius:999px;background:rgba(39,130,86,.1);font-size:6.2px;line-height:1;letter-spacing:.045em;white-space:nowrap}.account-v2-flight-row .ops-pirep-chip.pending,.account-v2-flight-row .ops-pirep-chip.changes_requested{background:rgba(155,105,0,.1)}.account-v2-flight-row .ops-pirep-chip.rejected{background:rgba(179,30,61,.1)}
 .account-v2-flight-points{color:#0b7a37!important;font-weight:700}
+.account-v2-debrief-link{justify-self:end;color:#075aaa;font-size:7.5px;font-weight:700;text-decoration:underline!important;white-space:nowrap}
 .account-v2-assignment>strong{display:block;font-size:10px;margin:0 0 7px;color:#071d49}
 .account-v2-assignment>p{font-size:8px;line-height:1.45;color:#657184;margin:0 0 7px}
 .account-v2-assignment>a{font-size:8px;color:#075aaa;text-decoration:underline}
@@ -127,7 +128,7 @@
   .account-v2-readiness-grid{grid-template-columns:1fr}
   .account-v2-readiness-grid article,.account-v2-readiness-grid article:nth-child(3),.account-v2-readiness-grid article:nth-child(4){border-left:0;border-top:1px solid #e4eaf1;min-height:0}
   .account-v2-readiness-grid article:first-child{border-top:0}
-  .account-v2-flight-row{grid-template-columns:.7fr .9fr 1.3fr .7fr}
+  .account-v2-flight-row{grid-template-columns:.7fr .9fr 1.3fr .7fr auto}
   .account-v2-flight-row span:nth-last-child(-n+2){display:none}
   .account-v2-footer{padding:42px 0 36px}
   .account-v2-footer-inner{grid-template-columns:1fr 1fr;gap:28px}

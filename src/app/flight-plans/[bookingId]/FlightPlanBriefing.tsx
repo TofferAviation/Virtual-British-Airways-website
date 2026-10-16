@@ -1,5 +1,6 @@
 import type { SimbriefBriefing } from "@/lib/pilot-operations-store";
 import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { RouteAtmosphereBriefing } from "./RouteAtmosphereBriefing";
 import { RouteWindBriefing } from "./RouteWindBriefing";
 
 type Detail = { label: string; value: string | null };
@@ -71,6 +72,7 @@ export function FlightPlanBriefing({ briefing, route, cruiseAltitude, alternate,
     </div>
     <div className="briefing-weather"><section><h3>Departure weather</h3><p><strong>{briefing.originName ?? "Departure airport"}</strong>{briefing.originRunway ? ` · planned runway ${briefing.originRunway}` : ""}</p><code>{briefing.originMetar ?? "Weather was not included in this OFP."}</code></section><section><h3>Arrival weather</h3><p><strong>{briefing.destinationName ?? "Arrival airport"}</strong>{briefing.destinationRunway ? ` · planned runway ${briefing.destinationRunway}` : ""}</p><code>{briefing.destinationMetar ?? "Weather was not included in this OFP."}</code></section>{briefing.alternateName || briefing.alternateMetar ? <section><h3>Alternate weather</h3><p><strong>{briefing.alternateName ?? "Alternate airport"}</strong></p><code>{briefing.alternateMetar ?? "Weather was not included in this OFP."}</code></section> : null}</div>
     <RouteWindBriefing briefing={briefing} originIcao={originIcao} destinationIcao={destinationIcao} cruiseAltitude={cruiseAltitude} date={date} departure={departure} duration={duration} />
+    <RouteAtmosphereBriefing briefing={briefing} originIcao={originIcao} destinationIcao={destinationIcao} date={date} departure={departure} duration={duration} />
     {ofpUrl ? <details className="briefing-document"><summary>View the complete OFP without leaving BAV</summary><iframe title="Complete SimBrief operational flight plan" src={ofpUrl} loading="lazy" /><p>If the embedded document is unavailable in your browser, <a className="ops-inline-link" href={ofpUrl} target="_blank" rel="noreferrer">open the OFP in a new tab ↗</a>.</p></details> : null}
   </section>;
 }

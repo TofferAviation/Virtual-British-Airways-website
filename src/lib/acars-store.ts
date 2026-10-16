@@ -29,6 +29,12 @@ export type AcarsSession = {
   lastSnapshot: AcarsFlightSnapshot | null; recentSnapshots?: AcarsFlightSnapshot[];
 };
 
+/** A durable, pilot-authorised telemetry sample used to replay their own completed route. */
+export type AcarsPositionReport = Pick<AcarsFlightSnapshot,
+  "timestamp" | "latitude" | "longitude" | "altitudeFt" | "groundSpeedKt" |
+  "headingDeg" | "fuelKg" | "enginesRunning" | "parkingBrakeSet" | "onGround" |
+  "verticalSpeedFpm">;
+
 type State = { version: 1; sessions: AcarsSession[] };
 type NewSessionInput = Omit<AcarsSession, "id" | "status" | "startedAt" | "updatedAt" | "completedAt" | "firstFuelKg" | "lastFuelKg" | "distanceNm" | "landingFpm" | "lastSnapshot">;
 type AcarsSessionRow = {
@@ -146,6 +152,13 @@ function reduceTrackSnapshots(snapshots: AcarsFlightSnapshot[], limit = MAX_PUBL
   return reduced;
 }
 
+function positionReportFromRow(row: AcarsPositionReportRow): AcarsPositionReport | null {
+  const latitude = asNumber(row.latitude); const longitude = asNumber(row.longitude); const altitudeFt = asNumber(row.altitude_ft);
+  const groundSpeedKt = asNumber(row.ground_speed_kt); const headingDeg = asNumber(row.heading_deg);
+  if (latitude == null || longitude == null || altitudeFt == null || groundSpeedKt == null || headingDeg == null || typeof row.reported_at !== "string") return null;
+  return { timestamp: row.reported_at, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, fuelKg: asNumber(row.fuel_kg), enginesRunning: Boolean(row.engines_running), parkingBrakeSet: Boolean(row.parking_brake_set), onGround: Boolean(row.on_ground), verticalSpeedFpm: asNumber(row.vertical_speed_fpm) };
+}
+
 function getSupabaseClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL; const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) return null;
@@ -177,6 +190,7 @@ async function startLocalAcarsSession(input: NewSessionInput) {
   state.sessions.push(session); await writeState(state); return session;
 }
 async function getLocalAcarsSession(id: string) { const state = await readState(); return state.sessions.find((session) => session.id === id) ?? null; }
+async function listLocalAcarsPositionReports(id: string, pilotId: string) { const session = await getLocalAcarsSession(id); return session?.pilotId === pilotId ? session.recentSnapshots ?? [] : []; }
 async function getActiveLocalAcarsSessionForPilot(pilotId: string) { const state = await readState(); return state.sessions.filter((session) => session.pilotId === pilotId && session.status === "active").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null; }
 async function appendLocalAcarsSnapshot(id: string, pilotId: string, snapshot: AcarsFlightSnapshot) {
   const state = await readState(); const session = state.sessions.find((item) => item.id === id && item.pilotId === pilotId); if (!session || session.status !== "active") return null;
@@ -205,6 +219,12 @@ async function startPersistentAcarsSession(client: SupabaseClient, input: NewSes
   if (error) throw error; return sessionFromRow(data as AcarsSessionRow);
 }
 async function getPersistentAcarsSession(client: SupabaseClient, id: string) { const { data, error } = await client.from("acars_sessions").select("*").eq("id", id).maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null; }
+async function listPersistentAcarsPositionReports(client: SupabaseClient, id: string, pilotId: string) {
+  const session = await getPersistentAcarsSession(client, id); if (!session || session.pilotId !== pilotId) return [];
+  const { data, error } = await client.from("acars_position_reports").select("reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm").eq("session_id", id).order("reported_at", { ascending: true }).limit(2_000);
+  if (error) throw error;
+  return (data as AcarsPositionReportRow[]).map(positionReportFromRow).filter((report): report is AcarsPositionReport => report != null);
+}
 async function getPersistentActiveAcarsSessionForPilot(client: SupabaseClient, pilotId: string) { const { data, error } = await client.from("acars_sessions").select("*").eq("pilot_id", pilotId).eq("status", "active").order("updated_at", { ascending: false }).limit(1).maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null; }
 async function appendPersistentAcarsSnapshot(client: SupabaseClient, id: string, pilotId: string, snapshot: AcarsFlightSnapshot) {
   const session = await getPersistentAcarsSession(client, id); if (!session || session.pilotId !== pilotId || session.status !== "active") return null;
@@ -270,6 +290,8 @@ async function listPersistentPublicTrackSnapshots(client: SupabaseClient, sessio
 
 export async function startAcarsSession(input: NewSessionInput) { const client = requirePersistentClient(); return client ? startPersistentAcarsSession(client, input) : startLocalAcarsSession(input); }
 export async function getAcarsSession(id: string) { const client = requirePersistentClient(); return client ? getPersistentAcarsSession(client, id) : getLocalAcarsSession(id); }
+/** Returns only the signed-in pilot's own saved telemetry, never another pilot's flight path. */
+export async function listAcarsPositionReports(id: string, pilotId: string) { const client = requirePersistentClient(); return client ? listPersistentAcarsPositionReports(client, id, pilotId) : listLocalAcarsPositionReports(id, pilotId); }
 export async function getActiveAcarsSessionForPilot(pilotId: string) { const client = requirePersistentClient(); return client ? getPersistentActiveAcarsSessionForPilot(client, pilotId) : getActiveLocalAcarsSessionForPilot(pilotId); }
 /** Lists a pilot's own completed Ember flights for the private BA-Radar replay library. */
 export async function listCompletedAcarsSessionsForPilot(pilotId: string, requestedLimit = 12) {
