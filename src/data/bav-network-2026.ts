@@ -52,7 +52,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-2026-10-04-r18";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-2026-10-04-r19";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -533,11 +533,11 @@ const verifiedSchedules: BavNetworkRouteSeed[] = [
   { id: "ba-a26-lhr-cph-ba814-20261004", from: "LHR", to: "CPH", flightNumber: "BA814", callsign: "BAW814", departure: "14:55", arrival: "17:55", duration: "2h 00m", aircraft: "Airbus A321neo", aircraftOptions: ["Airbus A321neo", "Airbus A320neo", "Airbus A320", "Airbus A319"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.copenhagenLive, validatedAt: "2026-10-03" },
   { id: "ba-a26-lhr-cph-ba822-20261003", from: "LHR", to: "CPH", flightNumber: "BA822", callsign: "BAW822", departure: "20:40", arrival: "23:25", duration: "1h 45m", aircraft: "Airbus A319", aircraftOptions: ["Airbus A319", "Airbus A320", "Airbus A320neo", "Airbus A321neo"], slots: 12, active: true, validFrom: "2026-10-03", validUntil: "2026-10-03", operatingDays: [6], sourceUrl: sources.copenhagenLive, validatedAt: "2026-10-03" },
 
-  // Miami: the flight number, local schedule, equipment and tracker
-  // identifier were checked for the Sunday 4 October operation. The tracker
-  // uses BAW3G for BA207, demonstrating why the ICAO identifier must never be
-  // generated mechanically from the BA flight number.
-  { id: "ba-a26-lhr-mia-ba207-20261004", from: "LHR", to: "MIA", flightNumber: "BA207", callsign: "BAW3G", departure: "09:55", arrival: "14:35", duration: "9h 40m", aircraft: "Airbus A380-800", aircraftOptions: ["Airbus A380-800"], slots: 12, active: true, validFrom: "2026-10-04", validUntil: "2026-10-04", operatingDays: [0], sourceUrl: sources.miami, validatedAt: "2026-10-03" },
+  // Miami: BA207's flight number, local planning times, A380 equipment and
+  // observed tracker identifier were checked on 4 October. Keep it available
+  // as a 2025–26 operational reference for the LHR–MIA A380 test corridor;
+  // it is not presented as an exact current-day airline timetable.
+  { id: "ba-a26-lhr-mia-ba207-20261004", from: "LHR", to: "MIA", flightNumber: "BA207", callsign: "BAW3G", departure: "09:55", arrival: "14:35", duration: "9h 40m", aircraft: "Airbus A380-800", aircraftOptions: ["Airbus A380-800"], slots: 12, active: true, sourceUrl: sources.miami, validatedAt: "2026-10-03", referenceOnly: true },
 
   // Oslo: schedule and tracker identifier checked on 3 October 2026 for the
   // Sunday 4 October operation. This replaces the BAV placeholder only for

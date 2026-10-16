@@ -121,6 +121,20 @@ export async function getManagedRoutes(): Promise<ManagedRoute[]> {
       byId.set(route.id, { ...route, callsign: shipped.callsign, sourceUrl: shipped.sourceUrl, validatedAt: shipped.validatedAt });
       continue;
     }
+    // r19 promotes the original, date-limited BA207 snapshot into an explicit
+    // operational reference. This makes the LHR–MIA A380 test corridor
+    // selectable without implying that the dated 4 October check is today's
+    // live BA timetable. Preserve any genuine Operations edit to that record.
+    if (route.id === "ba-a26-lhr-mia-ba207-20261004" &&
+        route.callsign === "BAW3G" &&
+        route.aircraft === "Airbus A380-800" &&
+        route.departure === "09:55" &&
+        route.arrival === "14:35" &&
+        route.duration === "9h 40m" &&
+        route.slots === 12 &&
+        route.validFrom === "2026-10-04" &&
+        route.validUntil === "2026-10-04" &&
+        route.referenceOnly !== true) continue;
     byId.set(route.id, route);
   }
   const migrated = normalizedRoutes([...byId.values()]);
