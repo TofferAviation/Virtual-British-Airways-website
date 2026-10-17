@@ -52,7 +52,7 @@ export type BavNetworkRouteSeed = {
 };
 
 export const BAV_NETWORK_VALIDATED_AT = "2026-09-19";
-export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-2026-10-04-r19";
+export const BAV_NETWORK_SCHEDULE_VERSION = "bav-operational-reference-heathrow-a380-2026-10-17-r20";
 
 export const BAV_NETWORK_SOURCES = [
   "https://www.britishairways.com/content/flights/from-london-heathrow",
@@ -631,6 +631,141 @@ const heathrowCallsignReferenceServices: BavNetworkRouteSeed[] = allHeathrowCall
   }));
 
 /**
+ * The supplied A380 workbook is a published, local-time timetable covering
+ * 1 January through 17 October 2026.  It is deliberately modelled as compact
+ * seasonal spans rather than 4,056 daily rows: the selected-date lookup still
+ * exposes only the service and equipment published for that day.
+ *
+ * The workbook does not infer ATC identifiers.  Each entry below instead uses
+ * an independently checked BAW identifier already held by BAV's operational
+ * references.  BA193 and BA209 are backed by the cited flight-history checks.
+ */
+const A380_TIMETABLE_VALIDATED_AT = "2026-10-17";
+const a380TimetableCallsigns: Record<string, string> = {
+  BA11: "BAW11", BA12: "BAW12D", BA54: "BAW54", BA55: "BAW55", BA56: "BAW56", BA57: "BAW57K",
+  BA106: "BAW106", BA107: "BAW107", BA192: "BAW8K", BA193: "BAW193",
+  BA206: "BAW6R", BA207: "BAW3G", BA208: "BAW34N", BA209: "BAW5E",
+  BA212: "BAW2CE", BA213: "BAW1B", BA268: "BAW4E", BA269: "BAW7D", BA284: "BAW2X", BA285: "BAW5L",
+};
+
+const a380TimetableSources: Record<string, string> = {
+  BA11: "https://speedbird.online/timetable",
+  BA12: "https://info.flightmapper.net/flight/British_Airways_BA_12",
+  BA54: "https://info.flightmapper.net/flight/British_Airways_BA_54",
+  BA55: "https://info.flightmapper.net/flight/British_Airways_BA_55",
+  BA56: "https://info.flightmapper.net/flight/British_Airways_BA_56",
+  BA57: "https://info.flightmapper.net/flight/British_Airways_BA_57",
+  BA106: "https://info.flightmapper.net/flight/British_Airways_BA_106",
+  BA107: "https://info.flightmapper.net/flight/British_Airways_BA_107",
+  BA192: "https://www.heathrow.com/arrivals/terminal-3/flight-details/BA192",
+  BA193: "https://www.flightaware.com/live/flight/BAW193/history",
+  BA206: "https://info.flightmapper.net/flight/British_Airways_BA_206",
+  BA207: "https://info.flightmapper.net/flight/British_Airways_BA_207",
+  BA208: "https://info.flightmapper.net/flight/British_Airways_BA_208",
+  BA209: "https://planefinder.net/data/flight/BA209",
+  BA212: "https://info.flightmapper.net/flight/British_Airways_BA_212",
+  BA213: "https://info.flightmapper.net/flight/British_Airways_BA_213",
+  BA268: "https://info.flightmapper.net/flight/British_Airways_BA_268",
+  BA269: "https://info.flightmapper.net/flight/British_Airways_BA_269",
+  BA284: "https://info.flightmapper.net/flight/British_Airways_BA_284",
+  BA285: "https://info.flightmapper.net/flight/British_Airways_BA_285",
+};
+
+type A380TimetableSpan = readonly [
+  flightNumber: keyof typeof a380TimetableCallsigns,
+  from: string,
+  to: string,
+  departure: string,
+  arrival: string,
+  duration: string,
+  validFrom: string,
+  validUntil: string,
+  operatingDays: number[],
+];
+
+const everyDay = [0, 1, 2, 3, 4, 5, 6];
+const a380TimetableSpans: readonly A380TimetableSpan[] = [
+  ["BA106", "DXB", "LHR", "02:15", "06:25", "8h 10m", "2026-01-01", "2026-03-28", everyDay],
+  ["BA107", "LHR", "DXB", "12:35", "23:45", "7h 10m", "2026-01-01", "2026-03-28", everyDay],
+  ["BA206", "MIA", "LHR", "17:10", "06:50", "8h 40m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA207", "LHR", "MIA", "09:45", "14:40", "9h 55m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA208", "MIA", "LHR", "22:00", "11:30", "8h 30m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA209", "LHR", "MIA", "14:30", "19:30", "10h 00m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA268", "LAX", "LHR", "21:00", "15:30", "10h 30m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA269", "LHR", "LAX", "15:05", "18:25", "11h 20m", "2026-01-01", "2026-03-07", [5]],
+  ["BA269", "LHR", "LAX", "15:10", "18:30", "11h 20m", "2026-01-01", "2026-03-07", [0, 1, 2, 3, 4, 6]],
+  ["BA284", "SFO", "LHR", "17:30", "12:00", "10h 30m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA285", "LHR", "SFO", "11:45", "15:00", "11h 15m", "2026-01-01", "2026-03-07", everyDay],
+  ["BA54", "JNB", "LHR", "22:00", "07:25", "11h 25m", "2026-01-01", "2026-03-27", everyDay],
+  ["BA55", "LHR", "JNB", "18:30", "07:35", "11h 05m", "2026-01-01", "2026-03-28", everyDay],
+  ["BA56", "JNB", "LHR", "19:35", "04:55", "11h 20m", "2026-01-01", "2026-03-28", everyDay],
+  ["BA57", "LHR", "JNB", "21:15", "10:25", "11h 10m", "2026-01-01", "2026-03-28", everyDay],
+  ["BA206", "MIA", "LHR", "18:10", "06:50", "8h 40m", "2026-03-08", "2026-03-28", everyDay],
+  ["BA207", "LHR", "MIA", "09:45", "15:40", "9h 55m", "2026-03-08", "2026-03-28", everyDay],
+  ["BA208", "MIA", "LHR", "23:00", "11:30", "8h 30m", "2026-03-08", "2026-03-27", everyDay],
+  ["BA209", "LHR", "MIA", "14:30", "20:30", "10h 00m", "2026-03-08", "2026-03-28", everyDay],
+  ["BA268", "LAX", "LHR", "22:00", "15:30", "10h 30m", "2026-03-08", "2026-03-27", everyDay],
+  ["BA269", "LHR", "LAX", "15:05", "19:25", "11h 20m", "2026-03-08", "2026-03-28", [5]],
+  ["BA269", "LHR", "LAX", "15:10", "19:30", "11h 20m", "2026-03-08", "2026-03-28", [0, 1, 2, 3, 4, 6]],
+  ["BA284", "SFO", "LHR", "18:30", "12:00", "10h 30m", "2026-03-08", "2026-03-28", everyDay],
+  ["BA285", "LHR", "SFO", "11:45", "16:00", "11h 15m", "2026-03-08", "2026-03-28", everyDay],
+  ["BA208", "MIA", "LHR", "22:40", "12:35", "8h 55m", "2026-03-28", "2026-05-20", everyDay],
+  ["BA268", "LAX", "LHR", "20:55", "15:25", "10h 30m", "2026-03-28", "2026-10-17", everyDay],
+  ["BA54", "JNB", "LHR", "22:00", "08:25", "11h 25m", "2026-03-28", "2026-03-28", everyDay],
+  ["BA206", "MIA", "LHR", "17:00", "06:55", "8h 55m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA207", "LHR", "MIA", "09:55", "14:30", "9h 35m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA209", "LHR", "MIA", "15:35", "20:10", "9h 35m", "2026-03-29", "2026-05-20", [0, 2, 3, 4]],
+  ["BA209", "LHR", "MIA", "15:40", "20:15", "9h 35m", "2026-03-29", "2026-05-20", [1, 5, 6]],
+  ["BA212", "BOS", "LHR", "19:30", "07:05", "6h 35m", "2026-03-29", "2026-10-17", [0]],
+  ["BA212", "BOS", "LHR", "19:35", "07:10", "6h 35m", "2026-03-29", "2026-10-17", [1, 2, 3, 4, 5, 6]],
+  ["BA213", "LHR", "BOS", "14:25", "16:55", "7h 30m", "2026-03-29", "2026-10-17", [0, 2]],
+  ["BA213", "LHR", "BOS", "14:30", "17:00", "7h 30m", "2026-03-29", "2026-10-17", [1, 3, 4, 5, 6]],
+  ["BA269", "LHR", "LAX", "15:10", "18:25", "11h 15m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA284", "SFO", "LHR", "16:35", "11:00", "10h 25m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA285", "LHR", "SFO", "10:45", "13:50", "11h 05m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA54", "JNB", "LHR", "21:15", "07:30", "11h 15m", "2026-03-29", "2026-09-05", everyDay],
+  ["BA55", "LHR", "JNB", "19:00", "07:00", "11h 00m", "2026-03-29", "2026-09-05", everyDay],
+  ["BA56", "JNB", "LHR", "19:25", "05:35", "11h 10m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA57", "LHR", "JNB", "21:20", "09:25", "11h 05m", "2026-03-29", "2026-10-17", everyDay],
+  ["BA192", "DFW", "LHR", "19:40", "10:55", "9h 15m", "2026-05-21", "2026-10-14", everyDay],
+  ["BA193", "LHR", "DFW", "12:55", "17:05", "10h 10m", "2026-05-21", "2026-10-14", everyDay],
+  ["BA11", "LHR", "SIN", "19:25", "16:10", "13h 45m", "2026-09-06", "2026-10-17", everyDay],
+  ["BA12", "SIN", "LHR", "23:20", "06:35", "14h 15m", "2026-09-06", "2026-10-17", everyDay],
+  ["BA208", "MIA", "LHR", "22:40", "12:35", "8h 55m", "2026-10-15", "2026-10-17", everyDay],
+  ["BA209", "LHR", "MIA", "15:35", "20:10", "9h 35m", "2026-10-15", "2026-10-17", [0, 2, 3, 4]],
+  ["BA209", "LHR", "MIA", "15:40", "20:15", "9h 35m", "2026-10-15", "2026-10-17", [1, 5, 6]],
+];
+
+function a380ServiceFromSpan([
+  flightNumber, from, to, departure, arrival, duration, validFrom, validUntil, operatingDays,
+]: A380TimetableSpan): BavNetworkRouteSeed {
+  const callsign = a380TimetableCallsigns[flightNumber];
+  const sourceUrl = a380TimetableSources[flightNumber];
+  if (!callsign || !sourceUrl) throw new Error(`A380 timetable reference missing for ${flightNumber}.`);
+  return {
+    id: `ba-a380-2026-${from.toLowerCase()}-${to.toLowerCase()}-${flightNumber.toLowerCase()}-${validFrom.replaceAll("-", "")}-${departure.replace(":", "")}`,
+    from,
+    to,
+    flightNumber,
+    callsign,
+    departure,
+    arrival,
+    duration,
+    aircraft: "Airbus A380-800",
+    aircraftOptions: ["Airbus A380-800"],
+    slots: 12,
+    active: true,
+    validFrom,
+    validUntil,
+    operatingDays: [...operatingDays],
+    sourceUrl,
+    validatedAt: A380_TIMETABLE_VALIDATED_AT,
+  };
+}
+
+const a380TimetableServices = a380TimetableSpans.map(a380ServiceFromSpan);
+
+/**
  * The persistent route store migrates this complete set as one baseline. The
  * number of records is greater than 221 because several published airport
  * pairs have multiple independently verified departures.
@@ -640,6 +775,7 @@ export const BAV_NETWORK_2026: BavNetworkRouteSeed[] = [
   ...gatwickTimetableServices,
   ...gatwickReferenceServices,
   ...gatwickReturnReferenceServices,
+  ...a380TimetableServices,
   ...verifiedSchedules,
   ...heathrowCallsignReferenceServices,
 ];
