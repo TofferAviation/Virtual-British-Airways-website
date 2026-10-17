@@ -18,8 +18,12 @@ const DAY_NIGHT_TAU = Math.PI * 2;
 // producing tiled dark patches. At 20 km the shell remains visually attached
 // to Earth but has enough depth separation to render as one continuous shade.
 const ATMOSPHERE_ELEVATION_METRES = 20_000;
-const LONGITUDE_SEGMENTS = 96;
-const LATITUDE_SEGMENTS = 48;
+// Globe projection curves custom geometry itself, but the horizon clips
+// triangles that are too large. The former 3.75° mesh was visibly broken
+// into dark shards at the limb on real devices. A two-degree mesh stays
+// smooth while remaining a small, static GPU buffer.
+const LONGITUDE_SEGMENTS = 180;
+const LATITUDE_SEGMENTS = 90;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -179,33 +183,38 @@ export class BaRadarDayNightLayer implements CustomLayerInterface {
 ${options.shaderData.vertexShaderPrelude}
 ${options.shaderData.define}
 in vec3 a_position;
-uniform float u_solarTime;
-uniform float u_solarDeclination;
-out float v_night;
-const float SUN_PI = 3.14159265359;
-const float SUN_TAU = 6.28318530718;
+out vec2 v_coordinate;
 void main() {
   gl_Position = projectTileFor3D(a_position.xy, a_position.z);
-  float longitude = a_position.x * SUN_TAU - SUN_PI;
-  float latitude = atan(sinh(SUN_PI * (1.0 - 2.0 * a_position.y)));
-  float solarLongitude = (0.5 - u_solarTime / 86400.0) * SUN_TAU;
-  float solarElevation = sin(latitude) * sin(u_solarDeclination)
-    + cos(latitude) * cos(u_solarDeclination) * cos(longitude - solarLongitude);
-  // A 20-degree twilight band prevents a hard artificial edge at sunset.
-  v_night = 1.0 - smoothstep(-0.18, 0.16, solarElevation);
+  // Keep the geographic position for a per-fragment terminator. Computing
+  // darkness only at vertices was the source of the tiled-looking bands:
+  // values were interpolated across large curved globe triangles.
+  v_coordinate = a_position.xy;
 }`);
     const fragment = compileShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
-in float v_night;
+in vec2 v_coordinate;
+uniform float u_solarTime;
+uniform float u_solarDeclination;
 out vec4 fragColor;
+const float SUN_PI = 3.14159265359;
+const float SUN_TAU = 6.28318530718;
 void main() {
-  // Preserve a little blue horizon luminance through twilight, then settle
-  // into a deep space-facing night tone over the dark hemisphere.
-  vec3 twilightTint = vec3(0.020, 0.062, 0.105);
-  vec3 nightTint = vec3(0.003, 0.012, 0.030);
+  float longitude = v_coordinate.x * SUN_TAU - SUN_PI;
+  float latitude = atan(sinh(SUN_PI * (1.0 - 2.0 * v_coordinate.y)));
+  float solarLongitude = (0.5 - u_solarTime / 86400.0) * SUN_TAU;
+  float solarElevation = sin(latitude) * sin(u_solarDeclination)
+    + cos(latitude) * cos(u_solarDeclination) * cos(longitude - solarLongitude);
+  // A broad twilight band keeps sunset natural without leaving a hard or
+  // visibly polygonal terminator around the Earth.
+  float v_night = 1.0 - smoothstep(-0.18, 0.16, solarElevation);
+  // Preserve enough surface context for coastlines and the NASA city-light
+  // layer to read, rather than turning the whole night hemisphere black.
+  vec3 twilightTint = vec3(0.028, 0.078, 0.122);
+  vec3 nightTint = vec3(0.007, 0.022, 0.050);
   float darkness = pow(v_night, 1.18);
   vec3 tint = mix(twilightTint, nightTint, smoothstep(0.28, 1.0, darkness));
-  fragColor = vec4(tint, 0.72 * darkness);
+  fragColor = vec4(tint, 0.54 * darkness);
 }`);
     const program = gl.createProgram();
     if (!program) throw new Error("Unable to link day/night globe shader.");

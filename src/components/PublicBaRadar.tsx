@@ -363,7 +363,9 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   // Observed satellite imagery is the honest default. The GFS volume remains
   // available as a forecast aid, but is never enabled by default as though
   // its coarse cells were actual cloud formations.
-  const [globeSatelliteClouds, setGlobeSatelliteClouds] = useState(true);
+  // A clean, continuous Earth surface is the stable default. The daily
+  // MODIS layer remains available as an optional observed-cloud reference.
+  const [globeSatelliteClouds, setGlobeSatelliteClouds] = useState(false);
   const [globeClouds, setGlobeClouds] = useState(false);
   const [cloudSettings, setCloudSettings] = useState<CloudSettings>(initialCloudSettings);
   const [windLayer, setWindLayer] = useState<RadarWindLayerId>("surface");

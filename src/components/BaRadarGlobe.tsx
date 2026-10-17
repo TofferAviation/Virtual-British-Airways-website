@@ -145,8 +145,18 @@ export function BaRadarGlobe({
       dayNightLayerRef.current?.update(current.dayNightEnabled);
       cloudLayerRef.current?.update(current.cloudData, current.cloudsEnabled, current.cloudSettings);
       auroraLayerRef.current?.update(current.aurora, current.auroraEnabled, current.auroraSettings);
+      if (map.getLayer("ba-radar-globe-city-lights")) {
+        // NASA's night composite has a black background, so keep it modest
+        // over the daylight side while the real-time sun layer is enabled.
+        // It is ordered above the terminator so actual urban lights remain
+        // visible on the dark hemisphere rather than being tinted to black.
+        map.setPaintProperty("ba-radar-globe-city-lights", "raster-opacity", current.dayNightEnabled ? 0.28 : 0);
+      }
       if (map.getLayer("ba-radar-globe-satellite-clouds")) {
-        map.setPaintProperty("ba-radar-globe-satellite-clouds", "raster-opacity", current.satelliteCloudsEnabled ? 0.9 : 0);
+        // Daily true-colour imagery is useful optional context, but the
+        // ground texture must remain visible through any missing daily swath
+        // instead of reading as a hard opaque tile.
+        map.setPaintProperty("ba-radar-globe-satellite-clouds", "raster-opacity", current.satelliteCloudsEnabled ? 0.52 : 0);
       }
     };
     const start = async () => {
@@ -175,6 +185,16 @@ export function BaRadarGlobe({
               tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpeg"],
               tileSize: 256,
               attribution: "NASA GIBS · Terra/MODIS daily imagery",
+            },
+            "ba-radar-globe-city-lights": {
+              type: "raster",
+              // The stable Suomi NPP/VIIRS composite gives the night side
+              // real geographic light distribution, not procedural dots.
+              tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_CityLights_2012/default//GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg"],
+              tileSize: 256,
+              minzoom: 0,
+              maxzoom: 8,
+              attribution: "NASA GIBS · Suomi NPP/VIIRS Earth at Night",
             },
           },
           layers: [{
@@ -229,6 +249,19 @@ export function BaRadarGlobe({
         dayNightLayerRef.current = dayNightLayer;
         dayNightLayer.update(dataRef.current.dayNightEnabled);
         map.addLayer(dayNightLayer);
+        map.addLayer({
+          id: "ba-radar-globe-city-lights",
+          type: "raster",
+          source: "ba-radar-globe-city-lights",
+          paint: {
+            "raster-opacity": dataRef.current.dayNightEnabled ? 0.28 : 0,
+            "raster-brightness-min": 0,
+            "raster-brightness-max": 1,
+            "raster-contrast": 0.36,
+            "raster-saturation": 0.16,
+            "raster-fade-duration": 0,
+          },
+        });
         const cloudLayer = new BaRadarCloudLayer();
         cloudLayerRef.current = cloudLayer;
         cloudLayer.update(dataRef.current.cloudData, dataRef.current.cloudsEnabled, dataRef.current.cloudSettings);
@@ -318,6 +351,7 @@ export function BaRadarGlobe({
       (map.getSource("ba-radar-globe-routes") as GeoJSONSource | undefined)?.setData(data.routes as never);
       (map.getSource("ba-radar-globe-controllers") as GeoJSONSource | undefined)?.setData(controllersGeoJson as never);
       dayNightLayerRef.current?.update(dayNightEnabled);
+      if (map.getLayer("ba-radar-globe-city-lights")) map.setPaintProperty("ba-radar-globe-city-lights", "raster-opacity", dayNightEnabled ? 0.28 : 0);
       cloudLayerRef.current?.update(cloudData, cloudsEnabled, cloudSettings);
       auroraLayerRef.current?.update(aurora, auroraEnabled, auroraSettings);
     }
