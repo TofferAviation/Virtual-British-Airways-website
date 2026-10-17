@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CrewRoomRequestComposer } from "./CrewRoomRequestComposer";
 
 type CrewIntent = {
   id: string;
@@ -35,6 +36,21 @@ type Props = {
   assignment: { id: string; flightNumber: string; from: string; to: string; aircraft: string; date: string; departure: string; arrival: string; duration: string } | null;
   flightPlan: { status: "draft" | "dispatch_opened" | "synced" | "sync_failed"; simbriefOfpId: string | null } | null;
   initialEvents: CompanionEvent[];
+  initialCrewRoomRequests: {
+    id: string;
+    roomName: string;
+    flightNumber: string;
+    routeFrom: string;
+    routeTo: string;
+    requestedCapacity: number;
+    mediaPreferences: ("voice" | "camera" | "screen")[];
+    bannerId: string;
+    hasCustomBanner: boolean;
+    status: "pending" | "approved" | "declined" | "cancelled";
+    staffNote: string | null;
+    voiceRoomId: string | null;
+    createdAt: string;
+  }[];
 };
 
 function dateLabel(value: string) {
@@ -51,7 +67,7 @@ function checklistState(complete: boolean, action: boolean) {
   return complete ? "complete" : action ? "action" : "waiting";
 }
 
-export function FlightCompanionExperience({ pilot, assignment, flightPlan, initialEvents }: Props) {
+export function FlightCompanionExperience({ pilot, assignment, flightPlan, initialEvents, initialCrewRoomRequests }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [busyEventId, setBusyEventId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -107,6 +123,8 @@ export function FlightCompanionExperience({ pilot, assignment, flightPlan, initi
         <article className={checklistState(joinedEventIds.size > 0, initialEvents.length > 0)}><i>3</i><div><span>CREW BOARD</span><strong>{joinedEventIds.size ? "Flying with the community" : "Find your crew"}</strong><small>{joinedEventIds.size ? "You are visible to other pilots on your selected crew board." : "Join a voluntary board below to plan together."}</small></div></article>
         <article className={checklistState(false, Boolean(assignment))}><i>4</i><div><span>EMBER</span><strong>{assignment ? "Ready to connect" : "Waiting for a flight"}</strong><small>{assignment ? "Open Ember when your simulator is ready." : "Ember connects to an active BAV assignment."}</small></div></article>
       </section>
+
+      <CrewRoomRequestComposer assignment={assignment} initialRequests={initialCrewRoomRequests} />
 
       <section className="flight-companion-community" aria-labelledby="flight-companion-community-title">
         <header><div><span className="flight-companion-kicker">GROUP FLIGHTS</span><h2 id="flight-companion-community-title">Find your crew</h2><p>Join a board to say you are interested in flying together. It does not register you for an event or book a BAV flight.</p></div><Link href="/events">View BAV events →</Link></header>

@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import type { VirtualEvent } from "@/data/events";
 import { listCrewRoomIntents } from "@/lib/crew-room-store";
+import { listPilotCrewRoomRequests } from "@/lib/crew-room-request-store";
 import { getEvents } from "@/lib/event-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getActivePilotBooking, getPilotFlightPlan } from "@/lib/pilot-operations-store";
@@ -40,9 +41,10 @@ export default async function FlightCompanionPage() {
     listVoiceRooms(),
   ]);
   if (!pilot) return null;
-  const [flightPlan, crewBoards] = await Promise.all([
+  const [flightPlan, crewBoards, roomRequests] = await Promise.all([
     assignment ? getPilotFlightPlan(assignment.id, pilot.id) : Promise.resolve(null),
     Promise.all(upcomingEvents(events).map((event) => safeIntentions(event.id))),
+    listPilotCrewRoomRequests(pilot.id),
   ]);
   const nextEvents = upcomingEvents(events);
 
@@ -50,6 +52,7 @@ export default async function FlightCompanionPage() {
     pilot={{ id: pilot.id, name: pilot.name, pilotNumber: pilot.pilotNumber, rank: pilot.rank }}
     assignment={assignment ? { id: assignment.id, flightNumber: assignment.flightNumber, from: assignment.from, to: assignment.to, aircraft: assignment.aircraft, date: assignment.date, departure: assignment.departure, arrival: assignment.arrival, duration: assignment.duration } : null}
     flightPlan={flightPlan ? { status: flightPlan.status, simbriefOfpId: flightPlan.simbriefOfpId } : null}
+    initialCrewRoomRequests={roomRequests}
     initialEvents={nextEvents.map((event, index) => {
       const room = rooms.find((candidate) => candidate.eventId === event.id) ?? null;
       return {

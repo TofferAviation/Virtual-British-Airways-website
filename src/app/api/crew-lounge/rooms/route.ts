@@ -21,6 +21,9 @@ export async function GET() {
       startsAt: room.startsAt,
       endsAt: room.endsAt,
       status: room.status,
+      maxParticipants: room.maxParticipants,
+      bannerId: room.bannerId,
+      hasCustomBanner: room.hasCustomBanner,
     })),
   });
 }

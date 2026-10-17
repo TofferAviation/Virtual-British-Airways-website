@@ -52,6 +52,9 @@ export default async function CrewLoungePage() {
           startsAt: room.startsAt,
           endsAt: room.endsAt,
           status: room.status,
+          maxParticipants: room.maxParticipants,
+          bannerId: room.bannerId,
+          hasCustomBanner: room.hasCustomBanner,
         }))}
         initialEvents={upcomingEvents(events)}
       />

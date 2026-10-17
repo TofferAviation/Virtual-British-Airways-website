@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { crewRoomBannerById } from "@/lib/crew-room-banner-library";
 import { PeerVoiceCall } from "./PeerVoiceCall";
 
 type VoiceRoomStatus = "scheduled" | "open" | "closed";
-type VoiceRoom = { id: string; name: string; description: string; startsAt: string | null; endsAt: string | null; status: VoiceRoomStatus };
+type VoiceRoom = { id: string; name: string; description: string; startsAt: string | null; endsAt: string | null; status: VoiceRoomStatus; maxParticipants: number; bannerId: string; hasCustomBanner: boolean };
 type Pilot = { id: string; name: string; pilotNumber: string; profileImage: string | null };
 type ChatMessage = { id: string; pilotId: string; pilotNumber: string; pilotName: string; rank: string; body: string; createdAt: string };
 type Portrait = { pilotId: string; profileImage: string | null };
@@ -58,6 +59,12 @@ export function CrewLoungeExperience({ pilot, initialRooms, initialEvents, canMa
 
   const selectedRoom = useMemo(() => rooms.find((room) => room.id === selectedRoomId) ?? null, [rooms, selectedRoomId]);
   const roomIsOpen = selectedRoom?.status === "open";
+  const selectedBanner = selectedRoom ? crewRoomBannerById(selectedRoom.bannerId) : null;
+  const selectedRoomBackground = selectedRoom
+    ? selectedRoom.hasCustomBanner
+      ? `linear-gradient(90deg, rgba(4,19,39,.87) 0%, rgba(4,19,39,.65) 47%, rgba(4,19,39,.28) 100%), url("/api/crew-lounge/rooms/${encodeURIComponent(selectedRoom.id)}/banner")`
+      : `linear-gradient(90deg, rgba(4,19,39,.87) 0%, rgba(4,19,39,.65) 47%, rgba(4,19,39,.28) 100%), url("${selectedBanner?.image}")`
+    : undefined;
 
   const applyRoomBoard = useCallback((nextRooms: VoiceRoom[]) => {
     setRooms(nextRooms);
@@ -192,7 +199,7 @@ export function CrewLoungeExperience({ pilot, initialRooms, initialEvents, canMa
 
       <section className="crew-lounge-main-column" id="lounge-active-room">
         {selectedRoom ? <>
-          <section className="crew-lounge-active-room">
+          <section className="crew-lounge-active-room crew-lounge-active-room-with-banner" style={selectedRoomBackground ? { backgroundImage: selectedRoomBackground, backgroundPosition: selectedRoom.hasCustomBanner ? "center" : selectedBanner?.position } : undefined}>
             <header className="crew-lounge-active-heading"><div><span className={`crew-lounge-status-chip ${selectedRoom.status}`}>{statusCopy(selectedRoom.status)}</span><h2>{selectedRoom.name}</h2><p>{selectedRoom.description}</p></div><div className="crew-lounge-active-meta"><span>{roomTime(selectedRoom)}</span>{selectedRoom.endsAt ? <small>Ends {new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(selectedRoom.endsAt))} UTC</small> : null}</div></header>
             {roomIsOpen ? <PeerVoiceCall key={selectedRoom.id} room={selectedRoom} pilot={pilot} /> : <section className="crew-lounge-waiting-stage" aria-label="Voice room availability"><LoungeIcon name="voice" /><div><span className="crew-voice-eyebrow">{selectedRoom.status === "closed" ? "Room closed" : "Waiting for the host"}</span><h3>{selectedRoom.status === "closed" ? "This room has wrapped up" : "This room is on the departure board"}</h3><p>{selectedRoom.status === "closed" ? "Choose another crew space to see what is open now." : "Voice and chat unlock as soon as a staff host opens this room. This board checks for updates every 15 seconds."}</p>{selectedRoom.status !== "closed" ? <div>{canManageRooms ? <><button type="button" onClick={() => void openSelectedRoom()} disabled={openingRoom}>{openingRoom ? "Opening room…" : "Open room now"}</button><a href="/staff/voice-rooms">Manage rooms</a></> : <button type="button" onClick={() => void refreshRoomBoard()} disabled={refreshingRooms}>{refreshingRooms ? "Checking…" : "Check again"}</button>}</div> : null}</div></section>}
           </section>

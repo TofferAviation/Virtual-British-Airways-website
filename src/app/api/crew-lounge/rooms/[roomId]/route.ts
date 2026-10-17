@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, context: Context) {
     if (!body || typeof body.action !== "string") return response({ error: "Choose a voice action." }, 400);
 
     if (body.action === "preview") {
-      return response(await previewVoicePeerRoom(auth.room.id));
+      return response(await previewVoicePeerRoom(auth.room.id, auth.room.maxParticipants));
     }
     if (body.action === "join") {
       const joined = await joinVoicePeerRoom({
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest, context: Context) {
         pilotNumber: auth.pilot.pilotNumber,
         name: auth.pilot.name,
         profileImage: auth.pilot.profileImage,
+        maxParticipants: auth.room.maxParticipants,
       });
       return response({ ...joined, iceServers: await voicePeerIceServers() });
     }

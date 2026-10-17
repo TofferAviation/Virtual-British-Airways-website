@@ -28,15 +28,15 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: VoicePi
   const localMedia = Boolean(voice.previewStream?.getVideoTracks().some((track) => track.readyState === "live"));
 
   if (!isThisRoom && voice.phase === "connected" && voice.activeRoom) {
-    return <section className="crew-p2p-call" aria-label="Active Crew Lounge voice room"><header className="crew-p2p-call-heading"><div><span className="crew-voice-eyebrow">Voice continues</span><h3>You are still in {voice.activeRoom.name}</h3></div><span className="crew-p2p-capacity">{voice.participants.length}/4 pilots</span></header><div className="crew-p2p-intro"><p>Your call stays connected while you explore the website. Use the voice dock at the bottom of the page to manage it or leave.</p><button type="button" className="crew-voice-secondary" onClick={() => void voice.leave()}>Leave voice</button></div></section>;
+    return <section className="crew-p2p-call" aria-label="Active Crew Lounge voice room"><header className="crew-p2p-call-heading"><div><span className="crew-voice-eyebrow">Voice continues</span><h3>You are still in {voice.activeRoom.name}</h3></div><span className="crew-p2p-capacity">{voice.participants.length}/{voice.activeRoom.maxParticipants} pilots</span></header><div className="crew-p2p-intro"><p>Your call stays connected while you explore the website. Use the voice dock at the bottom of the page to manage it or leave.</p><button type="button" className="crew-voice-secondary" onClick={() => void voice.leave()}>Leave voice</button></div></section>;
   }
 
   return <section className="crew-p2p-call" aria-label="Private Crew Lounge voice room">
-    <header className="crew-p2p-call-heading"><div><span className="crew-voice-eyebrow">Private direct call · beta</span><h3>{phase === "connected" ? "You are in the crew room" : "Join the crew voice room"}</h3></div><span className="crew-p2p-capacity">{memberCount}/4 pilots</span></header>
+    <header className="crew-p2p-call-heading"><div><span className="crew-voice-eyebrow">Private direct call · beta</span><h3>{phase === "connected" ? "You are in the crew room" : "Join the crew voice room"}</h3></div><span className="crew-p2p-capacity">{memberCount}/{room.maxParticipants} pilots</span></header>
     {phase === "idle" || phase === "error" ? <div className="crew-p2p-intro"><p>Join muted, then decide whether to speak, turn on your camera, or share a screen. BAV does not record or retain your media.</p><button type="button" className="crew-voice-primary" onClick={() => void voice.join(room, pilot)}>Join voice</button></div> : null}
     {phase === "joining" ? <div className="crew-p2p-intro"><span className="crew-p2p-spinner" aria-hidden="true" /><p>Asking your browser for microphone permission and preparing a secure voice connection…</p></div> : null}
     {phase === "connected" ? <>
-      <div className={`crew-p2p-grid crew-p2p-grid-${Math.min(Math.max(memberCount, 1), 4)}`}>
+      <div className={`crew-p2p-grid crew-p2p-grid-${Math.min(Math.max(memberCount, 1), 8)}`}>
         <article className="crew-p2p-tile crew-p2p-self">{localMedia && voice.previewStream ? <StreamVideo stream={voice.previewStream} className="crew-p2p-video" muted /> : <span className="crew-p2p-avatar">{pilot.profileImage ? <img src={pilot.profileImage} alt="" /> : initials(pilot.name)}</span>}<footer><strong>You</strong><span>{voice.screenOn ? "Sharing screen" : voice.cameraOn ? "Camera on" : voice.muted ? "Muted" : "Speaking"}</span></footer></article>
         {otherParticipants.map((member) => {
           const stream = voice.remoteStreams[member.sessionId];

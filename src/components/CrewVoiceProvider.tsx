@@ -2,7 +2,7 @@
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-export type VoiceRoom = { id: string; name: string; status: "scheduled" | "open" | "closed" };
+export type VoiceRoom = { id: string; name: string; status: "scheduled" | "open" | "closed"; maxParticipants: number };
 export type VoicePilot = { id: string; name: string; pilotNumber: string; profileImage: string | null };
 export type VoiceParticipant = { sessionId: string; pilotId: string; pilotNumber: string; name: string; profileImage: string | null };
 export type VoiceDevice = { id: string; label: string };

@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PeerVoiceCall } from "./PeerVoiceCall";
 
 type VoiceRoomStatus = "scheduled" | "open" | "closed";
-type VoiceRoom = { id: string; name: string; description: string; startsAt: string | null; endsAt: string | null; status: VoiceRoomStatus };
+type VoiceRoom = { id: string; name: string; description: string; startsAt: string | null; endsAt: string | null; status: VoiceRoomStatus; maxParticipants: number };
 type Pilot = { id: string; name: string; pilotNumber: string; profileImage: string | null };
 type ChatMessage = { id: string; pilotId: string; pilotNumber: string; pilotName: string; rank: string; body: string; createdAt: string };
 type Portrait = { pilotId: string; profileImage: string | null };

@@ -3,7 +3,8 @@ import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const MAX_PARTICIPANTS = 4;
+const DEFAULT_MAX_PARTICIPANTS = 4;
+const MAX_CONFIGURED_PARTICIPANTS = 8;
 const SESSION_IDLE_MS = 90_000;
 const MAX_SIGNAL_BYTES = 12_000;
 const MAX_QUEUED_SIGNALS = 80;
@@ -188,6 +189,7 @@ export async function joinVoicePeerRoom(input: {
   pilotNumber: string;
   name: string;
   profileImage?: string | null;
+  maxParticipants?: number;
 }) {
   try {
     const db = client();
@@ -200,8 +202,11 @@ export async function joinVoicePeerRoom(input: {
       .select("id", { count: "exact", head: true })
       .eq("room_id", input.roomId);
     if (countError) rethrowStoreError(countError);
-    if ((count ?? 0) >= MAX_PARTICIPANTS) {
-      throw new VoicePeerError("This small-room beta is at its four-pilot limit. Try again when a seat opens.", 409);
+    const maxParticipants = Number.isInteger(input.maxParticipants) && (input.maxParticipants ?? 0) >= 2 && (input.maxParticipants ?? 0) <= MAX_CONFIGURED_PARTICIPANTS
+      ? input.maxParticipants!
+      : DEFAULT_MAX_PARTICIPANTS;
+    if ((count ?? 0) >= maxParticipants) {
+      throw new VoicePeerError(`This crew room is at its ${maxParticipants}-pilot limit. Try again when a seat opens.`, 409);
     }
 
     const token = opaqueToken();
@@ -223,7 +228,7 @@ export async function joinVoicePeerRoom(input: {
       .single();
     if (error) rethrowStoreError(error);
     const session = data as unknown as VoicePeerSessionRow;
-    return { session: publicPeer(session), token, participants: await roomParticipants(db, input.roomId), maxParticipants: MAX_PARTICIPANTS };
+    return { session: publicPeer(session), token, participants: await roomParticipants(db, input.roomId), maxParticipants };
   } catch (error) {
     rethrowStoreError(error);
   }
@@ -268,12 +273,15 @@ export async function pollVoicePeerRoom(input: { roomId: string; pilotId: string
   }
 }
 
-export async function previewVoicePeerRoom(roomId: string) {
+export async function previewVoicePeerRoom(roomId: string, maxParticipants?: number) {
   try {
     const db = client();
     await purgeExpired(db);
     const participants = await roomParticipants(db, roomId);
-    return { participantCount: participants.length, maxParticipants: MAX_PARTICIPANTS };
+    const configuredLimit = Number.isInteger(maxParticipants) && (maxParticipants ?? 0) >= 2 && (maxParticipants ?? 0) <= MAX_CONFIGURED_PARTICIPANTS
+      ? maxParticipants!
+      : DEFAULT_MAX_PARTICIPANTS;
+    return { participantCount: participants.length, maxParticipants: configuredLimit };
   } catch (error) {
     rethrowStoreError(error);
   }

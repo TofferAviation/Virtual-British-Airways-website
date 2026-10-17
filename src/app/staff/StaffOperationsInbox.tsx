@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listLiveAcarsSessions } from "@/lib/acars-store";
+import { pendingCrewRoomRequestCount } from "@/lib/crew-room-request-store";
 import { isFleetAircraftBookable, listFleetAircraft } from "@/lib/fleet-service";
 import { listAllPireps } from "@/lib/pilot-operations-store";
 import { listMentorApplications, listMentoringFlightReviews, listPilots } from "@/lib/pilot-store";
@@ -14,6 +15,7 @@ type StaffOperationsInboxProps = {
   canViewLiveOperations: boolean;
   canManageClosedBeta: boolean;
   canViewServiceStatus: boolean;
+  canManageVoiceRooms: boolean;
   activeStaffCount: number;
 };
 
@@ -40,9 +42,10 @@ export async function StaffOperationsInbox({
   canViewLiveOperations,
   canManageClosedBeta,
   canViewServiceStatus,
+  canManageVoiceRooms,
   activeStaffCount,
 }: StaffOperationsInboxProps) {
-  const [pireps, tickets, mentorApplications, mentoringReviews, fleet, sessions, pilots, serviceStatus] = await Promise.all([
+  const [pireps, tickets, mentorApplications, mentoringReviews, fleet, sessions, pilots, serviceStatus, crewRoomRequests] = await Promise.all([
     canReviewPireps ? listAllPireps().catch(() => null) : Promise.resolve(null),
     canViewSupport ? listAllTickets().catch(() => null) : Promise.resolve(null),
     canManageMentoring ? listMentorApplications().catch(() => null) : Promise.resolve(null),
@@ -51,6 +54,7 @@ export async function StaffOperationsInbox({
     canViewLiveOperations ? listLiveAcarsSessions().catch(() => null) : Promise.resolve(null),
     canManageClosedBeta ? listPilots().catch(() => null) : Promise.resolve(null),
     canViewServiceStatus ? getServiceStatusState().catch(() => null) : Promise.resolve(null),
+    canManageVoiceRooms ? pendingCrewRoomRequestCount().catch(() => null) : Promise.resolve(null),
   ]);
 
   const items: InboxItem[] = [];
@@ -138,6 +142,18 @@ export async function StaffOperationsInbox({
       detail: waitingForActivation ? "Invited pilots have not changed their temporary password" : "All invited pilots activated",
       href: "/staff/permissions",
       tone: waitingForActivation ? "attention" : "clear",
+    });
+  }
+
+  if (crewRoomRequests !== null) {
+    items.push({
+      id: "crew-room-requests",
+      icon: "◌",
+      count: crewRoomRequests,
+      title: "Crew room requests",
+      detail: crewRoomRequests ? "Pilot-hosted rooms awaiting review" : "No pilot rooms waiting",
+      href: "/staff/voice-rooms",
+      tone: crewRoomRequests ? "attention" : "clear",
     });
   }
 

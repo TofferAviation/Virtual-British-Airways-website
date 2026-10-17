@@ -77,6 +77,7 @@ export default async function StaffPage() {
                 canViewLiveOperations={canViewRoutes}
                 canManageClosedBeta={canManageClosedBeta}
                 canViewServiceStatus={canViewServiceStatus}
+                canManageVoiceRooms={canEditSettings}
                 activeStaffCount={activeStaffCount}
               />
             }

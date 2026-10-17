@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { DEFAULT_CREW_ROOM_BANNER_ID, isCrewRoomBannerId } from "@/lib/crew-room-banner-library";
 import { getEvents } from "@/lib/event-store";
 
 export const VOICE_ROOM_CHANNEL_PREFIX = "voice:";
 export type VoiceRoomStatus = "scheduled" | "open" | "closed";
+const CREW_ROOM_REQUEST_BUCKET = "crew-room-request-media";
 
 type VoiceRoomRow = {
   id: string;
@@ -14,6 +16,10 @@ type VoiceRoomRow = {
   starts_at: string | null;
   ends_at: string | null;
   status: VoiceRoomStatus;
+  max_participants?: number;
+  banner_id?: string | null;
+  banner_object_key?: string | null;
+  banner_content_type?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -27,6 +33,9 @@ export type VoiceRoom = {
   startsAt: string | null;
   endsAt: string | null;
   status: VoiceRoomStatus;
+  maxParticipants: number;
+  bannerId: string;
+  hasCustomBanner: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -60,6 +69,9 @@ function toVoiceRoom(row: VoiceRoomRow): VoiceRoom {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     status: row.status,
+    maxParticipants: typeof row.max_participants === "number" ? row.max_participants : 4,
+    bannerId: isCrewRoomBannerId(row.banner_id) ? row.banner_id : DEFAULT_CREW_ROOM_BANNER_ID,
+    hasCustomBanner: Boolean(row.banner_object_key),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -91,6 +103,34 @@ function cleanSlug(value: unknown) {
 function cleanStatus(value: unknown): VoiceRoomStatus {
   if (value === "scheduled" || value === "open" || value === "closed") return value;
   throw new VoiceRoomError("Choose whether this room is scheduled, open or closed.", 400);
+}
+
+function cleanCapacity(value: unknown) {
+  const capacity = value === undefined || value === null || value === "" ? 4 : Number(value);
+  if (!Number.isInteger(capacity) || capacity < 2 || capacity > 8) {
+    throw new VoiceRoomError("Choose a room size between 2 and 8 pilots.", 400);
+  }
+  return capacity;
+}
+
+function cleanBanner(value: unknown) {
+  if (value === undefined || value === null || value === "") return DEFAULT_CREW_ROOM_BANNER_ID;
+  if (isCrewRoomBannerId(value)) return value;
+  throw new VoiceRoomError("Choose a valid Crew Lounge banner.", 400);
+}
+
+function cleanBannerObjectKey(value: unknown) {
+  return cleanOptionalText(value, "Custom banner", 255);
+}
+
+function cleanBannerContentType(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (value === "image/jpeg" || value === "image/png") return value;
+  throw new VoiceRoomError("Custom banners must be JPG or PNG images.", 400);
+}
+
+function voiceRoomColumns() {
+  return "id, slug, name, description, event_id, starts_at, ends_at, status, max_participants, banner_id, banner_object_key, banner_content_type, created_at, updated_at";
 }
 
 function cleanDate(value: unknown, label: string) {
@@ -128,14 +168,14 @@ export async function listVoiceRooms(options?: { includeClosed?: boolean }) {
   try {
     let query = client()
       .from("crew_voice_rooms")
-      .select("id, slug, name, description, event_id, starts_at, ends_at, status, created_at, updated_at")
+      .select(voiceRoomColumns())
       .order("status", { ascending: true })
       .order("starts_at", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true });
     if (!options?.includeClosed) query = query.neq("status", "closed");
     const { data, error } = await query;
     if (error) throw error;
-    return ((data ?? []) as VoiceRoomRow[]).map(toVoiceRoom);
+    return ((data ?? []) as unknown as VoiceRoomRow[]).map(toVoiceRoom);
   } catch (error) {
     // Deploys remain safe while the companion migration is being applied.
     if (isMissingVoiceRoomSchema(error)) return [];
@@ -155,13 +195,13 @@ export async function getVoiceRoomById(idValue: unknown, options?: { includeClos
   try {
     let query = client()
       .from("crew_voice_rooms")
-      .select("id, slug, name, description, event_id, starts_at, ends_at, status, created_at, updated_at")
+      .select(voiceRoomColumns())
       .eq("id", id);
     if (!options?.includeClosed) query = query.neq("status", "closed");
     const { data, error } = await query.maybeSingle();
     if (error) throw error;
     if (!data) throw new VoiceRoomError("That voice room is not available.", 404);
-    return toVoiceRoom(data as VoiceRoomRow);
+    return toVoiceRoom(data as unknown as VoiceRoomRow);
   } catch (error) {
     if (isMissingVoiceRoomSchema(error)) {
       throw new VoiceRoomError("Voice rooms are waiting for their database setup. Apply the Crew Lounge voice-room migration, then try again.", 503);
@@ -178,6 +218,10 @@ export async function createVoiceRoom(input: {
   startsAt: unknown;
   endsAt: unknown;
   status: unknown;
+  maxParticipants?: unknown;
+  bannerId?: unknown;
+  bannerObjectKey?: unknown;
+  bannerContentType?: unknown;
 }) {
   const name = cleanText(input.name, "Room name", 80);
   if (!name) throw new VoiceRoomError("Give the room a name.", 400);
@@ -191,6 +235,13 @@ export async function createVoiceRoom(input: {
     throw new VoiceRoomError("The room end time must be after its start time.", 400);
   }
   const status = cleanStatus(input.status);
+  const maxParticipants = cleanCapacity(input.maxParticipants);
+  const bannerId = cleanBanner(input.bannerId);
+  const bannerObjectKey = cleanBannerObjectKey(input.bannerObjectKey);
+  const bannerContentType = cleanBannerContentType(input.bannerContentType);
+  if (Boolean(bannerObjectKey) !== Boolean(bannerContentType)) {
+    throw new VoiceRoomError("A custom banner needs both its image and image type.", 400);
+  }
   const id = randomUUID();
   const now = new Date().toISOString();
   const { data, error } = await client()
@@ -204,19 +255,23 @@ export async function createVoiceRoom(input: {
       starts_at: startsAt,
       ends_at: endsAt,
       status,
+      max_participants: maxParticipants,
+      banner_id: bannerId,
+      banner_object_key: bannerObjectKey,
+      banner_content_type: bannerContentType,
       // The opaque key avoids turning a staff-facing room label into a public meeting URL.
       meeting_key: `bav-${id.replaceAll("-", "")}`,
       created_at: now,
       updated_at: now,
     })
-    .select("id, slug, name, description, event_id, starts_at, ends_at, status, created_at, updated_at")
+    .select(voiceRoomColumns())
     .single();
   if (error) {
     if (error.code === "23505") throw new VoiceRoomError("That room address is already in use.", 409);
     if (isMissingVoiceRoomSchema(error)) throw new VoiceRoomError("Apply the Crew Lounge voice-room migration before creating rooms.", 503);
     throw error;
   }
-  return toVoiceRoom(data as VoiceRoomRow);
+  return toVoiceRoom(data as unknown as VoiceRoomRow);
 }
 
 export async function updateVoiceRoomStatus(input: { id: unknown; status: unknown }) {
@@ -226,8 +281,27 @@ export async function updateVoiceRoomStatus(input: { id: unknown; status: unknow
     .from("crew_voice_rooms")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", room.id)
-    .select("id, slug, name, description, event_id, starts_at, ends_at, status, created_at, updated_at")
+    .select(voiceRoomColumns())
     .single();
   if (error) throw error;
-  return toVoiceRoom(data as VoiceRoomRow);
+  return toVoiceRoom(data as unknown as VoiceRoomRow);
+}
+
+/** Custom room artwork is held in private Storage and only streamed through an authenticated website route. */
+export async function readVoiceRoomCustomBanner(idValue: unknown) {
+  const room = await getVoiceRoomById(idValue);
+  if (!room.hasCustomBanner) return null;
+  const { data, error } = await client()
+    .from("crew_voice_rooms")
+    .select("banner_object_key, banner_content_type")
+    .eq("id", room.id)
+    .maybeSingle();
+  if (error) throw error;
+  const record = data as { banner_object_key: string | null; banner_content_type: string | null } | null;
+  if (!record?.banner_object_key || (record.banner_content_type !== "image/jpeg" && record.banner_content_type !== "image/png")) return null;
+  const { data: file, error: fileError } = await client().storage.from(CREW_ROOM_REQUEST_BUCKET).download(record.banner_object_key);
+  if (fileError) throw fileError;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!bytes.byteLength || bytes.byteLength > 5 * 1024 * 1024) throw new VoiceRoomError("The custom room banner is unavailable.", 503);
+  return { bytes, contentType: record.banner_content_type };
 }

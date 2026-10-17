@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
       startsAt: body?.room?.startsAt,
       endsAt: body?.room?.endsAt,
       status: body?.room?.status,
+      maxParticipants: body?.room?.maxParticipants,
+      bannerId: body?.room?.bannerId,
     });
     addAudit(auth.state, {
       actorEmail: auth.actor.email,
