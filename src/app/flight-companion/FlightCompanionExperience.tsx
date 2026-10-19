@@ -35,6 +35,24 @@ type Props = {
   pilot: { id: string; name: string; pilotNumber: string; rank: string };
   assignment: { id: string; flightNumber: string; from: string; to: string; aircraft: string; date: string; departure: string; arrival: string; duration: string } | null;
   flightPlan: { status: "draft" | "dispatch_opened" | "synced" | "sync_failed"; simbriefOfpId: string | null } | null;
+  operations: {
+    ember: {
+      flightNumber: string;
+      from: string;
+      to: string;
+      aircraft: string;
+      simulator: "xplane12" | "msfs2020" | "msfs2024";
+      startedAt: string;
+      updatedAt: string;
+      distanceNm: number;
+      phase: string | null;
+      altitudeFt: number | null;
+      groundSpeedKt: number | null;
+      onGround: boolean | null;
+    } | null;
+    fleet: { registration: string | null; station: string | null; status: "reserved" | "operating" | "completed" | "cancelled"; availability: string | null } | null;
+    latestDebrief: { id: string; flightNumber: string; from: string; to: string; completedAt: string; status: "pending" | "changes_requested" | "accepted" | "rejected"; blockMinutes: number; pointsAwarded: number } | null;
+  };
   initialEvents: CompanionEvent[];
   initialCrewRoomRequests: {
     id: string;
@@ -67,12 +85,37 @@ function checklistState(complete: boolean, action: boolean) {
   return complete ? "complete" : action ? "action" : "waiting";
 }
 
-export function FlightCompanionExperience({ pilot, assignment, flightPlan, initialEvents, initialCrewRoomRequests }: Props) {
+function utcClock(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Update pending";
+  return `${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(date)} UTC`;
+}
+
+function duration(minutes: number) {
+  const hours = Math.floor(Math.max(0, minutes) / 60);
+  const remainder = Math.max(0, minutes) % 60;
+  return hours ? `${hours}h ${remainder}m` : `${remainder}m`;
+}
+
+function friendlyStatus(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function simulatorLabel(value: "xplane12" | "msfs2020" | "msfs2024") {
+  return value === "xplane12" ? "X-Plane 12" : value === "msfs2024" ? "MSFS 2024" : "MSFS 2020";
+}
+
+export function FlightCompanionExperience({ pilot, assignment, flightPlan, operations, initialEvents, initialCrewRoomRequests }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [busyEventId, setBusyEventId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const joinedEventIds = useMemo(() => new Set(events.filter((event) => event.intentions.some((intention) => intention.pilotId === pilot.id)).map((event) => event.id)), [events, pilot.id]);
   const briefingReady = flightPlan?.status === "synced";
+  const activeRoomRequest = initialCrewRoomRequests.find((request) => request.status === "approved" || request.status === "pending") ?? null;
+  const ember = operations.ember;
+  const fleet = operations.fleet;
+  const debrief = operations.latestDebrief;
+  const currentFlightLabel = ember ? `${ember.flightNumber} · ${ember.from} → ${ember.to}` : assignment ? `${assignment.flightNumber} · ${assignment.from} → ${assignment.to}` : "Choose a BAV flight to begin";
 
   async function updateCrewBoard(event: CompanionEvent) {
     const joining = !joinedEventIds.has(event.id);
@@ -111,6 +154,48 @@ export function FlightCompanionExperience({ pilot, assignment, flightPlan, initi
         <div><span className="flight-companion-kicker">YOUR FLIGHT DAY</span><h2>Welcome back, {pilot.name}</h2><p>Everything here comes from your BAV assignment, briefing and voluntary community crew boards.</p></div>
         <span className="flight-companion-pilot">{pilot.pilotNumber} · {pilot.rank}</span>
       </header>
+
+      <section className="flight-companion-board" aria-labelledby="flight-companion-board-title">
+        <header className="flight-companion-board-heading">
+          <div><span className="flight-companion-kicker">TODAY&apos;S OPERATIONS</span><h2 id="flight-companion-board-title">Your shared flight board</h2><p>One clear place for the flight you chose, the people around it and what Ember sees when you begin.</p></div>
+          <span className={ember ? "flight-companion-live-pill active" : "flight-companion-live-pill"}><i aria-hidden="true" />{ember ? "Ember connected" : assignment ? "Ready on the ground" : "Awaiting a flight"}</span>
+        </header>
+        <div className="flight-companion-board-grid">
+          <article className="flight-companion-operation-card flight-companion-operation-primary">
+            <span className="flight-companion-kicker">CURRENT SECTOR</span>
+            <h3>{currentFlightLabel}</h3>
+            <p>{ember ? `${ember.aircraft} is currently connected through ${simulatorLabel(ember.simulator)}.` : assignment ? `${assignment.aircraft} · ${assignment.date} · scheduled departure ${assignment.departure}.` : "Browse the verified BAV schedule, then return here for a focused pre-flight board."}</p>
+            <div className="flight-companion-operation-steps">
+              <span className={assignment ? "ready" : ""}><i />Flight</span>
+              <span className={briefingReady ? "ready" : ""}><i />Briefing</span>
+              <span className={activeRoomRequest?.status === "approved" || joinedEventIds.size ? "ready" : ""}><i />Crew</span>
+              <span className={ember ? "ready" : ""}><i />Ember</span>
+            </div>
+            <div className="flight-companion-operation-actions">
+              <Link className="flight-companion-primary" href={ember ? "/ba-radar" : assignment ? `/flight-plans/${encodeURIComponent(assignment.id)}` : "/book"}>{ember ? "View live operations" : assignment ? briefingReady ? "Open briefing" : "Prepare briefing" : "Find a BAV flight"}</Link>
+              <Link className="flight-companion-board-text-link" href="/crew-lounge">Open Crew Lounge →</Link>
+            </div>
+          </article>
+
+          <article className="flight-companion-operation-card">
+            <header><span className="flight-companion-kicker">EMBER STATUS</span><b className={ember ? "status-good" : ""}>{ember ? "LIVE" : "STANDBY"}</b></header>
+            {ember ? <><h3>{ember.phase ? friendlyStatus(ember.phase) : ember.onGround ? "On the ground" : "Flight telemetry active"}</h3><dl className="flight-companion-operation-metrics"><div><dt>Altitude</dt><dd>{ember.altitudeFt == null ? "—" : `${Math.round(ember.altitudeFt).toLocaleString()} ft`}</dd></div><div><dt>Ground speed</dt><dd>{ember.groundSpeedKt == null ? "—" : `${Math.round(ember.groundSpeedKt)} kt`}</dd></div><div><dt>Distance recorded</dt><dd>{Math.round(ember.distanceNm).toLocaleString()} NM</dd></div><div><dt>Last update</dt><dd>{utcClock(ember.updatedAt)}</dd></div></dl><Link className="flight-companion-board-text-link" href="/ba-radar">Open BA-Radar →</Link></> : <><h3>Waiting for Ember</h3><p>When you start your BAV assignment in Ember, its operational state appears here without exposing your private route history.</p><span className="flight-companion-operation-note">Connect after your simulator is ready.</span></>}
+          </article>
+
+          <article className="flight-companion-operation-card">
+            <header><span className="flight-companion-kicker">AIRCRAFT &amp; TURNAROUND</span><b className={fleet?.status === "operating" ? "status-good" : ""}>{fleet ? friendlyStatus(fleet.status) : "OPTIONAL"}</b></header>
+            {fleet ? <><h3>{fleet.registration ?? "Assigned BAV aircraft"}</h3><dl className="flight-companion-operation-metrics"><div><dt>Current station</dt><dd>{fleet.station ?? "Station pending"}</dd></div><div><dt>Dispatch state</dt><dd>{fleet.availability ? friendlyStatus(fleet.availability) : "Assignment active"}</dd></div></dl><p>Fleet keeps the authoritative airframe location while your pilot credit remains attached to your own completed PIREP.</p></> : <><h3>No managed tail selected</h3><p>You can still fly normally. Select a Fleet registration while booking when you want its live station and turnaround to follow this board.</p><Link className="flight-companion-board-text-link" href={assignment ? `/flight-plans/${encodeURIComponent(assignment.id)}` : "/book"}>Manage aircraft →</Link></>}
+          </article>
+
+          <article className="flight-companion-operation-card">
+            <header><span className="flight-companion-kicker">CREW &amp; AFTER FLIGHT</span><b className={activeRoomRequest?.status === "approved" ? "status-good" : ""}>{activeRoomRequest?.status === "approved" ? "ROOM OPEN" : activeRoomRequest ? "REQUESTED" : "PERSONAL"}</b></header>
+            <h3>{activeRoomRequest?.status === "approved" ? `${activeRoomRequest.roomName} is ready` : joinedEventIds.size ? "You are on a crew board" : "Your crew space is optional"}</h3>
+            <p>{activeRoomRequest?.status === "approved" ? "Your staff-approved room is available in the Lounge when you want to coordinate." : joinedEventIds.size ? "Your event-board signal is visible to pilots who are planning the same community flight." : "Use the Lounge for voice, a quick chat or a crew-room request—never required to fly."}</p>
+            {debrief ? <Link className="flight-companion-debrief-link" href={`/account/flights/${encodeURIComponent(debrief.id)}`}>Latest debrief · {debrief.flightNumber} {debrief.from} → {debrief.to}<small>{duration(debrief.blockMinutes)} · {friendlyStatus(debrief.status)} · {debrief.pointsAwarded} VA points</small></Link> : <span className="flight-companion-operation-note">Your completed Ember flights will return here as debriefs.</span>}
+          </article>
+        </div>
+        <p className="flight-companion-board-privacy">The board only combines records already connected to your BAV account. It does not alter your booking, activate Ember, or reveal private telemetry to other pilots.</p>
+      </section>
 
       <section className="flight-companion-flight-card" aria-label="Your next BAV flight">
         <div className="flight-companion-flight-title"><span className="flight-companion-kicker">YOUR NEXT BAV FLIGHT</span><h2>{assignment ? `${assignment.flightNumber} · ${assignment.from} → ${assignment.to}` : "Ready when you are"}</h2><p>{assignment ? `${assignment.aircraft} · ${assignment.date} · departs ${assignment.departure}` : "Pick a verified BAV service first, then return here to prepare it with the community."}</p></div>
