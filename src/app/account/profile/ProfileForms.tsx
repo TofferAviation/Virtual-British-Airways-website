@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AccountBackgroundPicker } from "@/components/AccountBackgroundPicker";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 import { BAV_HUBS } from "@/lib/hubs";
+import { PASSPORT_NATIONALITIES } from "@/lib/passport-nationalities";
 import styles from "./ember-download.module.css";
 import hubStyles from "./hub-picker.module.css";
 import rulesStyles from "./pilot-rules.module.css";
@@ -24,7 +25,7 @@ async function patchProfile(payload: Record<string, string | null>) {
   return body;
 }
 
-export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
+export function ProfileForms({ name, email, hub, passportNationality, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; passportNationality: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -77,7 +78,7 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), profileImage });
+      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), profileImage });
       setProfileMessage("Profile updated successfully.");
       router.refresh();
     } catch (error) {
@@ -132,6 +133,7 @@ export function ProfileForms({ name, email, hub, simbriefPilotId, profileImage: 
         <label>Full name<input name="name" defaultValue={name} autoComplete="name" required /></label>
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
         <label>Home hub<select className={hubStyles.select} name="hub" defaultValue={hub}>{BAV_HUBS.map((item) => <option key={item.code} value={item.name}>{item.name} ({item.code}) — {item.role}</option>)}</select><small className={hubStyles.hint}>This sets the default departure hub on the BAV flight search. You can change it whenever you like.</small></label>
+        <label>Virtual passport nationality<select className={hubStyles.select} name="passportNationality" defaultValue={passportNationality}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small className={hubStyles.hint}>This changes your virtual passport cover and identity page. It is not identity verification.</small></label>
         <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
         <AccountBackgroundPicker value={accountBackground} onChange={saveAccountBackground} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
