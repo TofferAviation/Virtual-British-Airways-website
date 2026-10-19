@@ -1,7 +1,7 @@
 export type PassportNationality = string;
 
 export const PASSPORT_NATIONALITIES = [
-  "Australia", "Austria", "Belgium", "Brazil", "Canada", "China", "Denmark", "Finland", "France", "Germany", "Greece", "India", "Ireland", "Italy", "Japan", "Mexico", "Netherlands", "New Zealand", "Norway", "Poland", "Portugal", "Singapore", "South Africa", "Spain", "Sweden", "Switzerland", "Thailand", "United Arab Emirates", "United Kingdom", "United States",
+  "Albania", "Algeria", "Antigua & Barbuda", "Argentina", "Australia", "Austria", "Bahamas", "Bahrain", "Barbados", "Belgium", "Bermuda", "Brazil", "Bulgaria", "Cambodia", "Canada", "Cayman Islands", "Chile", "China", "Costa Rica", "Croatia", "Cyprus", "Czechia", "Denmark", "Dominican Republic", "Egypt", "Finland", "France", "Georgia", "Germany", "Ghana", "Gibraltar", "Greece", "Grenada", "Guernsey", "Guyana", "Hong Kong", "Hungary", "Iceland", "India", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jersey", "Jordan", "Kenya", "Luxembourg", "Malaysia", "Maldives", "Malta", "Mauritius", "Mexico", "Montenegro", "Morocco", "Netherlands", "New Zealand", "Nigeria", "Norway", "Pakistan", "Poland", "Portugal", "Qatar", "Romania", "Saudi Arabia", "Singapore", "Slovenia", "South Africa", "Spain", "Sri Lanka", "St. Kitts & Nevis", "St. Lucia", "Sweden", "Switzerland", "Thailand", "Trinidad & Tobago", "Turkey", "Turks & Caicos Islands", "United Arab Emirates", "United Kingdom", "United States",
 ] as const;
 
 const THEMES: Record<string, { flag: string; ink: string; cover: string; edge: string }> = {
