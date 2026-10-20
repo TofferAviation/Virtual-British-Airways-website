@@ -28,7 +28,7 @@ function initials(name: string) {
 }
 
 function seatPosition(index: number) {
-  const positions = ["head", "north-left", "north-right", "east-top", "east-bottom", "south-right", "south-left", "west-bottom"];
+  const positions = ["port-1", "port-2", "port-3", "port-4", "starboard-1", "starboard-2", "starboard-3", "starboard-4"];
   return positions[index - 1] ?? "";
 }
 
@@ -97,7 +97,6 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
           const unavailable = Boolean(occupant && !isOurs);
           const selected = !isThisRoom && selectedSeat === seatIndex;
           return <button key={seatIndex} type="button" className={`briefing-seat ${seatPosition(seatIndex)}${selected ? " selected" : ""}${occupant ? " occupied" : ""}${isOurs ? " yours" : ""}`} aria-label={seatLabel(seatIndex, occupant)} disabled={unavailable || isThisRoom} onClick={() => setSelectedSeat(seatIndex)}>
-            <span className="briefing-chair" aria-hidden="true" />
             <span className="briefing-seat-name">{occupant ? <>{occupant.profileImage ? <img src={occupant.profileImage} alt="" /> : <i>{initials(occupant.name)}</i>}<b>{isOurs ? "You" : occupant.name}</b><small>{occupant.pilotNumber}</small></> : <><i>{seatIndex}</i><b>{selected ? "Your chair" : "Available"}</b><small>{selected ? "Ready to join" : "Select seat"}</small></>}</span>
           </button>;
         })}
