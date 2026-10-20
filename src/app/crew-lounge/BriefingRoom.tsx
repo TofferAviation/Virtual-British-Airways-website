@@ -21,7 +21,7 @@ type BriefingRoomProps = {
   events: BriefingEvent[];
 };
 
-type WallView = "flight-plan" | "route" | "weather" | "notes";
+type WallView = "overview" | "flight-plan" | "route" | "weather" | "airports" | "aircraft" | "notes";
 
 type SharedBriefing = {
   picPilotId: string;
@@ -61,7 +61,8 @@ function PilotPortrait({ image, name }: { image: string | null; name: string }) 
 export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const voice = useCrewVoice();
   const [selectedSeat, setSelectedSeat] = useState(1);
-  const [wallView, setWallView] = useState<WallView>("flight-plan");
+  const [wallView, setWallView] = useState<WallView>("overview");
+  const [consoleOverride, setConsoleOverride] = useState(false);
   const [sharedBriefing, setSharedBriefing] = useState<SharedBriefing | null>(null);
   const [briefingNotice, setBriefingNotice] = useState("");
   const [publishingBriefing, setPublishingBriefing] = useState(false);
@@ -70,6 +71,7 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const participants = isThisRoom ? voice.participants : [];
   const remotePresentation = Object.entries(voice.remoteStreams).find(([, stream]) => stream.getVideoTracks().some((track) => track.readyState === "live" && !track.muted));
   const presentationStream = voice.screenOn ? voice.previewStream : remotePresentation?.[1] ?? null;
+  const showPresentation = Boolean(presentationStream && !consoleOverride);
   const presentationPilot = voice.screenOn ? "Your screen" : participants.find((participant) => participant.sessionId === remotePresentation?.[0])?.name ?? "Live presentation";
   const localSeat = participants.find((participant) => participant.pilotId === pilot.id)?.seatIndex;
   const seats = Array.from({ length: room.maxParticipants }, (_, index) => {
@@ -130,30 +132,23 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
 
     <section className="briefing-room-scene" aria-label="Briefing room seat plan and shared presentation wall">
       <div className="briefing-wall" aria-live="polite">
-        <div className={`briefing-wall-content${presentationStream ? " is-presenting" : ""}`}>
-          {presentationStream ? <><PresentationVideo stream={presentationStream} /><span className="briefing-presentation-label">Live presentation · {presentationPilot}</span></> : <>
-          {wallView === "flight-plan" ? <>
-            <span>British Airways Virtual · flight plan</span>
-            <strong>{plan ? plan.flightNumber : briefing ? briefing.title : "Flight plan awaiting selection"}</strong>
-            <b>{plan ? `${plan.from}  →  ${plan.to}` : briefing ? `${briefing.route.from}  →  ${briefing.route.to}` : "Choose a linked event to populate the route"}</b>
-            <small>{plan ? `${plan.aircraft}${plan.registration ? ` · ${plan.registration}` : ""} · STD ${plan.departure} · STA ${plan.arrival} · ${plan.duration}${plan.simbrief?.distanceNm ? ` · ${plan.simbrief.distanceNm} NM` : ""}` : briefing ? `${briefing.route.fromName} to ${briefing.route.toName} · ${formattedDate(briefing.date)} · ${briefing.startUtc}Z` : "The PIC can publish their own booking for the crew to follow."}</small>
-          </> : null}
-          {wallView === "route" ? <>
-            <span>Route overview</span><strong>{plan ? `${plan.from} — ${plan.to}` : briefing ? `${briefing.route.from} — ${briefing.route.to}` : "Route awaiting briefing selection"}</strong><div className="briefing-route-line"><i /> <em>✈</em> <i /></div><small>{plan?.route ? `${plan.route}${plan.cruiseAltitude ? ` · planned ${plan.cruiseAltitude}` : ""}${plan.alternate ? ` · alternate ${plan.alternate}` : ""}` : briefing ? briefing.aircraftNote : "A host can use screen share for a live SimBrief, chart, or route review."}</small>
-          </> : null}
-          {wallView === "weather" ? <>
-            <span>Weather desk</span><strong>{plan?.simbrief?.originMetar || plan?.simbrief?.destinationMetar ? "Flight-plan weather" : "Live weather is not invented"}</strong><b>{plan ? `${plan.from} & ${plan.to}` : briefing ? `${briefing.route.from} & ${briefing.route.to}` : "Departure & destination"}</b><small>{plan?.simbrief?.originMetar || plan?.simbrief?.destinationMetar ? `${plan.from}: ${plan.simbrief?.originMetar ?? "not supplied"} · ${plan.to}: ${plan.simbrief?.destinationMetar ?? "not supplied"}` : "Use the shared-screen control for a live METAR, TAF, or weather source during this free pilot-room release."}</small>
-          </> : null}
-          {wallView === "notes" ? <>
-            <span>Briefing notes</span><strong>Keep the table clear</strong><b>Voice, camera and screen sharing are ready.</b><small>Shared, host-controlled notes will be added on the same room state when the community briefing upgrade is enabled.</small>
-          </> : null}
+        <div className={`briefing-wall-content${showPresentation ? " is-presenting" : ""}`}>
+          {showPresentation ? <><PresentationVideo stream={presentationStream!} /><span className="briefing-presentation-label">Live presentation · {presentationPilot}</span></> : <>
+          {wallView === "overview" ? <><span>British Airways Virtual · operational overview</span><strong>{plan?.flightNumber ?? "Flight awaiting PIC booking"}</strong><b>{plan ? `${plan.from}  →  ${plan.to}` : "Route pending"}</b><small>{plan ? `${plan.aircraft}${plan.registration ? ` · ${plan.registration}` : ""} · STD ${plan.departure} · STA ${plan.arrival} · ${plan.simbrief?.distanceNm ?? "distance pending"} NM · fuel ${plan.simbrief?.blockFuel ?? "pending"} · ${plan.simbrief?.passengerCount ?? "passengers pending"} pax` : "The PIC’s active booking becomes the operational briefing for this room."}</small></> : null}
+          {wallView === "flight-plan" ? <><span>Flight plan · dispatch detail</span><strong>{plan?.flightNumber ?? "Flight plan pending"}</strong><b>{plan ? `${plan.from}  →  ${plan.to} · ${plan.cruiseAltitude ?? "altitude pending"}` : "Publish a PIC booking to continue"}</b><small>{plan?.route ? `${plan.route}${plan.alternate ? ` · Alternate ${plan.alternate}` : ""}` : "Taxi routing, airway sequence and planned altitude appear here once the PIC synchronises SimBrief."}</small></> : null}
+          {wallView === "route" ? <><span>Route overview</span><strong>{plan ? `${plan.from} — ${plan.to}` : "Route awaiting briefing"}</strong><div className="briefing-route-line"><i /> <em>✈</em> <i /></div><small>{plan?.route ? `${plan.route}${plan.cruiseAltitude ? ` · planned ${plan.cruiseAltitude}` : ""}${plan.alternate ? ` · alternate ${plan.alternate}` : ""}` : "Route geometry is supplied from the PIC’s dispatch plan — never invented."}</small></> : null}
+          {wallView === "weather" ? <><span>Weather desk</span><strong>{plan?.simbrief?.originMetar || plan?.simbrief?.destinationMetar ? "Flight-plan weather" : "Weather awaiting dispatch"}</strong><b>{plan ? `${plan.from} & ${plan.to}` : "Departure & destination"}</b><small>{plan?.simbrief?.originMetar || plan?.simbrief?.destinationMetar ? `${plan.from}: ${plan.simbrief?.originMetar ?? "not supplied"} · ${plan.to}: ${plan.simbrief?.destinationMetar ?? "not supplied"}` : "Detailed METAR and TAF are shown after the PIC synchronises a dispatch plan."}</small></> : null}
+          {wallView === "airports" ? <><span>ETOPS airports</span><strong>{plan?.from && plan?.to ? `${plan.from} — ${plan.to}` : "ETOPS assessment pending"}</strong><b>Suitable en-route alternates</b><small>ETOPS diversion airports are only displayed when an eligible dispatch route and ETOPS assessment are available. No alternates are fabricated.</small></> : null}
+          {wallView === "aircraft" ? <><span>Aircraft desk</span><strong>{plan?.registration ?? plan?.aircraft ?? "Airframe pending"}</strong><b>{plan?.aircraft ?? "Fleet assignment pending"}</b><small>Fleet maintenance findings, open defects and dispatch limitations appear here when the assigned airframe has been selected.</small></> : null}
+          {wallView === "notes" ? <><span>Briefing notes</span><strong>Safety & passenger comfort</strong><b>Operational notices</b><small>Host-controlled safety, service and passenger-comfort notes will be shown here. This room currently has no published notes.</small></> : null}
           </>}
         </div>
       </div>
 
       <div className="briefing-table" aria-hidden="true"><span>BAW</span><small>flight briefing</small></div>
       <nav className="briefing-console" aria-label="Briefing console">
-        {(["flight-plan", "route", "weather", "notes"] as WallView[]).map((view) => <button key={view} type="button" className={wallView === view ? "active" : ""} onClick={() => setWallView(view)}><span>{view === "flight-plan" ? "Flight plan" : view}</span><small>{view === "flight-plan" ? "OFP" : view === "route" ? "MAP" : view === "weather" ? "WX" : "LOG"}</small></button>)}
+        {(["overview", "flight-plan", "route", "weather", "airports", "aircraft", "notes"] as WallView[]).map((view) => <button key={view} type="button" className={wallView === view && consoleOverride ? "active" : ""} onClick={() => { setWallView(view); setConsoleOverride(true); }}><span>{view === "flight-plan" ? "Flight plan" : view}</span><small>{view === "overview" ? "OPS" : view === "flight-plan" ? "OFP" : view === "route" ? "MAP" : view === "weather" ? "WX" : view === "airports" ? "ETOPS" : view === "aircraft" ? "TECH" : "LOG"}</small></button>)}
+        {presentationStream ? <button type="button" className={!consoleOverride ? "active" : ""} onClick={() => setConsoleOverride(false)}><span>Live</span><small>SHARE</small></button> : null}
       </nav>
       <div className="briefing-seat-ring" role="group" aria-label="Choose your chair">
         {seats.map(({ seatIndex, pilot: occupant }) => {
