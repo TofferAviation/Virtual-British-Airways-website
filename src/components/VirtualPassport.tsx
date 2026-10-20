@@ -16,8 +16,8 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
   const [isOpen, setIsOpen] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [turn, setTurn] = useState<PageTurn | null>(null);
-  const palette = { "--passport-cover": theme.cover, "--passport-edge": theme.edge, "--passport-gold": theme.ink } as CSSProperties;
-  const studioClass = `passport-design-${studio.design} passport-material-${studio.material} passport-tint-${studio.tint} passport-wear-${studio.wear}`;
+  const palette = { "--passport-cover": theme.cover, "--passport-edge": theme.edge, "--passport-gold": theme.ink, "--passport-custom-cover": studio.coverColor, "--passport-custom-accent": studio.accentColor, "--passport-custom-texture": String(studio.texture / 100), "--passport-custom-sheen": String(studio.sheen / 100) } as CSSProperties;
+  const studioClass = `passport-design-${studio.design} passport-material-${studio.material} passport-tint-${studio.tint} passport-font-${studio.font} passport-motif-${studio.motif} passport-foil-${studio.foil} passport-wear-${studio.wear}`;
   const page = pages[pageIndex];
 
   function turnPage(nextPage: number) {
@@ -29,8 +29,8 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
 
   if (!isOpen) return <section className={"account-v2-passport passport-real-shell " + studioClass} style={palette} aria-labelledby="passport-heading">
     <button className="passport-real-cover" type="button" onClick={() => setIsOpen(true)} aria-describedby="passport-open-help">
-      <span className="passport-real-flag" aria-hidden="true">{theme.flag}</span>
-      <span className="passport-real-cover-title" id="passport-heading">{nationality.toUpperCase()}</span>
+      <span className="passport-real-flag" aria-hidden="true">{studio.monogram}</span>
+      <span className="passport-real-cover-title" id="passport-heading">{studio.title}</span>
       <span className="passport-real-cover-subtitle">BAV TRAVEL JOURNAL</span>
       <span className="passport-real-cover-rule" aria-hidden="true" />
       <span className="passport-real-cover-caption">PERSONALISED FOR VIRTUAL FLYING</span>
@@ -39,7 +39,7 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
   </section>;
 
   return <section className={"account-v2-passport passport-real-shell is-open " + studioClass} style={palette} aria-labelledby="passport-heading">
-    <div className="passport-real-toolbar"><div><p>BAV TRAVEL JOURNAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">Your virtual passport</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
+    <div className="passport-real-toolbar"><div><p>BAV TRAVEL JOURNAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">{studio.title}</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
     <div className="passport-real-book">
       <section className="passport-real-identity">
         <span className="passport-real-watermark" aria-hidden="true">{theme.flag}</span>

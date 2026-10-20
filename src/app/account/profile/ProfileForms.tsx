@@ -1,13 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AccountBackgroundPicker } from "@/components/AccountBackgroundPicker";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 import { BAV_HUBS } from "@/lib/hubs";
 import { PASSPORT_NATIONALITIES } from "@/lib/passport-nationalities";
-import { PASSPORT_STUDIO_DESIGNS, PASSPORT_STUDIO_MATERIALS, PASSPORT_STUDIO_TINTS, PASSPORT_STUDIO_WEARS, type PassportStudio } from "@/lib/passport-studio";
+import { PASSPORT_STUDIO_DESIGNS, PASSPORT_STUDIO_FOILS, PASSPORT_STUDIO_FONTS, PASSPORT_STUDIO_MATERIALS, PASSPORT_STUDIO_MOTIFS, PASSPORT_STUDIO_WEARS, type PassportStudio } from "@/lib/passport-studio";
 import styles from "./ember-download.module.css";
 import hubStyles from "./hub-picker.module.css";
 import rulesStyles from "./pilot-rules.module.css";
@@ -32,6 +32,7 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
   const [savingProfile, setSavingProfile] = useState(false);
   const [studioMessage, setStudioMessage] = useState("");
   const [savingStudio, setSavingStudio] = useState(false);
+  const [studio, setStudio] = useState<PassportStudio>(passportStudio);
   const [savingPassword, setSavingPassword] = useState(false);
   const [simbriefMessage, setSimbriefMessage] = useState("");
   const [savingSimbrief, setSavingSimbrief] = useState(false);
@@ -81,7 +82,7 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), passportStudio: { design: String(form.get("passportStudioDesign") || ""), material: String(form.get("passportStudioMaterial") || ""), tint: String(form.get("passportStudioTint") || ""), wear: String(form.get("passportStudioWear") || "") }, profileImage });
+      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), profileImage });
       setProfileMessage("Profile updated successfully.");
       router.refresh();
     } catch (error) {
@@ -93,11 +94,10 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
 
   async function savePassportStudio(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     setSavingStudio(true);
     setStudioMessage("");
     try {
-      await patchProfile({ passportStudio: { design: String(form.get("passportStudioDesign") || ""), material: String(form.get("passportStudioMaterial") || ""), tint: String(form.get("passportStudioTint") || ""), wear: String(form.get("passportStudioWear") || "") } });
+      await patchProfile({ passportStudio: studio });
       setStudioMessage("Passport Studio saved. Open Virtual passport to see your new cover.");
       router.refresh();
     } catch (error) {
@@ -106,6 +106,12 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
       setSavingStudio(false);
     }
   }
+
+  function updateStudio<K extends keyof PassportStudio>(key: K, value: PassportStudio[K]) {
+    setStudio((current) => ({ ...current, [key]: value }));
+  }
+
+  const studioPreview = { "--studio-editor-cover": studio.coverColor, "--studio-editor-accent": studio.accentColor, "--studio-editor-texture": String(studio.texture / 100), "--studio-editor-sheen": String(studio.sheen / 100) } as CSSProperties;
 
   async function saveSimbrief(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -160,9 +166,21 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
       </form>
 
       <form className="pilot-profile-card pilot-passport-studio" onSubmit={savePassportStudio}>
-        <div><span className="pilot-profile-kicker">PASSPORT STUDIO</span><h2>Design your BAV travel journal</h2><p>Choose a fictional cover style, material, tint and amount of travel wear. Your completed-flight stamps stay exactly as they are.</p></div>
-        <div className="pilot-passport-studio-grid"><label>Cover design<select className={hubStyles.select} name="passportStudioDesign" defaultValue={passportStudio.design}>{PASSPORT_STUDIO_DESIGNS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Material<select className={hubStyles.select} name="passportStudioMaterial" defaultValue={passportStudio.material}>{PASSPORT_STUDIO_MATERIALS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Colour tint<select className={hubStyles.select} name="passportStudioTint" defaultValue={passportStudio.tint}>{PASSPORT_STUDIO_TINTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Travel wear<select className={hubStyles.select} name="passportStudioWear" defaultValue={passportStudio.wear}>{PASSPORT_STUDIO_WEARS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>
-        <button type="submit" disabled={savingStudio}>{savingStudio ? "Saving…" : "Save Passport Studio"}</button>
+        <div><span className="pilot-profile-kicker">PASSPORT STUDIO</span><h2>Build your cover</h2><p>Make it yours. Every control updates the cover preview immediately; flight stamps are never altered.</p></div>
+        <div className="passport-studio-workbench">
+          <section className={`passport-studio-preview passport-material-${studio.material} passport-design-${studio.design} passport-font-${studio.font} passport-motif-${studio.motif} passport-foil-${studio.foil} passport-wear-${studio.wear}`} style={studioPreview} aria-label="Live virtual passport cover preview">
+            <span className="passport-studio-preview-monogram">{studio.monogram}</span><strong>{studio.title}</strong><span className="passport-studio-preview-subtitle">BAV TRAVEL JOURNAL</span><i aria-hidden="true" /><small>PERSONALISED FOR VIRTUAL FLYING</small>
+          </section>
+          <div className="passport-studio-controls">
+            <div className="passport-studio-control-row"><label>Cover title<input value={studio.title} maxLength={32} onChange={(event) => updateStudio("title", event.target.value)} /></label><label>Monogram<input value={studio.monogram} maxLength={5} onChange={(event) => updateStudio("monogram", event.target.value.toUpperCase())} /></label></div>
+            <div className="passport-studio-control-row"><label>Design<select className={hubStyles.select} value={studio.design} onChange={(event) => updateStudio("design", event.target.value as PassportStudio["design"])}>{PASSPORT_STUDIO_DESIGNS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Material<select className={hubStyles.select} value={studio.material} onChange={(event) => updateStudio("material", event.target.value as PassportStudio["material"])}>{PASSPORT_STUDIO_MATERIALS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>
+            <div className="passport-studio-control-row"><label>Typeface<select className={hubStyles.select} value={studio.font} onChange={(event) => updateStudio("font", event.target.value as PassportStudio["font"])}>{PASSPORT_STUDIO_FONTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Motif<select className={hubStyles.select} value={studio.motif} onChange={(event) => updateStudio("motif", event.target.value as PassportStudio["motif"])}>{PASSPORT_STUDIO_MOTIFS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>
+            <div className="passport-studio-control-row"><label>Foil<select className={hubStyles.select} value={studio.foil} onChange={(event) => updateStudio("foil", event.target.value as PassportStudio["foil"])}>{PASSPORT_STUDIO_FOILS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Wear<select className={hubStyles.select} value={studio.wear} onChange={(event) => updateStudio("wear", event.target.value as PassportStudio["wear"])}>{PASSPORT_STUDIO_WEARS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>
+            <div className="passport-studio-colours"><label>Cover colour<span><input type="color" value={studio.coverColor} onChange={(event) => updateStudio("coverColor", event.target.value.toUpperCase())} /><input value={studio.coverColor} maxLength={7} onChange={(event) => updateStudio("coverColor", event.target.value.toUpperCase())} /></span></label><label>Accent colour<span><input type="color" value={studio.accentColor} onChange={(event) => updateStudio("accentColor", event.target.value.toUpperCase())} /><input value={studio.accentColor} maxLength={7} onChange={(event) => updateStudio("accentColor", event.target.value.toUpperCase())} /></span></label></div>
+            <div className="passport-studio-sliders"><label>Texture <output>{studio.texture}%</output><input type="range" min="0" max="100" value={studio.texture} onChange={(event) => updateStudio("texture", Number(event.target.value))} /></label><label>Sheen <output>{studio.sheen}%</output><input type="range" min="0" max="100" value={studio.sheen} onChange={(event) => updateStudio("sheen", Number(event.target.value))} /></label></div>
+          </div>
+        </div>
+        <button type="submit" disabled={savingStudio}>{savingStudio ? "Saving…" : "Save your custom cover"}</button>
         {studioMessage ? <p className="pilot-profile-message">{studioMessage}</p> : null}
       </form>
 
