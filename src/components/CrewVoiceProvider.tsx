@@ -4,7 +4,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 export type VoiceRoom = { id: string; name: string; status: "scheduled" | "open" | "closed"; maxParticipants: number };
 export type VoicePilot = { id: string; name: string; pilotNumber: string; profileImage: string | null };
-export type VoiceParticipant = { sessionId: string; pilotId: string; pilotNumber: string; name: string; profileImage: string | null };
+export type VoiceParticipant = { sessionId: string; pilotId: string; pilotNumber: string; name: string; profileImage: string | null; seatIndex: number | null };
 export type VoiceDevice = { id: string; label: string };
 type Signal = { id: string; from: VoiceParticipant; kind: "offer" | "answer" | "candidate"; payload: Record<string, unknown> };
 type JoinReply = { session: VoiceParticipant; token: string; participants: VoiceParticipant[]; maxParticipants: number; iceServers: RTCIceServer[] };
@@ -32,7 +32,7 @@ type CrewVoiceContextValue = {
   selectedOutputId: string;
   selectedCameraId: string;
   outputSelectionSupported: boolean;
-  join: (room: VoiceRoom, pilot: VoicePilot) => Promise<void>;
+  join: (room: VoiceRoom, pilot: VoicePilot, seatIndex?: number) => Promise<void>;
   leave: () => Promise<void>;
   reconnect: () => Promise<void>;
   toggleMuted: () => void;
@@ -319,7 +319,7 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
     }
   }, [closeConnections, request]);
 
-  const join = useCallback(async (room: VoiceRoom, pilot: VoicePilot) => {
+  const join = useCallback(async (room: VoiceRoom, pilot: VoicePilot, seatIndex?: number) => {
     if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
       setPhase("error"); setNotice("This browser cannot make a direct voice call. Try the latest Safari, Chrome, Edge or Firefox."); return;
     }
@@ -335,7 +335,7 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
       microphoneStreamRef.current = microphone;
       microphoneReady = true;
       void refreshDevices();
-      const reply = await request({ action: "join" }) as JoinReply;
+      const reply = await request({ action: "join", seatIndex }) as JoinReply;
       sessionRef.current = { id: reply.session.sessionId, token: reply.token };
       iceServersRef.current = reply.iceServers;
       await synchroniseParticipants(reply.participants);
@@ -443,7 +443,7 @@ export function CrewVoiceProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<CrewVoiceContextValue>(() => ({ activeRoom, activePilot, phase, notice, muted, cameraOn, screenOn, participants, waitingRoomCount, remoteStreams, previewStream, inputDevices, outputDevices, cameraDevices, selectedInputId, selectedOutputId, selectedCameraId, outputSelectionSupported, join, leave: () => leave(), reconnect, toggleMuted, toggleCamera, toggleScreen, refreshDevices, selectInput, selectOutput, selectCamera, previewRoom }), [activePilot, activeRoom, cameraDevices, cameraOn, inputDevices, join, leave, muted, notice, outputDevices, outputSelectionSupported, participants, phase, previewRoom, previewStream, reconnect, refreshDevices, remoteStreams, screenOn, selectCamera, selectInput, selectOutput, selectedCameraId, selectedInputId, selectedOutputId, toggleCamera, toggleMuted, toggleScreen, waitingRoomCount]);
 
-  return <CrewVoiceContext.Provider value={value}>{children}{phase === "connected" && activeRoom && activePilot ? <aside className="crew-voice-dock" aria-label="Active Crew Lounge voice call"><div className="crew-voice-dock-summary"><span className="crew-voice-dock-dot" aria-hidden="true" /><span><strong>In voice · {activeRoom.name}</strong><small>{participants.length}/4 pilots · {muted ? "Muted" : "Microphone on"}</small></span></div><div className="crew-voice-dock-actions"><button type="button" onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button><button type="button" onClick={() => void toggleCamera()}>{cameraOn ? "Camera off" : "Camera"}</button><button type="button" onClick={() => void toggleScreen()}>{screenOn ? "Stop share" : "Share"}</button><button type="button" className="leave" onClick={() => void leave()}>Leave</button></div>{Object.entries(remoteStreams).map(([sessionId, stream]) => <RemoteAudio key={sessionId} stream={stream} outputDeviceId={selectedOutputId} onPlaybackBlocked={() => setNotice("Your browser paused incoming call audio. Interact with this page, then press Reconnect voice or check your selected speaker.")} />)}</aside> : null}</CrewVoiceContext.Provider>;
+  return <CrewVoiceContext.Provider value={value}>{children}{phase === "connected" && activeRoom && activePilot ? <aside className="crew-voice-dock" aria-label="Active Crew Lounge voice call"><div className="crew-voice-dock-summary"><span className="crew-voice-dock-dot" aria-hidden="true" /><span><strong>In voice · {activeRoom.name}</strong><small>{participants.length}/{activeRoom.maxParticipants} pilots · {muted ? "Muted" : "Microphone on"}</small></span></div><div className="crew-voice-dock-actions"><button type="button" onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button><button type="button" onClick={() => void toggleCamera()}>{cameraOn ? "Camera off" : "Camera"}</button><button type="button" onClick={() => void toggleScreen()}>{screenOn ? "Stop share" : "Share"}</button><button type="button" className="leave" onClick={() => void leave()}>Leave</button></div>{Object.entries(remoteStreams).map(([sessionId, stream]) => <RemoteAudio key={sessionId} stream={stream} outputDeviceId={selectedOutputId} onPlaybackBlocked={() => setNotice("Your browser paused incoming call audio. Interact with this page, then press Reconnect voice or check your selected speaker.")} />)}</aside> : null}</CrewVoiceContext.Provider>;
 }
 
 export function useCrewVoice() {

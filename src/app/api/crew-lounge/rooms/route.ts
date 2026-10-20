@@ -18,6 +18,7 @@ export async function GET() {
       id: room.id,
       name: room.name,
       description: room.description,
+      eventId: room.eventId,
       startsAt: room.startsAt,
       endsAt: room.endsAt,
       status: room.status,

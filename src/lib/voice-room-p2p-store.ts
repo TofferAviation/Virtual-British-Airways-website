@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const DEFAULT_MAX_PARTICIPANTS = 4;
+const DEFAULT_MAX_PARTICIPANTS = 8;
 const MAX_CONFIGURED_PARTICIPANTS = 8;
 const SESSION_IDLE_MS = 90_000;
 const MAX_SIGNAL_BYTES = 12_000;
@@ -15,6 +15,7 @@ export type VoicePeer = {
   pilotNumber: string;
   name: string;
   profileImage: string | null;
+  seatIndex: number | null;
 };
 
 export type VoiceSignalKind = "offer" | "answer" | "candidate";
@@ -36,6 +37,7 @@ type VoicePeerSessionRow = {
   token_hash: string;
   joined_at: string;
   last_seen_at: string;
+  seat_index: number | null;
 };
 
 type VoiceSignalRow = {
@@ -100,16 +102,26 @@ function publicPeer(session: VoicePeerSessionRow): VoicePeer {
     pilotNumber: session.pilot_number,
     name: session.name,
     profileImage: session.profile_image,
+    seatIndex: session.seat_index,
   };
 }
 
 function sessionColumns() {
-  return "id, room_id, pilot_id, pilot_number, name, profile_image, token_hash, joined_at, last_seen_at";
+  return "id, room_id, pilot_id, pilot_number, name, profile_image, token_hash, joined_at, last_seen_at, seat_index";
 }
 
 function cleanText(value: unknown, maximum: number, fallback = "") {
   if (typeof value !== "string") return fallback;
   return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, maximum) || fallback;
+}
+
+function cleanSeatIndex(value: unknown, maxParticipants: number) {
+  if (value === undefined || value === null || value === "") return null;
+  const seatIndex = Number(value);
+  if (!Number.isInteger(seatIndex) || seatIndex < 1 || seatIndex > maxParticipants) {
+    throw new VoicePeerError(`Choose one of this room's ${maxParticipants} briefing seats.`, 400);
+  }
+  return seatIndex;
 }
 
 function opaqueToken() {
@@ -190,6 +202,7 @@ export async function joinVoicePeerRoom(input: {
   name: string;
   profileImage?: string | null;
   maxParticipants?: number;
+  seatIndex?: unknown;
 }) {
   try {
     const db = client();
@@ -205,6 +218,7 @@ export async function joinVoicePeerRoom(input: {
     const maxParticipants = Number.isInteger(input.maxParticipants) && (input.maxParticipants ?? 0) >= 2 && (input.maxParticipants ?? 0) <= MAX_CONFIGURED_PARTICIPANTS
       ? input.maxParticipants!
       : DEFAULT_MAX_PARTICIPANTS;
+    const seatIndex = cleanSeatIndex(input.seatIndex, maxParticipants);
     if ((count ?? 0) >= maxParticipants) {
       throw new VoicePeerError(`This crew room is at its ${maxParticipants}-pilot limit. Try again when a seat opens.`, 409);
     }
@@ -223,9 +237,11 @@ export async function joinVoicePeerRoom(input: {
         token_hash: tokenHash(token),
         joined_at: now,
         last_seen_at: now,
+        seat_index: seatIndex,
       })
       .select(sessionColumns())
       .single();
+    if (error?.code === "23505" && seatIndex) throw new VoicePeerError("That briefing chair was just taken. Choose another seat and join again.", 409);
     if (error) rethrowStoreError(error);
     const session = data as unknown as VoicePeerSessionRow;
     return { session: publicPeer(session), token, participants: await roomParticipants(db, input.roomId), maxParticipants };

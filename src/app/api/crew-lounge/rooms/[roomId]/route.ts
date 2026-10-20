@@ -51,6 +51,7 @@ export async function POST(request: NextRequest, context: Context) {
         name: auth.pilot.name,
         profileImage: auth.pilot.profileImage,
         maxParticipants: auth.room.maxParticipants,
+        seatIndex: body.seatIndex,
       });
       return response({ ...joined, iceServers: await voicePeerIceServers() });
     }

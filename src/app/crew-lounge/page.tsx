@@ -29,6 +29,7 @@ function upcomingEvents(events: VirtualEvent[]) {
       startUtc: event.startUtc,
       route: event.route,
       participantCount: event.participantCount,
+      aircraftNote: event.aircraftNote,
     }));
 }
 
@@ -49,6 +50,7 @@ export default async function CrewLoungePage() {
           id: room.id,
           name: room.name,
           description: room.description,
+          eventId: room.eventId,
           startsAt: room.startsAt,
           endsAt: room.endsAt,
           status: room.status,
@@ -57,6 +59,16 @@ export default async function CrewLoungePage() {
           hasCustomBanner: room.hasCustomBanner,
         }))}
         initialEvents={upcomingEvents(events)}
+        briefingEvents={events.filter((event) => event.published).map((event) => ({
+          id: event.id,
+          title: event.title,
+          typeLabel: event.typeLabel,
+          date: event.date,
+          startUtc: event.startUtc,
+          route: event.route,
+          participantCount: event.participantCount,
+          aircraftNote: event.aircraftNote,
+        }))}
       />
       <SiteFooter />
     </>

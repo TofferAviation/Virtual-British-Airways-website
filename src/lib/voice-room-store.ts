@@ -69,7 +69,7 @@ function toVoiceRoom(row: VoiceRoomRow): VoiceRoom {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     status: row.status,
-    maxParticipants: typeof row.max_participants === "number" ? row.max_participants : 4,
+    maxParticipants: typeof row.max_participants === "number" ? row.max_participants : 8,
     bannerId: isCrewRoomBannerId(row.banner_id) ? row.banner_id : DEFAULT_CREW_ROOM_BANNER_ID,
     hasCustomBanner: Boolean(row.banner_object_key),
     createdAt: row.created_at,
@@ -106,7 +106,7 @@ function cleanStatus(value: unknown): VoiceRoomStatus {
 }
 
 function cleanCapacity(value: unknown) {
-  const capacity = value === undefined || value === null || value === "" ? 4 : Number(value);
+  const capacity = value === undefined || value === null || value === "" ? 8 : Number(value);
   if (!Number.isInteger(capacity) || capacity < 2 || capacity > 8) {
     throw new VoiceRoomError("Choose a room size between 2 and 8 pilots.", 400);
   }

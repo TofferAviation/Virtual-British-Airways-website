@@ -13,7 +13,7 @@ function StreamVideo({ stream, className, muted = false }: { stream: MediaStream
   return <video ref={ref} className={className} autoPlay muted={muted} playsInline />;
 }
 
-export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: VoicePilot }) {
+export function PeerVoiceCall({ room, pilot, seatIndex }: { room: VoiceRoom; pilot: VoicePilot; seatIndex?: number }) {
   const voice = useCrewVoice();
   const { previewRoom } = voice;
   const isThisRoom = voice.activeRoom?.id === room.id;
@@ -33,7 +33,7 @@ export function PeerVoiceCall({ room, pilot }: { room: VoiceRoom; pilot: VoicePi
 
   return <section className="crew-p2p-call" aria-label="Private Crew Lounge voice room">
     <header className="crew-p2p-call-heading"><div><span className="crew-voice-eyebrow">Private direct call · beta</span><h3>{phase === "connected" ? "You are in the crew room" : "Join the crew voice room"}</h3></div><span className="crew-p2p-capacity">{memberCount}/{room.maxParticipants} pilots</span></header>
-    {phase === "idle" || phase === "error" ? <div className="crew-p2p-intro"><p>Join muted, then decide whether to speak, turn on your camera, or share a screen. BAV does not record or retain your media.</p><button type="button" className="crew-voice-primary" onClick={() => void voice.join(room, pilot)}>Join voice</button></div> : null}
+    {phase === "idle" || phase === "error" ? <div className="crew-p2p-intro"><p>Join muted, then decide whether to speak, turn on your camera, or share a screen. BAV does not record or retain your media.</p><button type="button" className="crew-voice-primary" onClick={() => void voice.join(room, pilot, seatIndex)}>Join voice</button></div> : null}
     {phase === "joining" ? <div className="crew-p2p-intro"><span className="crew-p2p-spinner" aria-hidden="true" /><p>Asking your browser for microphone permission and preparing a secure voice connection…</p></div> : null}
     {phase === "connected" ? <>
       <div className={`crew-p2p-grid crew-p2p-grid-${Math.min(Math.max(memberCount, 1), 8)}`}>
