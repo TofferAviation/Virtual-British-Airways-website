@@ -14,7 +14,7 @@ import rulesStyles from "./pilot-rules.module.css";
 
 const EMBER_INSTALLER_URL = "https://github.com/TofferAviation/FreeFlight-Cabin-Controls/releases/latest/download/Ember_Systems.exe";
 
-async function patchProfile(payload: Record<string, string | null | PassportStudio>) {
+async function patchProfile(payload: Record<string, unknown>) {
   const response = await fetch("/api/pilot/profile", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
