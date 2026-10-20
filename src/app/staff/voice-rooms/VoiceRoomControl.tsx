@@ -50,7 +50,7 @@ export function VoiceRoomControl({ initialRooms, publishedEvents, pilots }: Prop
     } catch (error) { setMessage(error instanceof Error ? error.message : "The PIC could not be assigned."); } finally { setBusy(false); }
   }
 
-  return <main className="staff-page voice-room-settings-page">
+  return <main id="voice-room-controls" className="staff-page voice-room-settings-page">
     <div className="staff-breadcrumb-band"><div className="staff-shell staff-breadcrumbs"><a href="/staff">Staff centre</a><span>›</span><strong>Crew Lounge voice rooms</strong></div></div>
     <section className="staff-shell voice-room-settings-shell">
       <header className="voice-room-settings-hero"><span className="staff-kicker">Community &amp; systems</span><h1>Voice rooms</h1><p>Create a focused place for a community event, route-planning session or staff briefing. Pilots see only rooms you schedule or open.</p></header>
