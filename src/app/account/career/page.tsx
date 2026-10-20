@@ -9,6 +9,7 @@ import { nextPilotRank } from "@/lib/pilot-ranks";
 import { getPilotAwardDisplay } from "@/lib/pilot-awards";
 import { getEvents } from "@/lib/event-store";
 import { getServiceStatusState, overallServiceStatus } from "@/lib/service-status-store";
+import { getVirtualCurrencyEntries, VIRTUAL_RECENCY_WINDOW_DAYS } from "@/lib/career-currency";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById, getPilotMentoringExperience, getPilotMentoringStatus, listMentoringFlightReviews, MENTOR_MINIMUM_CAREER_HOURS } from "@/lib/pilot-store";
 import { CareerExperienceForm } from "./CareerExperienceForm";
@@ -26,6 +27,7 @@ import { MentoringPortfolio } from "./MentoringPortfolio";
 import { CareerPathForm } from "./CareerPathForm";
 import { CareerRotation } from "./CareerRotation";
 import { CareerOperationsBoard } from "./CareerOperationsBoard";
+import { CareerCurrency } from "./CareerCurrency";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Career & Qualifications" };
@@ -64,6 +66,7 @@ export default async function CareerPage() {
   const guidedCareer = pilot.careerExperience.mode !== "fly";
   const advancedOperations = pilot.careerExperience.mode === "realistic_operations" && isCareerFeatureEnabled("advanced_operations");
   const operationsBoard = guidedCareer && isCareerFeatureEnabled("operations_board");
+  const currencyPreview = guidedCareer && isCareerFeatureEnabled("currency");
   const passportPreview = isCareerFeatureEnabled("passport");
   const fleetPreview = isCareerFeatureEnabled("fleet");
   const mentoringPreview = isCareerFeatureEnabled("mentoring");
@@ -71,7 +74,7 @@ export default async function CareerPage() {
   const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience, mentoringReviews, rotationChoices, serviceStatus, nextEvent] = await Promise.all([
     guidedCareer && isCareerFeatureEnabled("dispatcher") ? getCareerDispatchSuggestions(pilot) : Promise.resolve(null),
     advancedOperations || operationsBoard ? getActivePilotBooking(pilot.id) : Promise.resolve(null),
-    advancedOperations || passportPreview || fleetPreview || pathsPreview || (guidedCareer && isCareerFeatureEnabled("debrief")) ? listPilotPireps(pilot.id) : Promise.resolve([]),
+    advancedOperations || passportPreview || fleetPreview || pathsPreview || currencyPreview || (guidedCareer && isCareerFeatureEnabled("debrief")) ? listPilotPireps(pilot.id) : Promise.resolve([]),
     mentoringPreview ? getPilotMentoringStatus(pilot.id) : Promise.resolve(null),
     mentoringPreview ? getPilotMentoringExperience(pilot.id) : Promise.resolve(null),
     mentoringPreview ? listMentoringFlightReviews({ mentorPilotId: pilot.id }) : Promise.resolve([]),
@@ -81,6 +84,7 @@ export default async function CareerPage() {
   ]);
   const careerPathProgress = pathsPreview ? getCareerPathProgress(pilot.careerExperience.careerPath, recentPireps) : null;
   const rotationProgress = pathsPreview && pilot.careerExperience.activeRotation ? getCareerRotationProgress(pilot.careerExperience.activeRotation, recentPireps) : null;
+  const currencyEntries = currencyPreview ? getVirtualCurrencyEntries({ qualifications: career.qualifications, definitions: career.definitions, pireps: recentPireps }) : [];
   const recentAwards = pilot.awards
     .map((award) => ({ award, detail: getPilotAwardDisplay(award) }))
     .sort((left, right) => right.award.awardedAt.localeCompare(left.award.awardedAt))
@@ -104,6 +108,7 @@ export default async function CareerPage() {
       {isCareerFeatureEnabled("experience") ? <CareerExperienceForm initialPreferences={pilot.careerExperience} /> : null}
       {isCareerFeatureEnabled("experience") ? <CareerModeGuide preferences={pilot.careerExperience} /> : null}
       {operationsBoard ? <CareerOperationsBoard dispatch={dispatchSuggestions} booking={activeBooking} flightPlan={activeFlightPlan} activeRotation={pilot.careerExperience.activeRotation} serviceStatus={serviceStatus} nextEvent={nextEvent} /> : null}
+      {currencyPreview ? <CareerCurrency entries={currencyEntries} windowDays={VIRTUAL_RECENCY_WINDOW_DAYS} /> : null}
       {dispatchSuggestions ? <CareerDispatcher plan={dispatchSuggestions} hub={pilot.hub} /> : null}
       {pathsPreview && careerPathProgress ? <CareerPathForm initialPath={pilot.careerExperience.careerPath} /> : null}
       {pathsPreview ? <CareerRotation activeRotation={pilot.careerExperience.activeRotation} progress={rotationProgress} choices={rotationChoices} /> : null}
