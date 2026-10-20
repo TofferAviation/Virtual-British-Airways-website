@@ -6,6 +6,7 @@ import { isCareerFeatureEnabled } from "@/lib/career-experience";
 import { getCareerDispatchSuggestions } from "@/lib/career-dispatcher";
 import { getCareerPathProgress, getCareerRotationChoices, getCareerRotationProgress } from "@/lib/career-paths";
 import { nextPilotRank } from "@/lib/pilot-ranks";
+import { getPilotAwardDisplay } from "@/lib/pilot-awards";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById, getPilotMentoringExperience, getPilotMentoringStatus, listMentoringFlightReviews, MENTOR_MINIMUM_CAREER_HOURS } from "@/lib/pilot-store";
 import { CareerExperienceForm } from "./CareerExperienceForm";
@@ -27,6 +28,21 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Career & Qualifications" };
 
 function money(value: number) { return `£${value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+
+function serviceLength(createdAt: string) {
+  const joined = new Date(createdAt);
+  const now = new Date();
+  let months = (now.getUTCFullYear() - joined.getUTCFullYear()) * 12 + now.getUTCMonth() - joined.getUTCMonth();
+  if (now.getUTCDate() < joined.getUTCDate()) months -= 1;
+  months = Math.max(0, months);
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  return years ? `${years}y ${remainingMonths}m` : `${remainingMonths}m`;
+}
+
+function date(value: string) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(value));
+}
 
 export default async function CareerPage() {
   const session = await requirePilotSession();
@@ -53,6 +69,10 @@ export default async function CareerPage() {
   ]);
   const careerPathProgress = pathsPreview ? getCareerPathProgress(pilot.careerExperience.careerPath, recentPireps) : null;
   const rotationProgress = pathsPreview && pilot.careerExperience.activeRotation ? getCareerRotationProgress(pilot.careerExperience.activeRotation, recentPireps) : null;
+  const recentAwards = pilot.awards
+    .map((award) => ({ award, detail: getPilotAwardDisplay(award) }))
+    .sort((left, right) => right.award.awardedAt.localeCompare(left.award.awardedAt))
+    .slice(0, 3);
   const mentoringPortfolio = await Promise.all(mentoringReviews.map(async (review) => {
     const flight = await getPirep(review.pirepId);
     const learner = await getPilotById(review.learnerPilotId);
@@ -68,6 +88,7 @@ export default async function CareerPage() {
       <article className="career-card"><div className="career-card-head"><div><span>VIRTUAL FINANCES</span><h2>{money(career.finance.currentBalance)}</h2></div></div><p>This month: <strong>{money(career.finance.currentMonthEarnings)}</strong><br />Training expenditure and flight earnings are recorded permanently in the ledger.</p><Link href="/account/finances">View transactions →</Link></article>
       <article className="career-card"><div className="career-card-head"><div><span>ACTIVE TRAINING</span><h2>{activeTraining.length}</h2></div></div>{activeTraining.length ? <ul className="career-compact-list">{activeTraining.map((application) => <li key={application.id}><strong>{career.definitions.find((definition) => definition.id === application.qualificationDefinitionId)?.name ?? application.qualificationDefinitionId}</strong><span>{application.status.replaceAll("_", " ")}</span></li>)}</ul> : <p>No training programme is currently in progress.</p>}<Link href="/account/qualifications">Manage training →</Link></article>
       <article className="career-card career-card-wide"><div className="career-card-head"><div><span>QUALIFICATION RECORD</span><h2>Professional standing</h2></div><Link href="/account/qualifications">All qualifications →</Link></div>{career.qualifications.length ? <div className="career-record-grid">{career.qualifications.map((qualification) => { const definition = career.definitions.find((item) => item.id === qualification.qualificationDefinitionId); return <div key={qualification.id}><strong>{definition?.name ?? qualification.qualificationDefinitionId}</strong><span className={`career-status ${qualification.status}`}>{qualification.status.replaceAll("_", " ")}</span><small>{qualification.source === "grandfathered" ? "Grandfathered during career migration" : `Issued ${new Date(qualification.issuedAt).toLocaleDateString("en-GB")}`}</small></div>; })}</div> : <p>Begin with an eligible type-rating programme. Payment alone never issues a qualification.</p>}</article>
+      <article className="career-card career-card-wide career-module career-module-service"><div className="career-card-head"><div><span>SENIORITY &amp; RECOGNITION · LIVE RECORD</span><h2>Your BAV service record</h2></div><Link href="/account/career/passport">Open career passport →</Link></div><p>Your career record is built from the same accepted PIREPs, awards and qualifications used everywhere else in BAV. It is a virtual-airline history only and never represents real-world employment, seniority or certification.</p><section className="career-service-grid" aria-label="Virtual BAV service record"><div><span>Member since</span><strong>{date(pilot.createdAt)}</strong><small>{serviceLength(pilot.createdAt)} virtual service</small></div><div><span>Accepted sectors</span><strong>{pilot.flights.toLocaleString("en-GB")}</strong><small>{pilot.hours.toFixed(1)} career block hours</small></div><div><span>Recognition</span><strong>{pilot.awards.length}</strong><small>{pilot.awards.length === 1 ? "career award" : "career awards"}</small></div><div><span>Current standing</span><strong>{pilot.rank}</strong><small>{issued.size} active virtual qualifications</small></div></section>{recentAwards.length ? <section className="career-service-awards" aria-label="Recent career recognition"><span>RECENT RECOGNITION</span>{recentAwards.map(({ award, detail }) => <div key={`${award.id}-${award.awardedAt}`}><strong>{detail.title}</strong><small>{date(award.awardedAt)} · {detail.description}</small></div>)}</section> : <p className="career-service-empty">Complete and have your first BAV PIREP accepted to begin your recognition history.</p>}</article>
       {isCareerFeatureEnabled("experience") ? <CareerExperienceForm initialPreferences={pilot.careerExperience} /> : null}
       {isCareerFeatureEnabled("experience") ? <CareerModeGuide preferences={pilot.careerExperience} /> : null}
       {dispatchSuggestions ? <CareerDispatcher plan={dispatchSuggestions} hub={pilot.hub} /> : null}
