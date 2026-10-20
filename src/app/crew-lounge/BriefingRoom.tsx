@@ -21,7 +21,7 @@ type BriefingRoomProps = {
   events: BriefingEvent[];
 };
 
-type WallView = "briefing" | "route" | "weather" | "notes";
+type WallView = "flight-plan" | "route" | "weather" | "notes";
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BA";
@@ -51,7 +51,7 @@ function PilotPortrait({ image, name }: { image: string | null; name: string }) 
 export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const voice = useCrewVoice();
   const [selectedSeat, setSelectedSeat] = useState(1);
-  const [wallView, setWallView] = useState<WallView>("briefing");
+  const [wallView, setWallView] = useState<WallView>("flight-plan");
   const isThisRoom = voice.activeRoom?.id === room.id;
   const briefing = useMemo(() => events.find((event) => event.id === room.eventId) ?? null, [events, room.eventId]);
   const participants = isThisRoom ? voice.participants : [];
@@ -83,16 +83,13 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
 
     <section className="briefing-room-scene" aria-label="Briefing room seat plan and shared presentation wall">
       <div className="briefing-wall" aria-live="polite">
-        <nav aria-label="Briefing wall views">
-          {(["briefing", "route", "weather", "notes"] as WallView[]).map((view) => <button key={view} type="button" className={wallView === view ? "active" : ""} onClick={() => setWallView(view)}>{view}</button>)}
-        </nav>
         <div className={`briefing-wall-content${presentationStream ? " is-presenting" : ""}`}>
           {presentationStream ? <><PresentationVideo stream={presentationStream} /><span className="briefing-presentation-label">Live presentation · {presentationPilot}</span></> : <>
-          {wallView === "briefing" ? <>
-            <span>British Airways Virtual · pre-flight brief</span>
-            <strong>{briefing ? briefing.title : "Crew briefing"}</strong>
+          {wallView === "flight-plan" ? <>
+            <span>British Airways Virtual · flight plan</span>
+            <strong>{briefing ? briefing.title : "Flight plan awaiting selection"}</strong>
             <b>{briefing ? `${briefing.route.from}  →  ${briefing.route.to}` : "Choose a linked event to populate the route"}</b>
-            <small>{briefing ? `${briefing.route.fromName} to ${briefing.route.toName} · ${formattedDate(briefing.date)} · ${briefing.startUtc}Z` : "The wall is deliberately separate from pilots’ private bookings."}</small>
+            <small>{briefing ? `${briefing.route.fromName} to ${briefing.route.toName} · ${formattedDate(briefing.date)} · ${briefing.startUtc}Z` : "The shared wall stays separate from pilots’ private bookings."}</small>
           </> : null}
           {wallView === "route" ? <>
             <span>Route overview</span><strong>{briefing ? `${briefing.route.from} — ${briefing.route.to}` : "Route awaiting briefing selection"}</strong><div className="briefing-route-line"><i /> <em>✈</em> <i /></div><small>{briefing ? briefing.aircraftNote : "A host can use screen share for a live SimBrief, chart, or route review."}</small>
@@ -108,6 +105,9 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
       </div>
 
       <div className="briefing-table" aria-hidden="true"><span>BAW</span><small>flight briefing</small></div>
+      <nav className="briefing-console" aria-label="Briefing console">
+        {(["flight-plan", "route", "weather", "notes"] as WallView[]).map((view) => <button key={view} type="button" className={wallView === view ? "active" : ""} onClick={() => setWallView(view)}><span>{view === "flight-plan" ? "Flight plan" : view}</span><small>{view === "flight-plan" ? "OFP" : view === "route" ? "MAP" : view === "weather" ? "WX" : "LOG"}</small></button>)}
+      </nav>
       <div className="briefing-seat-ring" role="group" aria-label="Choose your chair">
         {seats.map(({ seatIndex, pilot: occupant }) => {
           const isOurs = occupant?.pilotId === pilot.id;
