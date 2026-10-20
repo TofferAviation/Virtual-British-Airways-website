@@ -135,10 +135,13 @@ export function validateCareerRosterDays(input: unknown) {
   return days;
 }
 
-/** Unset is intentionally safe: a new module is invisible until enabled. */
+/**
+ * Career modules are live by default. Operations can still turn an individual
+ * module off, or limit it to staff, with its existing environment switch.
+ */
 export function careerFeatureState(feature: CareerFeature): CareerFeatureState {
   const value = process.env[FEATURE_ENV[feature]]?.trim().toLowerCase();
-  return value === "enabled" || value === "staff" ? value : "disabled";
+  return value === "disabled" ? "disabled" : value === "staff" ? "staff" : "enabled";
 }
 
 export function isCareerFeatureEnabled(feature: CareerFeature, staff = false) {
