@@ -10,6 +10,7 @@ import { DEFAULT_REWARD_SETTINGS, normalizeRewardSettings, validateRewardSetting
 import { awardsForAcceptedPirep, isHeathrowStation, isPilotCareerAwardId, type PilotCareerAwardId } from "@/lib/pilot-awards";
 import { createCareerExperiencePreferences, normalizeCareerExperiencePreferences, validateActiveCareerRotation, validateCareerExperiencePreferences, validateCareerPath, validateCareerRosterDays, validateMentoringInterest, type ActiveCareerRotation, type CareerExperiencePreferences } from "@/lib/career-experience";
 import { normalizePassportNationality, type PassportNationality } from "@/lib/passport-nationalities";
+import { normalizePassportStudio, type PassportStudio } from "@/lib/passport-studio";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
@@ -212,6 +213,8 @@ export type PilotAccount = {
   hub: string;
   /** Pilot-selected virtual passport nationality; never identity verification. */
   passportNationality: PassportNationality;
+  /** Pilot-designed fictional BAV passport cover; never an official document. */
+  passportStudio: PassportStudio;
   tier: string;
   points: number;
   tierPoints: number;
@@ -301,6 +304,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     typeRatings: normalizePilotTypeRatings(raw.typeRatings),
     hub: normalizeBavHub(raw.hub),
     passportNationality: normalizePassportNationality(raw.passportNationality),
+    passportStudio: normalizePassportStudio(raw.passportStudio),
     tier: raw.tier ?? "Blue",
     points: Number(raw.points) || 0,
     tierPoints: Number(raw.tierPoints) || 0,
@@ -1112,7 +1116,7 @@ export async function markPilotLogin(id: string) {
   await writeState(state);
 }
 
-export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; passportNationality?: unknown; profileImage?: string | null; accountBackground?: string | null }) {
+export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; passportNationality?: unknown; passportStudio?: unknown; profileImage?: string | null; accountBackground?: string | null }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   if (name.length < 2) throw new Error("Please enter your full name.");
@@ -1125,6 +1129,7 @@ export async function updatePilotProfile(id: string, input: { name: string; emai
   account.email = email;
   if (input.hub !== undefined) account.hub = normalizeBavHub(input.hub);
   if (input.passportNationality !== undefined) account.passportNationality = normalizePassportNationality(input.passportNationality);
+  if (input.passportStudio !== undefined) account.passportStudio = normalizePassportStudio(input.passportStudio);
   if (input.profileImage !== undefined) account.profileImage = validateProfileImage(input.profileImage);
   if (input.accountBackground !== undefined) account.accountBackground = validateAccountBackground(input.accountBackground);
   await writeState(state);
