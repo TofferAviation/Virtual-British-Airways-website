@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStaffSession } from "@/lib/staff-auth";
 import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
-import { approveCrewRoomRequest, CrewRoomRequestError, declineCrewRoomRequest, listCrewRoomRequestsForStaff } from "@/lib/crew-room-request-store";
+import { approveCrewRoomRequest, attachPublishedCrewRoomBriefing, CrewRoomRequestError, declineCrewRoomRequest, listCrewRoomRequestsForStaff } from "@/lib/crew-room-request-store";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +61,12 @@ export async function PATCH(request: NextRequest) {
         action: "crew-lounge.voice-room.request.declined",
         details: `Declined pilot crew-room request “${crewRoomRequest.roomName}”.`,
       });
+      await saveStaffState(auth.state);
+      return NextResponse.json({ request: crewRoomRequest });
+    }
+    if (body?.action === "attach_briefing") {
+      const crewRoomRequest = await attachPublishedCrewRoomBriefing(body.id);
+      addAudit(auth.state, { actorEmail: auth.actor.email, actorName: auth.actor.name, action: "crew-lounge.voice-room.briefing.attached", details: `Attached the requested booking to “${crewRoomRequest.roomName}”.` });
       await saveStaffState(auth.state);
       return NextResponse.json({ request: crewRoomRequest });
     }

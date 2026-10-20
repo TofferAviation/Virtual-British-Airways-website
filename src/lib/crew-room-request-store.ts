@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { crewRoomBannerById, DEFAULT_CREW_ROOM_BANNER_ID, isCrewRoomBannerId } from "@/lib/crew-room-banner-library";
 import { createPilotNotification } from "@/lib/pilot-store";
-import { createVoiceRoom, type VoiceRoom } from "@/lib/voice-room-store";
+import { configureVoiceRoomBriefingPic, createVoiceRoom, publishPicActiveBooking, type VoiceRoom } from "@/lib/voice-room-store";
 
 const CREW_ROOM_REQUEST_BUCKET = "crew-room-request-media";
 const MAX_BANNER_BYTES = 5 * 1024 * 1024;
@@ -379,7 +379,9 @@ export async function approveCrewRoomRequest(input: {
     bannerId: request.banner_id,
     bannerObjectKey: request.banner_object_key,
     bannerContentType: request.banner_content_type,
+    briefingPicPilotId: request.pilot_id,
   });
+  await publishPicActiveBooking(room.id, request.pilot_id, request.booking_id);
   const now = new Date().toISOString();
   const { data, error } = await client()
     .from("crew_room_requests")
@@ -405,6 +407,17 @@ export async function approveCrewRoomRequest(input: {
     href: "/crew-lounge",
   });
   return { request: toRequest(data as unknown as CrewRoomRequestRow), room } satisfies { request: CrewRoomRequest; room: VoiceRoom };
+}
+
+export async function attachPublishedCrewRoomBriefing(idValue: unknown) {
+  const id = cleanText(idValue, "Crew-room request", 64);
+  const { data, error } = await client().from("crew_room_requests").select(requestColumns()).eq("id", id).maybeSingle();
+  if (error) throw error;
+  const request = data as CrewRoomRequestRow | null;
+  if (!request || request.status !== "approved" || !request.voice_room_id) throw new CrewRoomRequestError("This published room is not available for briefing setup.", 404);
+  await configureVoiceRoomBriefingPic({ roomId: request.voice_room_id, picPilotId: request.pilot_id });
+  await publishPicActiveBooking(request.voice_room_id, request.pilot_id, request.booking_id);
+  return toRequest(request);
 }
 
 export async function declineCrewRoomRequest(input: { id: unknown; staffName: string; staffNote: unknown }) {

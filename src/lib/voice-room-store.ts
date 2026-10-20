@@ -219,12 +219,13 @@ export async function configureVoiceRoomBriefingPic(input: { roomId: unknown; pi
   return getVoiceRoomBriefing(room.id);
 }
 
-export async function publishPicActiveBooking(roomIdValue: unknown, pilotId: string) {
+export async function publishPicActiveBooking(roomIdValue: unknown, pilotId: string, bookingId?: string) {
   const room = await getVoiceRoomById(roomIdValue);
   const briefing = await readRoomBriefing(room.id);
   if (!briefing || briefing.pic_pilot_id !== pilotId) throw new VoiceRoomError("Only this room’s assigned PIC can publish its briefing plan.", 403);
-  const booking = await getActivePilotBooking(pilotId);
+  const booking = bookingId ? await getPilotBooking(bookingId, pilotId) : await getActivePilotBooking(pilotId);
   if (!booking) throw new VoiceRoomError("Book or begin your BAV flight first, then publish it to the crew room.", 409);
+  if (!['booked', 'in_progress'].includes(booking.status)) throw new VoiceRoomError("Only an active BAV booking can be published to the crew room.", 409);
   const { error } = await client().from("crew_voice_room_briefings")
     .update({ booking_id: booking.id, updated_at: new Date().toISOString() }).eq("room_id", room.id).eq("pic_pilot_id", pilotId);
   if (error) throw error;
