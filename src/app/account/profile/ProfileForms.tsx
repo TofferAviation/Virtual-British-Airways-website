@@ -26,7 +26,7 @@ async function patchProfile(payload: Record<string, unknown>) {
   return body;
 }
 
-export function ProfileForms({ name, email, hub, passportNationality, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; passportNationality: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
+export function ProfileForms({ name, email, hub, passportNationality, dateOfBirth, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; passportNationality: string; dateOfBirth: string | null; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -79,7 +79,7 @@ export function ProfileForms({ name, email, hub, passportNationality, simbriefPi
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), profileImage });
+      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), dateOfBirth: String(form.get("dateOfBirth") || ""), profileImage });
       setProfileMessage("Profile updated successfully.");
       router.refresh();
     } catch (error) {
@@ -135,6 +135,7 @@ export function ProfileForms({ name, email, hub, passportNationality, simbriefPi
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
         <label>Home hub<select className={hubStyles.select} name="hub" defaultValue={hub}>{BAV_HUBS.map((item) => <option key={item.code} value={item.name}>{item.name} ({item.code}) — {item.role}</option>)}</select><small className={hubStyles.hint}>This sets the default departure hub on the BAV flight search. You can change it whenever you like.</small></label>
         <label>Virtual passport nationality<select className={hubStyles.select} name="passportNationality" defaultValue={passportNationality}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small className={hubStyles.hint}>A starting influence for your BAV travel journal. It is not identity verification.</small></label>
+        <label>Date of birth<input name="dateOfBirth" type="date" defaultValue={dateOfBirth ?? ""} required /><small className={hubStyles.hint}>Required for the 18+ BAV community. It appears only in your own fictional BAV travel record.</small></label>
         <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
         <AccountBackgroundPicker value={accountBackground} onChange={saveAccountBackground} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>

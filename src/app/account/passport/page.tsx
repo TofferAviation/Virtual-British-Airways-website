@@ -23,7 +23,7 @@ export default async function PassportPage() {
     </header>
     <section className="account-v2-main account-v2-passport-page"><div className="account-v2-container">
       <Link className="account-v2-back-link" href="/account">← Back to pilot dashboard</Link>
-      <VirtualPassport pireps={pireps} pilotName={account.name} pilotNumber={account.pilotNumber} nationality={account.passportNationality} studio={account.passportStudio} />
+      <VirtualPassport pireps={pireps} pilotName={account.name} pilotNumber={account.pilotNumber} nationality={account.passportNationality} studio={account.passportStudio} dateOfBirth={account.dateOfBirth} profileImage={account.profileImage} />
     </div></section>
   </main>;
 }

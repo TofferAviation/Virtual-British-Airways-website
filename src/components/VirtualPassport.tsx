@@ -17,14 +17,26 @@ function PassportLayers({ studio, surface }: { studio: PassportStudio; surface: 
   </div>;
 }
 
-export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, studio }: { pireps: readonly PilotPirep[]; pilotName: string; pilotNumber: string; nationality: PassportNationality; studio: PassportStudio }) {
+function virtualRecordCode(pilotNumber: string) {
+  let seed = 5381;
+  for (const character of pilotNumber) seed = (seed * 33) ^ character.charCodeAt(0);
+  return `BAV-${(seed >>> 0).toString(36).toUpperCase().padStart(7, "0").slice(0, 7)}`;
+}
+
+function displayDate(value: string | null) {
+  if (!value) return "NOT SET";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00.000Z`)).toUpperCase();
+}
+
+export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, studio, dateOfBirth, profileImage }: { pireps: readonly PilotPirep[]; pilotName: string; pilotNumber: string; nationality: PassportNationality; studio: PassportStudio; dateOfBirth: string | null; profileImage: string | null }) {
   const stamps = virtualPassportStamps(pireps);
   const pages = Array.from({ length: Math.max(1, Math.ceil(stamps.length / STAMPS_PER_PAGE)) }, (_, index) => stamps.slice(index * STAMPS_PER_PAGE, (index + 1) * STAMPS_PER_PAGE));
   const theme = passportTheme(nationality);
   const [isOpen, setIsOpen] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [turn, setTurn] = useState<PageTurn | null>(null);
-  const palette = { "--passport-cover": theme.cover, "--passport-edge": theme.edge, "--passport-gold": theme.ink, "--passport-custom-cover": studio.coverColor, "--passport-custom-accent": studio.accentColor, "--passport-custom-texture": String(studio.texture / 100), "--passport-custom-sheen": String(studio.sheen / 100) } as CSSProperties;
+  const isOriginInspired = studio.coverPreset === "origin-inspired";
+  const palette = { "--passport-cover": theme.cover, "--passport-edge": theme.edge, "--passport-gold": theme.ink, "--passport-custom-cover": isOriginInspired ? theme.cover : studio.coverColor, "--passport-custom-accent": isOriginInspired ? theme.ink : studio.accentColor, "--passport-custom-texture": String(studio.texture / 100), "--passport-custom-sheen": String(studio.sheen / 100) } as CSSProperties;
   const studioClass = `passport-design-${studio.design} passport-material-${studio.material} passport-tint-${studio.tint} passport-font-${studio.font} passport-motif-${studio.motif} passport-foil-${studio.foil} passport-wear-${studio.wear}`;
   const page = pages[pageIndex];
 
@@ -37,6 +49,7 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
 
   if (!isOpen) return <section className={"account-v2-passport passport-real-shell " + studioClass} style={palette} aria-labelledby="passport-heading">
     <button className="passport-real-cover" type="button" onClick={() => setIsOpen(true)} aria-describedby="passport-open-help">
+      <span className="passport-real-bav-ribbon">BRITISH AIRWAYS VIRTUAL</span>
       <span className="passport-real-flag" aria-hidden="true">{studio.monogram}</span>
       <span className="passport-real-cover-title" id="passport-heading">{studio.title}</span>
       <span className="passport-real-cover-subtitle">BAV TRAVEL JOURNAL</span>
@@ -48,14 +61,14 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
   </section>;
 
   return <section className={"account-v2-passport passport-real-shell is-open " + studioClass} style={palette} aria-labelledby="passport-heading">
-    <div className="passport-real-toolbar"><div><p>BAV TRAVEL JOURNAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">{studio.title}</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
+    <div className="passport-real-toolbar"><div><p>BRITISH AIRWAYS VIRTUAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">{studio.title}</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
     <div className="passport-real-book">
       <section className={`passport-real-identity passport-real-interior-${studio.interior}`}>
         <span className="passport-real-watermark" aria-hidden="true">{theme.flag}</span>
-        <p className="passport-real-page-label">PILOT TRAVEL RECORD</p>
-        <div className="passport-real-photo" aria-hidden="true">{pilotName.slice(0, 1).toUpperCase()}</div>
-        <dl><div><dt>PILOT</dt><dd>{pilotName}</dd></div><div><dt>BAV PILOT ID</dt><dd>{pilotNumber}</dd></div><div><dt>PASSPORT NATIONALITY</dt><dd>{nationality}</dd></div></dl>
-        <small>Created for flight-simulation records only.</small>
+        <p className="passport-real-page-label">BRITISH AIRWAYS VIRTUAL · PILOT TRAVEL RECORD</p>
+        <div className="passport-real-photo">{profileImage ? <img src={profileImage} alt={`${pilotName}'s profile`} /> : pilotName.slice(0, 1).toUpperCase()}</div>
+        <dl><div><dt>PILOT</dt><dd>{pilotName}</dd></div><div><dt>BAV PILOT ID</dt><dd>{pilotNumber}</dd></div><div><dt>VIRTUAL NATIONALITY</dt><dd>{nationality}</dd></div><div><dt>DATE OF BIRTH</dt><dd>{displayDate(dateOfBirth)}</dd></div><div><dt>BAV RECORD CODE</dt><dd>{virtualRecordCode(pilotNumber)}</dd></div></dl>
+        <small>Fictional BAV member record — not valid for travel, identification or verification.</small>
         <PassportLayers studio={studio} surface="interior" />
       </section>
       <section className="passport-real-record-page" aria-live="polite" aria-atomic="true">

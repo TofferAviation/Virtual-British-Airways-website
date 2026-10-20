@@ -54,6 +54,14 @@ export const PASSPORT_STUDIO_INTERIORS = [
   { value: "night", label: "Night journal" },
 ] as const;
 
+export const PASSPORT_STUDIO_COVER_PRESETS = [
+  { value: "bav-heritage", label: "BAV heritage", description: "Navy and gold, inspired by the BAV house style." },
+  { value: "bav-club", label: "BAV club", description: "Deep burgundy with a warm-gold finish." },
+  { value: "bav-aeronautical", label: "BAV aeronautical", description: "Technical blue with a crisp, modern finish." },
+  { value: "origin-inspired", label: "Origin-inspired", description: "A fictional BAV interpretation of the selected virtual nationality." },
+  { value: "custom", label: "Custom atelier", description: "Your own material, colour and layout." },
+] as const;
+
 export type PassportStudioSurface = "cover" | "interior";
 export type PassportStudioLayer = {
   id: string;
@@ -78,6 +86,7 @@ export type PassportStudio = {
   foil: typeof PASSPORT_STUDIO_FOILS[number]["value"];
   wear: typeof PASSPORT_STUDIO_WEARS[number]["value"];
   interior: typeof PASSPORT_STUDIO_INTERIORS[number]["value"];
+  coverPreset: typeof PASSPORT_STUDIO_COVER_PRESETS[number]["value"];
   title: string;
   monogram: string;
   coverColor: string;
@@ -88,7 +97,7 @@ export type PassportStudio = {
 };
 
 export const DEFAULT_PASSPORT_STUDIO: PassportStudio = {
-  design: "heritage", material: "leather", tint: "midnight", font: "classic", motif: "crest", foil: "gold", wear: "fresh", interior: "ivory",
+  design: "heritage", material: "leather", tint: "midnight", font: "classic", motif: "crest", foil: "gold", wear: "fresh", interior: "ivory", coverPreset: "bav-heritage",
   title: "BAV FLIGHT PASSPORT", monogram: "BAV", coverColor: "#102C5F", accentColor: "#E5BF60", texture: 42, sheen: 36,
   layers: [],
 };
@@ -144,7 +153,7 @@ function layers(value: unknown): PassportStudioLayer[] {
 export function normalizePassportStudio(value: unknown): PassportStudio {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
-    design: selected(PASSPORT_STUDIO_DESIGNS, source.design, DEFAULT_PASSPORT_STUDIO.design), material: selected(PASSPORT_STUDIO_MATERIALS, source.material, DEFAULT_PASSPORT_STUDIO.material), tint: selected(PASSPORT_STUDIO_TINTS, source.tint, DEFAULT_PASSPORT_STUDIO.tint), font: selected(PASSPORT_STUDIO_FONTS, source.font, DEFAULT_PASSPORT_STUDIO.font), motif: selected(PASSPORT_STUDIO_MOTIFS, source.motif, DEFAULT_PASSPORT_STUDIO.motif), foil: selected(PASSPORT_STUDIO_FOILS, source.foil, DEFAULT_PASSPORT_STUDIO.foil), wear: selected(PASSPORT_STUDIO_WEARS, source.wear, DEFAULT_PASSPORT_STUDIO.wear), interior: selected(PASSPORT_STUDIO_INTERIORS, source.interior, DEFAULT_PASSPORT_STUDIO.interior),
+    design: selected(PASSPORT_STUDIO_DESIGNS, source.design, DEFAULT_PASSPORT_STUDIO.design), material: selected(PASSPORT_STUDIO_MATERIALS, source.material, DEFAULT_PASSPORT_STUDIO.material), tint: selected(PASSPORT_STUDIO_TINTS, source.tint, DEFAULT_PASSPORT_STUDIO.tint), font: selected(PASSPORT_STUDIO_FONTS, source.font, DEFAULT_PASSPORT_STUDIO.font), motif: selected(PASSPORT_STUDIO_MOTIFS, source.motif, DEFAULT_PASSPORT_STUDIO.motif), foil: selected(PASSPORT_STUDIO_FOILS, source.foil, DEFAULT_PASSPORT_STUDIO.foil), wear: selected(PASSPORT_STUDIO_WEARS, source.wear, DEFAULT_PASSPORT_STUDIO.wear), interior: selected(PASSPORT_STUDIO_INTERIORS, source.interior, DEFAULT_PASSPORT_STUDIO.interior), coverPreset: selected(PASSPORT_STUDIO_COVER_PRESETS, source.coverPreset, DEFAULT_PASSPORT_STUDIO.coverPreset),
     title: text(source.title, DEFAULT_PASSPORT_STUDIO.title, 32), monogram: text(source.monogram, DEFAULT_PASSPORT_STUDIO.monogram, 5).toUpperCase(), coverColor: colour(source.coverColor, DEFAULT_PASSPORT_STUDIO.coverColor), accentColor: colour(source.accentColor, DEFAULT_PASSPORT_STUDIO.accentColor), texture: percentage(source.texture, DEFAULT_PASSPORT_STUDIO.texture), sheen: percentage(source.sheen, DEFAULT_PASSPORT_STUDIO.sheen), layers: layers(source.layers),
   };
 }

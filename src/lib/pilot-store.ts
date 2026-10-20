@@ -16,7 +16,7 @@ const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
 
 type PilotState = {
-  version: 11;
+  version: 12;
   nextPilotNumber: number;
   pilots: PilotAccount[];
   passwordResetTokens: PilotPasswordResetToken[];
@@ -213,6 +213,8 @@ export type PilotAccount = {
   hub: string;
   /** Pilot-selected virtual passport nationality; never identity verification. */
   passportNationality: PassportNationality;
+  /** Optional personal field used only for the pilot's private virtual travel record. */
+  dateOfBirth: string | null;
   /** Pilot-designed fictional BAV passport cover; never an official document. */
   passportStudio: PassportStudio;
   tier: string;
@@ -247,11 +249,11 @@ export type PilotAccount = {
   careerExperience: CareerExperiencePreferences;
 };
 
-export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion" | "accountBackground">;
+export type PublicPilotAccount = Omit<PilotAccount, "passwordHash" | "authVersion" | "accountBackground" | "dateOfBirth">;
 
 function emptyState(): PilotState {
   return {
-    version: 11,
+    version: 12,
     nextPilotNumber: 1,
     pilots: [],
     passwordResetTokens: [],
@@ -304,6 +306,7 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     typeRatings: normalizePilotTypeRatings(raw.typeRatings),
     hub: normalizeBavHub(raw.hub),
     passportNationality: normalizePassportNationality(raw.passportNationality),
+    dateOfBirth: normalizeDateOfBirth(raw.dateOfBirth),
     passportStudio: normalizePassportStudio(raw.passportStudio),
     tier: raw.tier ?? "Blue",
     points: Number(raw.points) || 0,
@@ -518,7 +521,7 @@ function normalizeState(raw?: Partial<PilotState>): PilotState {
     ? raw.pilotMentoringExperience.filter((item): item is PilotMentoringExperience => Boolean(item && typeof item.pilotId === "string" && ["rookie", "developing", "experienced"].includes(item.level) && typeof item.updatedAt === "string" && typeof item.updatedBy === "string" && typeof item.sourceReviewId === "string")).map((item) => ({ ...item, updatedBy: item.updatedBy.trim().slice(0, 100) })).filter((item) => pilots.some((pilot) => pilot.id === item.pilotId)).slice(-2_000)
     : [];
   return {
-    version: 11,
+    version: 12,
     nextPilotNumber,
     pilots,
     passwordResetTokens,
@@ -709,7 +712,28 @@ export function verifyPilotPassword(password: string, stored: string) {
   }
 }
 
-export async function registerPilot(input: { name: string; email: string; password: string; hub?: string; passportNationality?: unknown; acceptPilotRules?: boolean }) {
+function normalizeDateOfBirth(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value || date.getUTCFullYear() < 1900) return null;
+  return value;
+}
+
+function isAdultDateOfBirth(dateOfBirth: string) {
+  const birthDate = new Date(`${dateOfBirth}T00:00:00.000Z`);
+  const today = new Date();
+  const eighteenthBirthday = new Date(Date.UTC(birthDate.getUTCFullYear() + 18, birthDate.getUTCMonth(), birthDate.getUTCDate()));
+  return eighteenthBirthday.getTime() <= Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+}
+
+function requiredAdultDateOfBirth(value: unknown) {
+  const dateOfBirth = normalizeDateOfBirth(value);
+  if (!dateOfBirth) throw new Error("Enter a valid date of birth.");
+  if (!isAdultDateOfBirth(dateOfBirth)) throw new Error("British Airways Virtual pilot accounts are available to people aged 18 or over.");
+  return dateOfBirth;
+}
+
+export async function registerPilot(input: { name: string; email: string; password: string; hub?: string; passportNationality?: unknown; dateOfBirth?: unknown; acceptPilotRules?: boolean }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   const password = input.password;
@@ -717,6 +741,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Please enter a valid email address.");
   if (password.length < 8) throw new Error("Password must contain at least 8 characters.");
   if (input.acceptPilotRules !== true) throw new Error("You must accept the BAV Pilot Rules before creating an account.");
+  const dateOfBirth = requiredAdultDateOfBirth(input.dateOfBirth);
 
   const state = await readState();
   if (state.pilots.some((pilot) => pilot.email === email)) throw new Error("An account already exists for that email address.");
@@ -726,7 +751,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const account: PilotAccount = {
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
     authVersion: 1,
-    createdAt: now, lastLoginAt: now, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub(input.hub), passportNationality: normalizePassportNationality(input.passportNationality), passportStudio: normalizePassportStudio(null), tier: "Blue",
+    createdAt: now, lastLoginAt: now, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub(input.hub), passportNationality: normalizePassportNationality(input.passportNationality), dateOfBirth, passportStudio: normalizePassportStudio(null), tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0, heathrowDepartures: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
@@ -778,7 +803,7 @@ export async function createClosedBetaPilot(input: { name: string; email: string
     account = {
       id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(temporaryPassword), status: "active",
       authVersion: 1,
-      createdAt: now, lastLoginAt: null, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub("LHR"), passportNationality: normalizePassportNationality(null), passportStudio: normalizePassportStudio(null), tier: "Blue",
+      createdAt: now, lastLoginAt: null, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub("LHR"), passportNationality: normalizePassportNationality(null), dateOfBirth: null, passportStudio: normalizePassportStudio(null), tier: "Blue",
       points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0, heathrowDepartures: 0,
       averageLanding: null, bestLanding: null, onTime: 100, streak: 0, simbriefPilotId: null, profileImage: null, accountBackground: null,
       pilotRulesAcceptedAt: null, pilotRulesVersion: null, betaAccess: true, mustChangePassword: true, awards: [],
@@ -1116,7 +1141,7 @@ export async function markPilotLogin(id: string) {
   await writeState(state);
 }
 
-export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; passportNationality?: unknown; passportStudio?: unknown; profileImage?: string | null; accountBackground?: string | null }) {
+export async function updatePilotProfile(id: string, input: { name: string; email: string; hub?: string; passportNationality?: unknown; dateOfBirth?: unknown; passportStudio?: unknown; profileImage?: string | null; accountBackground?: string | null }) {
   const name = input.name.trim().replace(/\s+/g, " ").slice(0, 80);
   const email = normalizeEmail(input.email);
   if (name.length < 2) throw new Error("Please enter your full name.");
@@ -1129,6 +1154,7 @@ export async function updatePilotProfile(id: string, input: { name: string; emai
   account.email = email;
   if (input.hub !== undefined) account.hub = normalizeBavHub(input.hub);
   if (input.passportNationality !== undefined) account.passportNationality = normalizePassportNationality(input.passportNationality);
+  if (input.dateOfBirth !== undefined) account.dateOfBirth = requiredAdultDateOfBirth(input.dateOfBirth);
   if (input.passportStudio !== undefined) account.passportStudio = normalizePassportStudio(input.passportStudio);
   if (input.profileImage !== undefined) account.profileImage = validateProfileImage(input.profileImage);
   if (input.accountBackground !== undefined) account.accountBackground = validateAccountBackground(input.accountBackground);
@@ -1631,9 +1657,10 @@ export async function applyApprovedPirepStats(pilotId: string, input: {
 }
 
 export function toPublicPilot(account: PilotAccount): PublicPilotAccount {
-  const { passwordHash: _passwordHash, authVersion: _authVersion, accountBackground: _accountBackground, ...pilot } = account;
+  const { passwordHash: _passwordHash, authVersion: _authVersion, accountBackground: _accountBackground, dateOfBirth: _dateOfBirth, ...pilot } = account;
   void _passwordHash;
   void _authVersion;
   void _accountBackground;
+  void _dateOfBirth;
   return pilot;
 }

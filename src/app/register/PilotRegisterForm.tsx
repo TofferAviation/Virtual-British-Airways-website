@@ -13,6 +13,7 @@ export function PilotRegisterForm() {
   const [confirm, setConfirm] = useState("");
   const [hub, setHub] = useState<BavHubCode>("LHR");
   const [passportNationality, setPassportNationality] = useState("United Kingdom");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [acceptPilotRules, setAcceptPilotRules] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,7 +32,7 @@ export function PilotRegisterForm() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         cache: "no-store",
-        body: JSON.stringify({ name, email, password, hub, passportNationality, acceptPilotRules }),
+        body: JSON.stringify({ name, email, password, hub, passportNationality, dateOfBirth, acceptPilotRules }),
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
@@ -52,6 +53,7 @@ export function PilotRegisterForm() {
       <label><span>Email address</span><input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={busy} /></label>
       <label><span>Home hub</span><select className={hubStyles.select} value={hub} onChange={(event) => setHub(event.target.value as BavHubCode)} disabled={busy}>{BAV_HUBS.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code}) — {item.role}</option>)}</select></label>
       <label><span>Virtual passport nationality</span><select className={hubStyles.select} value={passportNationality} onChange={(event) => setPassportNationality(event.target.value)} disabled={busy}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small>This personalises your BAV virtual passport only. It is not identity verification.</small></label>
+      <label><span>Date of birth</span><input type="date" value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} required disabled={busy} /><small>Pilot accounts are available to people aged 18 or over. This is used only for your private BAV virtual travel record.</small></label>
       <label><span>Password</span><input type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
       <label><span>Confirm password</span><input type="password" autoComplete="new-password" minLength={8} value={confirm} onChange={(event) => setConfirm(event.target.value)} required disabled={busy} /></label>
       <label className="pilot-auth-rules"><input type="checkbox" checked={acceptPilotRules} onChange={(event) => setAcceptPilotRules(event.target.checked)} required disabled={busy} /><span>I have read and agree to the <Link href="/pilot-rules" target="_blank">BAV Pilot Rules &amp; Operational Standards</Link>.</span></label>

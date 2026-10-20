@@ -10,5 +10,5 @@ export default async function PassportStudioPage() {
   const session = await requirePilotSession();
   const pilot = await getPilotById(session.pilotId);
   if (!pilot) redirect("/login");
-  return <PassportStudioEditor initialStudio={pilot.passportStudio} pilotName={pilot.name} />;
+  return <PassportStudioEditor initialStudio={pilot.passportStudio} pilotName={pilot.name} nationality={pilot.passportNationality} />;
 }

@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   if (closedBetaEnabled()) {
     return NextResponse.json({ error: "British Airways Virtual is currently in closed beta. Accounts are available by invitation only." }, { status: 403 });
   }
-  const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string; hub?: string; passportNationality?: string; acceptPilotRules?: boolean } | null;
+  const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string; hub?: string; passportNationality?: string; dateOfBirth?: string; acceptPilotRules?: boolean } | null;
   try {
     const account = await registerPilot({
       name: body?.name ?? "",
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       password: body?.password ?? "",
       hub: body?.hub,
       passportNationality: body?.passportNationality,
+      dateOfBirth: body?.dateOfBirth,
       acceptPilotRules: body?.acceptPilotRules === true,
     });
     // A delivery outage must never prevent a pilot from creating an account.
