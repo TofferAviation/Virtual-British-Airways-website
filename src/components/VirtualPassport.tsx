@@ -6,6 +6,7 @@ import { passportTheme, type PassportNationality } from "@/lib/passport-national
 import { virtualPassportStamps } from "@/lib/virtual-passport";
 
 const STAMPS_PER_PAGE = 4;
+type PageTurn = { direction: "forward" | "back"; nextPage: number };
 
 export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }: { pireps: readonly PilotPirep[]; pilotName: string; pilotNumber: string; nationality: PassportNationality }) {
   const stamps = virtualPassportStamps(pireps);
@@ -13,21 +14,15 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }:
   const theme = passportTheme(nationality);
   const [isOpen, setIsOpen] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
-  const [turning, setTurning] = useState<"forward" | "back" | null>(null);
-  const [queuedPage, setQueuedPage] = useState<number | null>(null);
+  const [turn, setTurn] = useState<PageTurn | null>(null);
   const palette = { "--passport-cover": theme.cover, "--passport-edge": theme.edge, "--passport-gold": theme.ink } as CSSProperties;
   const page = pages[pageIndex];
 
-  function turnPage(next: number) {
-    if (turning || next < 0 || next >= pages.length) return;
-    setQueuedPage(next);
-    setTurning(next > pageIndex ? "forward" : "back");
-  }
-
-  function finishTurn() {
-    if (queuedPage !== null) setPageIndex(queuedPage);
-    setQueuedPage(null);
-    setTurning(null);
+  function turnPage(nextPage: number) {
+    if (turn || nextPage < 0 || nextPage >= pages.length) return;
+    const direction = nextPage > pageIndex ? "forward" : "back";
+    setTurn({ direction, nextPage });
+    window.setTimeout(() => setPageIndex(nextPage), 290);
   }
 
   if (!isOpen) return <section className="account-v2-passport passport-real-shell" style={palette} aria-labelledby="passport-heading">
@@ -43,7 +38,7 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }:
 
   return <section className="account-v2-passport passport-real-shell is-open" style={palette} aria-labelledby="passport-heading">
     <div className="passport-real-toolbar"><div><p>BRITISH AIRWAYS VIRTUAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">Your virtual passport</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
-    <div className={"passport-real-book" + (turning ? " is-turning-" + turning : "")}>
+    <div className="passport-real-book">
       <section className="passport-real-identity">
         <span className="passport-real-watermark" aria-hidden="true">{theme.flag}</span>
         <p className="passport-real-page-label">VIRTUAL PILOT IDENTITY</p>
@@ -51,14 +46,14 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }:
         <dl><div><dt>PILOT</dt><dd>{pilotName}</dd></div><div><dt>BAV PILOT ID</dt><dd>{pilotNumber}</dd></div><div><dt>PASSPORT NATIONALITY</dt><dd>{nationality}</dd></div></dl>
         <small>Created for flight-simulation records only.</small>
       </section>
-      <section className="passport-real-record-page" aria-live="polite">
+      <section className="passport-real-record-page" aria-live="polite" aria-atomic="true">
         <div className="passport-real-page-header"><span>ARRIVAL STAMPS</span><b>{pageIndex + 1} / {pages.length}</b></div>
         {page.length ? <div className="account-v2-passport-grid">{page.map((stamp) => <article key={stamp.id} className={"account-v2-passport-stamp" + (stamp.weathered ? " is-weathered" : "")} style={{ "--passport-ink": stamp.ink, "--passport-rotation": stamp.rotation + "deg" } as CSSProperties}>
           <div className="account-v2-passport-copy"><span>{stamp.flightNumber}</span><strong>{stamp.airportCode}</strong><p>{stamp.airportName}</p><small>{stamp.country}</small></div>
           <div className="account-v2-passport-seal" aria-label={["Arrived", stamp.completedDate, "at", stamp.completedTime].join(" ")}><span>ARRIVED</span><b>{stamp.completedDate}</b><em>{stamp.completedTime}</em><i>BAV</i></div>
         </article>)}</div> : <p className="account-v2-passport-empty">Your flight records will appear here after a BAV PIREP is submitted.</p>}
-        <div className="passport-real-controls"><button type="button" onClick={() => turnPage(pageIndex - 1)} disabled={pageIndex === 0 || Boolean(turning)}>← Previous</button><span>Turn page</span><button type="button" onClick={() => turnPage(pageIndex + 1)} disabled={pageIndex === pages.length - 1 || Boolean(turning)}>Next →</button></div>
-        {turning ? <span className="passport-real-turning-sheet" onAnimationEnd={finishTurn} aria-hidden="true" /> : null}
+        <div className="passport-real-controls"><button type="button" onClick={() => turnPage(pageIndex - 1)} disabled={pageIndex === 0 || Boolean(turn)}>← Previous</button><span>Turn page</span><button type="button" onClick={() => turnPage(pageIndex + 1)} disabled={pageIndex === pages.length - 1 || Boolean(turn)}>Next →</button></div>
+        {turn ? <span className={"passport-real-turning-sheet is-turning-" + turn.direction} onAnimationEnd={() => setTurn(null)} aria-hidden="true" /> : null}
       </section>
     </div>
     <p className="account-v2-passport-note">Virtual airline keepsake only — not an official travel or immigration document.</p>
