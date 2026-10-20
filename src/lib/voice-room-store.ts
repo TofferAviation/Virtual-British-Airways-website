@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_CREW_ROOM_BANNER_ID, isCrewRoomBannerId } from "@/lib/crew-room-banner-library";
 import { getEvents } from "@/lib/event-store";
+import { getActivePilotBooking, getPilotBooking, getPilotFlightPlan, type PilotBooking, type PilotFlightPlan } from "@/lib/pilot-operations-store";
+import { getPilotById } from "@/lib/pilot-store";
 
 export const VOICE_ROOM_CHANNEL_PREFIX = "voice:";
 export type VoiceRoomStatus = "scheduled" | "open" | "closed";
@@ -38,6 +40,20 @@ export type VoiceRoom = {
   hasCustomBanner: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+type VoiceRoomBriefingRow = { room_id: string; pic_pilot_id: string; booking_id: string | null; updated_at: string };
+
+export type VoiceRoomBriefing = {
+  picPilotId: string;
+  bookingId: string | null;
+  updatedAt: string;
+  plan: null | {
+    flightNumber: string; from: string; to: string; aircraft: string; date: string;
+    departure: string; arrival: string; duration: string; registration: string | null;
+    route: string | null; cruiseAltitude: string | null; alternate: string | null;
+    simbrief: Pick<NonNullable<PilotFlightPlan["simbriefBriefing"]>, "originMetar" | "destinationMetar" | "originRunway" | "destinationRunway" | "distanceNm" | "passengerCount" | "blockFuel" | "tripFuel" | "scheduledOut" | "scheduledIn" | "blockTime" | "aircraftIcao"> | null;
+  };
 };
 
 export class VoiceRoomError extends Error {
@@ -149,6 +165,72 @@ function isMissingVoiceRoomSchema(error: unknown) {
   return code === "42P01" || code === "PGRST205" || message.includes("crew_voice_rooms");
 }
 
+function isMissingBriefingSchema(error: unknown) {
+  const message = error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "";
+  return message.includes("crew_voice_room_briefings") || (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "42P01");
+}
+
+function briefingPlan(booking: PilotBooking, flightPlan: PilotFlightPlan | null): VoiceRoomBriefing["plan"] {
+  const source = flightPlan?.simbriefBriefing;
+  return {
+    flightNumber: booking.flightNumber, from: booking.from, to: booking.to, aircraft: booking.aircraft, date: booking.date,
+    departure: booking.departure, arrival: booking.arrival, duration: booking.duration, registration: booking.registration,
+    route: flightPlan?.route ?? null, cruiseAltitude: flightPlan?.cruiseAltitude ?? null, alternate: flightPlan?.alternate ?? null,
+    simbrief: source ? {
+      originMetar: source.originMetar, destinationMetar: source.destinationMetar, originRunway: source.originRunway,
+      destinationRunway: source.destinationRunway, distanceNm: source.distanceNm, passengerCount: source.passengerCount,
+      blockFuel: source.blockFuel, tripFuel: source.tripFuel, scheduledOut: source.scheduledOut,
+      scheduledIn: source.scheduledIn, blockTime: source.blockTime, aircraftIcao: source.aircraftIcao,
+    } : null,
+  };
+}
+
+async function readRoomBriefing(roomId: string) {
+  const { data, error } = await client().from("crew_voice_room_briefings")
+    .select("room_id, pic_pilot_id, booking_id, updated_at").eq("room_id", roomId).maybeSingle();
+  if (error) {
+    if (isMissingBriefingSchema(error)) throw new VoiceRoomError("Apply the Crew Lounge briefing-plan migration before configuring the PIC.", 503);
+    throw error;
+  }
+  return data as VoiceRoomBriefingRow | null;
+}
+
+export async function getVoiceRoomBriefing(roomIdValue: unknown): Promise<VoiceRoomBriefing | null> {
+  const room = await getVoiceRoomById(roomIdValue);
+  const briefing = await readRoomBriefing(room.id);
+  if (!briefing) return null;
+  const booking = briefing.booking_id ? await getPilotBooking(briefing.booking_id, briefing.pic_pilot_id) : null;
+  const flightPlan = booking ? await getPilotFlightPlan(booking.id, booking.pilotId) : null;
+  return { picPilotId: briefing.pic_pilot_id, bookingId: booking?.id ?? null, updatedAt: briefing.updated_at, plan: booking ? briefingPlan(booking, flightPlan) : null };
+}
+
+export async function configureVoiceRoomBriefingPic(input: { roomId: unknown; picPilotId: unknown }) {
+  const room = await getVoiceRoomById(input.roomId, { includeClosed: true });
+  const picPilotId = cleanText(input.picPilotId, "Pilot in command", 80);
+  if (!picPilotId) throw new VoiceRoomError("Choose the pilot in command for this briefing room.", 400);
+  const pilot = await getPilotById(picPilotId);
+  if (!pilot || pilot.status !== "active") throw new VoiceRoomError("Choose an active BAV pilot as the pilot in command.", 404);
+  const now = new Date().toISOString();
+  const { error } = await client().from("crew_voice_room_briefings").upsert({ room_id: room.id, pic_pilot_id: picPilotId, booking_id: null, updated_at: now }, { onConflict: "room_id" });
+  if (error) {
+    if (isMissingBriefingSchema(error)) throw new VoiceRoomError("Apply the Crew Lounge briefing-plan migration before configuring the PIC.", 503);
+    throw error;
+  }
+  return getVoiceRoomBriefing(room.id);
+}
+
+export async function publishPicActiveBooking(roomIdValue: unknown, pilotId: string) {
+  const room = await getVoiceRoomById(roomIdValue);
+  const briefing = await readRoomBriefing(room.id);
+  if (!briefing || briefing.pic_pilot_id !== pilotId) throw new VoiceRoomError("Only this room’s assigned PIC can publish its briefing plan.", 403);
+  const booking = await getActivePilotBooking(pilotId);
+  if (!booking) throw new VoiceRoomError("Book or begin your BAV flight first, then publish it to the crew room.", 409);
+  const { error } = await client().from("crew_voice_room_briefings")
+    .update({ booking_id: booking.id, updated_at: new Date().toISOString() }).eq("room_id", room.id).eq("pic_pilot_id", pilotId);
+  if (error) throw error;
+  return getVoiceRoomBriefing(room.id);
+}
+
 async function assertEventAvailable(eventId: string | null) {
   if (!eventId) return null;
   const events = await getEvents();
@@ -222,6 +304,7 @@ export async function createVoiceRoom(input: {
   bannerId?: unknown;
   bannerObjectKey?: unknown;
   bannerContentType?: unknown;
+  briefingPicPilotId?: unknown;
 }) {
   const name = cleanText(input.name, "Room name", 80);
   if (!name) throw new VoiceRoomError("Give the room a name.", 400);
@@ -271,7 +354,10 @@ export async function createVoiceRoom(input: {
     if (isMissingVoiceRoomSchema(error)) throw new VoiceRoomError("Apply the Crew Lounge voice-room migration before creating rooms.", 503);
     throw error;
   }
-  return toVoiceRoom(data as unknown as VoiceRoomRow);
+  const room = toVoiceRoom(data as unknown as VoiceRoomRow);
+  const briefingPicPilotId = cleanOptionalText(input.briefingPicPilotId, "Pilot in command", 80);
+  if (briefingPicPilotId) await configureVoiceRoomBriefingPic({ roomId: room.id, picPilotId: briefingPicPilotId });
+  return room;
 }
 
 export async function updateVoiceRoomStatus(input: { id: unknown; status: unknown }) {

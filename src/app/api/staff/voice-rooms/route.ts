@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStaffSession } from "@/lib/staff-auth";
 import { addAudit, getStaffState, hasPermission, saveStaffState } from "@/lib/staff-store";
-import { VoiceRoomError, createVoiceRoom, listVoiceRooms, updateVoiceRoomStatus } from "@/lib/voice-room-store";
+import { VoiceRoomError, configureVoiceRoomBriefingPic, createVoiceRoom, listVoiceRooms, updateVoiceRoomStatus } from "@/lib/voice-room-store";
 
 async function authorize() {
   const session = await getStaffSession();
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       status: body?.room?.status,
       maxParticipants: body?.room?.maxParticipants,
       bannerId: body?.room?.bannerId,
+      briefingPicPilotId: body?.room?.briefingPicPilotId,
     });
     addAudit(auth.state, {
       actorEmail: auth.actor.email,
@@ -61,8 +62,14 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await authorize();
   if ("denied" in auth) return auth.denied;
-  const body = await request.json().catch(() => null) as { id?: unknown; status?: unknown } | null;
+  const body = await request.json().catch(() => null) as { id?: unknown; status?: unknown; briefingPicPilotId?: unknown } | null;
   try {
+    if (body?.briefingPicPilotId !== undefined) {
+      const briefing = await configureVoiceRoomBriefingPic({ roomId: body?.id, picPilotId: body.briefingPicPilotId });
+      addAudit(auth.state, { actorEmail: auth.actor.email, actorName: auth.actor.name, action: "crew-lounge.voice-room.pic.updated", details: `Assigned the PIC for voice room ${String(body?.id)}.` });
+      await saveStaffState(auth.state);
+      return NextResponse.json({ briefing });
+    }
     const room = await updateVoiceRoomStatus({ id: body?.id, status: body?.status });
     addAudit(auth.state, {
       actorEmail: auth.actor.email,

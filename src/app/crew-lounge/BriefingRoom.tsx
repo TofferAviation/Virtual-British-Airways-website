@@ -23,6 +23,16 @@ type BriefingRoomProps = {
 
 type WallView = "flight-plan" | "route" | "weather" | "notes";
 
+type SharedBriefing = {
+  picPilotId: string;
+  bookingId: string | null;
+  plan: null | {
+    flightNumber: string; from: string; to: string; aircraft: string; date: string; departure: string; arrival: string; duration: string; registration: string | null;
+    route: string | null; cruiseAltitude: string | null; alternate: string | null;
+    simbrief: null | { originMetar: string | null; destinationMetar: string | null; originRunway: string | null; destinationRunway: string | null; distanceNm: string | null; passengerCount: string | null; blockFuel: string | null; tripFuel: string | null; scheduledOut: string | null; scheduledIn: string | null; blockTime: string | null; aircraftIcao: string | null };
+  };
+};
+
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BA";
 }
@@ -52,6 +62,9 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const voice = useCrewVoice();
   const [selectedSeat, setSelectedSeat] = useState(1);
   const [wallView, setWallView] = useState<WallView>("flight-plan");
+  const [sharedBriefing, setSharedBriefing] = useState<SharedBriefing | null>(null);
+  const [briefingNotice, setBriefingNotice] = useState("");
+  const [publishingBriefing, setPublishingBriefing] = useState(false);
   const isThisRoom = voice.activeRoom?.id === room.id;
   const briefing = useMemo(() => events.find((event) => event.id === room.eventId) ?? null, [events, room.eventId]);
   const participants = isThisRoom ? voice.participants : [];
@@ -64,6 +77,34 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
     return { seatIndex, pilot: participants.find((participant) => participant.seatIndex === seatIndex) ?? null };
   });
   const activeSeats = participants.filter((participant) => participant.seatIndex === null).length;
+  const plan = sharedBriefing?.plan ?? null;
+  const isPic = sharedBriefing?.picPilotId === pilot.id;
+
+  useEffect(() => {
+    let current = true;
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/crew-lounge/rooms/${room.id}/briefing`, { cache: "no-store" });
+        const data = await response.json().catch(() => null) as { briefing?: SharedBriefing | null; error?: string } | null;
+        if (!response.ok) throw new Error(data?.error || "The shared flight plan is unavailable.");
+        if (current) { setSharedBriefing(data?.briefing ?? null); setBriefingNotice(""); }
+      } catch (error) { if (current) setBriefingNotice(error instanceof Error ? error.message : "The shared flight plan is unavailable."); }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 20_000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, [room.id]);
+
+  async function publishBriefing() {
+    setPublishingBriefing(true); setBriefingNotice("");
+    try {
+      const response = await fetch(`/api/crew-lounge/rooms/${room.id}/briefing`, { method: "POST" });
+      const data = await response.json().catch(() => null) as { briefing?: SharedBriefing; error?: string } | null;
+      if (!response.ok || !data?.briefing) throw new Error(data?.error || "The flight could not be published.");
+      setSharedBriefing(data.briefing); setBriefingNotice("Your current flight is now the room’s shared briefing plan.");
+    } catch (error) { setBriefingNotice(error instanceof Error ? error.message : "The flight could not be published."); }
+    finally { setPublishingBriefing(false); }
+  }
 
   const seatLabel = (seatIndex: number, occupant: typeof participants[number] | null) => {
     if (occupant?.pilotId === pilot.id) return `Your selected chair, seat ${seatIndex}`;
@@ -79,6 +120,10 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
         <p>{briefing ? `${briefing.typeLabel} · ${briefing.title}` : "A private eight-pilot briefing room. Choose a chair, join muted, and prepare together."}</p>
       </div>
       <div className="briefing-room-capacity"><span className={isThisRoom ? "live" : ""} aria-hidden="true" />{participants.length}/{room.maxParticipants} in room</div>
+      <div className="briefing-room-actions">
+        {isPic && !plan ? <button type="button" onClick={() => void publishBriefing()} disabled={publishingBriefing}>{publishingBriefing ? "Publishing…" : "Publish my booking"}</button> : null}
+        {plan ? <a href={`/book?from=${encodeURIComponent(plan.from)}&to=${encodeURIComponent(plan.to)}&date=${encodeURIComponent(plan.date)}&flight=${encodeURIComponent(plan.flightNumber)}`}>Book {plan.flightNumber}</a> : null}
+      </div>
     </header>
 
     <section className="briefing-room-scene" aria-label="Briefing room seat plan and shared presentation wall">
@@ -87,15 +132,15 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
           {presentationStream ? <><PresentationVideo stream={presentationStream} /><span className="briefing-presentation-label">Live presentation · {presentationPilot}</span></> : <>
           {wallView === "flight-plan" ? <>
             <span>British Airways Virtual · flight plan</span>
-            <strong>{briefing ? briefing.title : "Flight plan awaiting selection"}</strong>
-            <b>{briefing ? `${briefing.route.from}  →  ${briefing.route.to}` : "Choose a linked event to populate the route"}</b>
-            <small>{briefing ? `${briefing.route.fromName} to ${briefing.route.toName} · ${formattedDate(briefing.date)} · ${briefing.startUtc}Z` : "The shared wall stays separate from pilots’ private bookings."}</small>
+            <strong>{plan ? plan.flightNumber : briefing ? briefing.title : "Flight plan awaiting selection"}</strong>
+            <b>{plan ? `${plan.from}  →  ${plan.to}` : briefing ? `${briefing.route.from}  →  ${briefing.route.to}` : "Choose a linked event to populate the route"}</b>
+            <small>{plan ? `${plan.aircraft}${plan.registration ? ` · ${plan.registration}` : ""} · STD ${plan.departure} · STA ${plan.arrival} · ${plan.duration}${plan.simbrief?.distanceNm ? ` · ${plan.simbrief.distanceNm} NM` : ""}` : briefing ? `${briefing.route.fromName} to ${briefing.route.toName} · ${formattedDate(briefing.date)} · ${briefing.startUtc}Z` : "The PIC can publish their own booking for the crew to follow."}</small>
           </> : null}
           {wallView === "route" ? <>
-            <span>Route overview</span><strong>{briefing ? `${briefing.route.from} — ${briefing.route.to}` : "Route awaiting briefing selection"}</strong><div className="briefing-route-line"><i /> <em>✈</em> <i /></div><small>{briefing ? briefing.aircraftNote : "A host can use screen share for a live SimBrief, chart, or route review."}</small>
+            <span>Route overview</span><strong>{plan ? `${plan.from} — ${plan.to}` : briefing ? `${briefing.route.from} — ${briefing.route.to}` : "Route awaiting briefing selection"}</strong><div className="briefing-route-line"><i /> <em>✈</em> <i /></div><small>{plan?.route ? `${plan.route}${plan.cruiseAltitude ? ` · planned ${plan.cruiseAltitude}` : ""}${plan.alternate ? ` · alternate ${plan.alternate}` : ""}` : briefing ? briefing.aircraftNote : "A host can use screen share for a live SimBrief, chart, or route review."}</small>
           </> : null}
           {wallView === "weather" ? <>
-            <span>Weather desk</span><strong>Live weather is not invented</strong><b>{briefing ? `${briefing.route.from} & ${briefing.route.to}` : "Departure & destination"}</b><small>Use the shared-screen control for a live METAR, TAF, or weather source during this free pilot-room release.</small>
+            <span>Weather desk</span><strong>{plan?.simbrief?.originMetar || plan?.simbrief?.destinationMetar ? "Flight-plan weather" : "Live weather is not invented"}</strong><b>{plan ? `${plan.from} & ${plan.to}` : briefing ? `${briefing.route.from} & ${briefing.route.to}` : "Departure & destination"}</b><small>{plan?.simbrief?.originMetar || plan?.simbrief?.destinationMetar ? `${plan.from}: ${plan.simbrief?.originMetar ?? "not supplied"} · ${plan.to}: ${plan.simbrief?.destinationMetar ?? "not supplied"}` : "Use the shared-screen control for a live METAR, TAF, or weather source during this free pilot-room release."}</small>
           </> : null}
           {wallView === "notes" ? <>
             <span>Briefing notes</span><strong>Keep the table clear</strong><b>Voice, camera and screen sharing are ready.</b><small>Shared, host-controlled notes will be added on the same room state when the community briefing upgrade is enabled.</small>
@@ -120,7 +165,7 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
       </div>
     </section>
 
-    {!isThisRoom ? <p className="briefing-room-seat-note">{activeSeats ? `${activeSeats} connected pilot${activeSeats === 1 ? " has" : "s have"} not selected a chair yet. ` : ""}Chair {selectedSeat} is selected. Joining reserves it while your call is active.</p> : <p className="briefing-room-seat-note">{localSeat ? `You are seated at chair ${localSeat}.` : "You joined without a chair assignment."} Your camera and screen remain off until you choose them.</p>}
+    {!isThisRoom ? <p className="briefing-room-seat-note">{briefingNotice ? `${briefingNotice} ` : ""}{activeSeats ? `${activeSeats} connected pilot${activeSeats === 1 ? " has" : "s have"} not selected a chair yet. ` : ""}Chair {selectedSeat} is selected. Joining reserves it while your call is active.</p> : <p className="briefing-room-seat-note">{briefingNotice ? `${briefingNotice} ` : ""}{localSeat ? `You are seated at chair ${localSeat}.` : "You joined without a chair assignment."} Your camera and screen remain off until you choose them.</p>}
     <PeerVoiceCall room={room} pilot={pilot} seatIndex={selectedSeat} />
   </section>;
 }

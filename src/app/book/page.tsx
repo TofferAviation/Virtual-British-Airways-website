@@ -55,6 +55,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   const departureStation = hub?.code ?? (hasDeparture ? from : null);
   const date = typeof params.date === "string" ? params.date : getTomorrowIsoDate();
   const flexible = params.flexible === "1";
+  const requestedFlightNumber = typeof params.flight === "string" ? params.flight.trim().toUpperCase() : "";
   const minimumHours = durationHoursParam(params.minHours);
   const maximumHours = durationHoursParam(params.maxHours);
   const hasDurationFilter = minimumHours !== null || maximumHours !== null;
@@ -75,6 +76,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
     ? scheduledFlights.filter((flight) => !flight.catalogueOnly && (flight.aircraft === aircraft || flight.aircraftOptions?.includes(aircraft)))
     : scheduledFlights;
   const flights = invalidDurationRange ? [] : aircraftFlights.filter((flight) => {
+    if (requestedFlightNumber && flight.number.toUpperCase() !== requestedFlightNumber) return false;
     if (!hasDurationFilter) return true;
     if (flight.catalogueOnly) return false;
     const minutes = durationToMinutes(flight.duration);
@@ -97,6 +99,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   else if (hasCityPair) { clearDurationFilterParams.set("from", from); clearDurationFilterParams.set("to", to); }
   else if (departureStation) clearDurationFilterParams.set("from", departureStation);
   if (aircraft) clearDurationFilterParams.set("aircraft", aircraft);
+  if (requestedFlightNumber) clearDurationFilterParams.set("flight", requestedFlightNumber);
   if (flexible) clearDurationFilterParams.set("flexible", "1");
   const durationRangeLabel = minimumHours !== null && maximumHours !== null
     ? `${hourLabel(minimumHours)} to ${hourLabel(maximumHours)}`
@@ -116,7 +119,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             <div>
               <div className="section-kicker">Operational flight schedule</div>
               <h1>{aircraft && !hasCityPair && !departureStation ? `${aircraft} routes` : hasCityPair ? `${airportName(from)} (${from}) → ${airportName(to)} (${to})` : `Flights departing ${airportName(departureStation ?? "LHR")} (${departureStation ?? "LHR"})`}</h1>
-              <p>{date} · real BA flight numbers and operating callsigns · flight-simulation planning times</p>
+              <p>{date} · real BA flight numbers and operating callsigns · flight-simulation planning times{requestedFlightNumber ? ` · shared briefing selection: ${requestedFlightNumber}` : ""}</p>
               {aircraft ? <p>Showing only routes that can operate with {aircraft}. Choose a matching registration while booking, or let Ember select one later.</p> : null}
               {hub ? <p>{hub.role}. Services use either an exact date check or a researched 2025–26 operational reference with its observed ICAO identifier.</p> : null}
               {!hub && departureStation ? <p>Real BA services and researched operational references from this station are available to book.</p> : null}
