@@ -7,6 +7,8 @@ import { getCareerDispatchSuggestions } from "@/lib/career-dispatcher";
 import { getCareerPathProgress, getCareerRotationChoices, getCareerRotationProgress } from "@/lib/career-paths";
 import { nextPilotRank } from "@/lib/pilot-ranks";
 import { getPilotAwardDisplay } from "@/lib/pilot-awards";
+import { getEvents } from "@/lib/event-store";
+import { getServiceStatusState, overallServiceStatus } from "@/lib/service-status-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById, getPilotMentoringExperience, getPilotMentoringStatus, listMentoringFlightReviews, MENTOR_MINIMUM_CAREER_HOURS } from "@/lib/pilot-store";
 import { CareerExperienceForm } from "./CareerExperienceForm";
@@ -23,6 +25,7 @@ import { redirect } from "next/navigation";
 import { MentoringPortfolio } from "./MentoringPortfolio";
 import { CareerPathForm } from "./CareerPathForm";
 import { CareerRotation } from "./CareerRotation";
+import { CareerOperationsBoard } from "./CareerOperationsBoard";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Career & Qualifications" };
@@ -44,6 +47,12 @@ function date(value: string) {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(value));
 }
 
+function osloCalendarDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/Oslo" }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
 export default async function CareerPage() {
   const session = await requirePilotSession();
   const pilot = await getPilotById(session.pilotId);
@@ -54,18 +63,21 @@ export default async function CareerPage() {
   const activeTraining = career.applications.filter((application) => !["failed", "type_rating_issued", "expired", "suspended"].includes(application.status));
   const guidedCareer = pilot.careerExperience.mode !== "fly";
   const advancedOperations = pilot.careerExperience.mode === "realistic_operations" && isCareerFeatureEnabled("advanced_operations");
+  const operationsBoard = guidedCareer && isCareerFeatureEnabled("operations_board");
   const passportPreview = isCareerFeatureEnabled("passport");
   const fleetPreview = isCareerFeatureEnabled("fleet");
   const mentoringPreview = isCareerFeatureEnabled("mentoring");
   const pathsPreview = guidedCareer && isCareerFeatureEnabled("paths");
-  const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience, mentoringReviews, rotationChoices] = await Promise.all([
+  const [dispatchSuggestions, activeBooking, recentPireps, mentoringStatus, mentoringExperience, mentoringReviews, rotationChoices, serviceStatus, nextEvent] = await Promise.all([
     guidedCareer && isCareerFeatureEnabled("dispatcher") ? getCareerDispatchSuggestions(pilot) : Promise.resolve(null),
-    advancedOperations ? getActivePilotBooking(pilot.id) : Promise.resolve(null),
+    advancedOperations || operationsBoard ? getActivePilotBooking(pilot.id) : Promise.resolve(null),
     advancedOperations || passportPreview || fleetPreview || pathsPreview || (guidedCareer && isCareerFeatureEnabled("debrief")) ? listPilotPireps(pilot.id) : Promise.resolve([]),
     mentoringPreview ? getPilotMentoringStatus(pilot.id) : Promise.resolve(null),
     mentoringPreview ? getPilotMentoringExperience(pilot.id) : Promise.resolve(null),
     mentoringPreview ? listMentoringFlightReviews({ mentorPilotId: pilot.id }) : Promise.resolve([]),
     pathsPreview && !pilot.careerExperience.activeRotation ? getCareerRotationChoices(pilot) : Promise.resolve([]),
+    operationsBoard ? getServiceStatusState().then((status) => overallServiceStatus(status)) : Promise.resolve(null),
+    operationsBoard ? getEvents().then((events) => events.filter((event) => event.published && event.registrationOpen && event.date >= osloCalendarDate()).sort((left, right) => `${left.date}T${left.startUtc}`.localeCompare(`${right.date}T${right.startUtc}`))[0] ?? null) : Promise.resolve(null),
   ]);
   const careerPathProgress = pathsPreview ? getCareerPathProgress(pilot.careerExperience.careerPath, recentPireps) : null;
   const rotationProgress = pathsPreview && pilot.careerExperience.activeRotation ? getCareerRotationProgress(pilot.careerExperience.activeRotation, recentPireps) : null;
@@ -78,7 +90,7 @@ export default async function CareerPage() {
     const learner = await getPilotById(review.learnerPilotId);
     return flight && learner ? { id: review.id, learnerName: learner.name, flightNumber: flight.flightNumber, from: flight.from, to: flight.to, aircraft: flight.aircraft, completedAt: flight.completedAt, blockMinutes: flight.blockMinutes, distanceNm: flight.distanceNm, fuelUsedKg: flight.fuelUsedKg, staffReviewedAt: review.staffReviewedAt } : null;
   }));
-  const activeFlightPlan = activeBooking && advancedOperations ? await getPilotFlightPlan(activeBooking.id, pilot.id) : null;
+  const activeFlightPlan = activeBooking && (advancedOperations || operationsBoard) ? await getPilotFlightPlan(activeBooking.id, pilot.id) : null;
   const [fleetAircraft, fleetAssignment] = fleetPreview ? await Promise.all([listFleetAircraft().catch(() => []), getActiveFleetFlightAssignmentForPilot({ subject: `bav:${pilot.id}`, displayName: pilot.name, fleetRole: "pilot" }).catch(() => null)]) : [[], null];
   return <><SiteHeader /><main className="career-page"><div className="career-shell">
     <nav className="career-breadcrumbs"><Link href="/account">Pilot account</Link><span>›</span><strong>Career & qualifications</strong></nav>
@@ -91,6 +103,7 @@ export default async function CareerPage() {
       <article className="career-card career-card-wide career-module career-module-service"><div className="career-card-head"><div><span>SENIORITY &amp; RECOGNITION · LIVE RECORD</span><h2>Your BAV service record</h2></div><Link href="/account/career/passport">Open career passport →</Link></div><p>Your career record is built from the same accepted PIREPs, awards and qualifications used everywhere else in BAV. It is a virtual-airline history only and never represents real-world employment, seniority or certification.</p><section className="career-service-grid" aria-label="Virtual BAV service record"><div><span>Member since</span><strong>{date(pilot.createdAt)}</strong><small>{serviceLength(pilot.createdAt)} virtual service</small></div><div><span>Accepted sectors</span><strong>{pilot.flights.toLocaleString("en-GB")}</strong><small>{pilot.hours.toFixed(1)} career block hours</small></div><div><span>Recognition</span><strong>{pilot.awards.length}</strong><small>{pilot.awards.length === 1 ? "career award" : "career awards"}</small></div><div><span>Current standing</span><strong>{pilot.rank}</strong><small>{issued.size} active virtual qualifications</small></div></section>{recentAwards.length ? <section className="career-service-awards" aria-label="Recent career recognition"><span>RECENT RECOGNITION</span>{recentAwards.map(({ award, detail }) => <div key={`${award.id}-${award.awardedAt}`}><strong>{detail.title}</strong><small>{date(award.awardedAt)} · {detail.description}</small></div>)}</section> : <p className="career-service-empty">Complete and have your first BAV PIREP accepted to begin your recognition history.</p>}</article>
       {isCareerFeatureEnabled("experience") ? <CareerExperienceForm initialPreferences={pilot.careerExperience} /> : null}
       {isCareerFeatureEnabled("experience") ? <CareerModeGuide preferences={pilot.careerExperience} /> : null}
+      {operationsBoard ? <CareerOperationsBoard dispatch={dispatchSuggestions} booking={activeBooking} flightPlan={activeFlightPlan} activeRotation={pilot.careerExperience.activeRotation} serviceStatus={serviceStatus} nextEvent={nextEvent} /> : null}
       {dispatchSuggestions ? <CareerDispatcher plan={dispatchSuggestions} hub={pilot.hub} /> : null}
       {pathsPreview && careerPathProgress ? <CareerPathForm initialPath={pilot.careerExperience.careerPath} /> : null}
       {pathsPreview ? <CareerRotation activeRotation={pilot.careerExperience.activeRotation} progress={rotationProgress} choices={rotationChoices} /> : null}

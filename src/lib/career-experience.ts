@@ -48,7 +48,7 @@ export type CareerExperiencePreferences = {
   updatedAt: string;
 };
 
-export type CareerFeature = "experience" | "dispatcher" | "debrief" | "fleet" | "rosters" | "advanced_operations" | "mentoring" | "passport" | "paths";
+export type CareerFeature = "experience" | "dispatcher" | "debrief" | "fleet" | "rosters" | "advanced_operations" | "operations_board" | "mentoring" | "passport" | "paths";
 export type CareerFeatureState = "disabled" | "staff" | "enabled";
 
 const FEATURE_ENV: Record<CareerFeature, string> = {
@@ -58,6 +58,7 @@ const FEATURE_ENV: Record<CareerFeature, string> = {
   fleet: "BAV_FEATURE_CAREER_FLEET",
   rosters: "BAV_FEATURE_CAREER_ROSTERS",
   advanced_operations: "BAV_FEATURE_CAREER_ADVANCED_OPERATIONS",
+  operations_board: "BAV_FEATURE_CAREER_OPERATIONS_BOARD",
   mentoring: "BAV_FEATURE_CAREER_MENTORING",
   passport: "BAV_FEATURE_CAREER_PASSPORT",
   paths: "BAV_FEATURE_CAREER_PATHS",
