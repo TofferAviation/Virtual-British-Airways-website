@@ -7,6 +7,7 @@ import "./portal.css";
 import "./pages.css";
 import "./branding.css";
 import "./account-v2.css";
+import "./passport-studio.css";
 import "./discover.css";
 import "./mega-menu.css";
 import "./home-center.css";
