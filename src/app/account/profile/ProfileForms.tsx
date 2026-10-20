@@ -7,13 +7,14 @@ import { AccountBackgroundPicker } from "@/components/AccountBackgroundPicker";
 import { ProfileImagePicker } from "@/components/ProfileImagePicker";
 import { BAV_HUBS } from "@/lib/hubs";
 import { PASSPORT_NATIONALITIES } from "@/lib/passport-nationalities";
+import { PASSPORT_STUDIO_DESIGNS, PASSPORT_STUDIO_MATERIALS, PASSPORT_STUDIO_TINTS, PASSPORT_STUDIO_WEARS, type PassportStudio } from "@/lib/passport-studio";
 import styles from "./ember-download.module.css";
 import hubStyles from "./hub-picker.module.css";
 import rulesStyles from "./pilot-rules.module.css";
 
 const EMBER_INSTALLER_URL = "https://github.com/TofferAviation/FreeFlight-Cabin-Controls/releases/latest/download/Ember_Systems.exe";
 
-async function patchProfile(payload: Record<string, string | null>) {
+async function patchProfile(payload: Record<string, string | null | PassportStudio>) {
   const response = await fetch("/api/pilot/profile", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -25,7 +26,7 @@ async function patchProfile(payload: Record<string, string | null>) {
   return body;
 }
 
-export function ProfileForms({ name, email, hub, passportNationality, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; passportNationality: string; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
+export function ProfileForms({ name, email, hub, passportNationality, passportStudio, simbriefPilotId, profileImage: initialProfileImage, accountBackground: initialAccountBackground, pilotRulesAcceptedAt, pilotRulesVersion, mustChangePassword }: { name: string; email: string; hub: string; passportNationality: string; passportStudio: PassportStudio; simbriefPilotId: string; profileImage: string | null; accountBackground: string | null; pilotRulesAcceptedAt: string | null; pilotRulesVersion: string | null; mustChangePassword: boolean }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -78,7 +79,7 @@ export function ProfileForms({ name, email, hub, passportNationality, simbriefPi
     setSavingProfile(true);
     setProfileMessage("");
     try {
-      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), profileImage });
+      await patchProfile({ name: String(form.get("name") || ""), email: String(form.get("email") || ""), hub: String(form.get("hub") || ""), passportNationality: String(form.get("passportNationality") || ""), passportStudio: { design: String(form.get("passportStudioDesign") || ""), material: String(form.get("passportStudioMaterial") || ""), tint: String(form.get("passportStudioTint") || ""), wear: String(form.get("passportStudioWear") || "") }, profileImage });
       setProfileMessage("Profile updated successfully.");
       router.refresh();
     } catch (error) {
@@ -133,7 +134,7 @@ export function ProfileForms({ name, email, hub, passportNationality, simbriefPi
         <label>Full name<input name="name" defaultValue={name} autoComplete="name" required /></label>
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
         <label>Home hub<select className={hubStyles.select} name="hub" defaultValue={hub}>{BAV_HUBS.map((item) => <option key={item.code} value={item.name}>{item.name} ({item.code}) — {item.role}</option>)}</select><small className={hubStyles.hint}>This sets the default departure hub on the BAV flight search. You can change it whenever you like.</small></label>
-        <label>Virtual passport nationality<select className={hubStyles.select} name="passportNationality" defaultValue={passportNationality}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small className={hubStyles.hint}>This changes your virtual passport cover and identity page. It is not identity verification.</small></label>
+        <label>Virtual passport nationality<select className={hubStyles.select} name="passportNationality" defaultValue={passportNationality}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small className={hubStyles.hint}>A starting influence for your BAV travel journal. It is not identity verification.</small></label><div className="pilot-passport-studio"><span className="pilot-profile-kicker">PASSPORT STUDIO</span><h3>Design your BAV travel journal</h3><p>Choose a cover style, material, tint and amount of travel wear. This is a fictional keepsake, never an official travel document.</p><div className="pilot-passport-studio-grid"><label>Cover design<select className={hubStyles.select} name="passportStudioDesign" defaultValue={passportStudio.design}>{PASSPORT_STUDIO_DESIGNS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Material<select className={hubStyles.select} name="passportStudioMaterial" defaultValue={passportStudio.material}>{PASSPORT_STUDIO_MATERIALS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Colour tint<select className={hubStyles.select} name="passportStudioTint" defaultValue={passportStudio.tint}>{PASSPORT_STUDIO_TINTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Travel wear<select className={hubStyles.select} name="passportStudioWear" defaultValue={passportStudio.wear}>{PASSPORT_STUDIO_WEARS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div></div>
         <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
         <AccountBackgroundPicker value={accountBackground} onChange={saveAccountBackground} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
