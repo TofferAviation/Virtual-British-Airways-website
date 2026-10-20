@@ -42,6 +42,12 @@ function PresentationVideo({ stream }: { stream: MediaStream }) {
   return <video ref={ref} className="briefing-presentation-video" autoPlay muted playsInline />;
 }
 
+function PilotPortrait({ image, name }: { image: string | null; name: string }) {
+  const [failed, setFailed] = useState(!image);
+  if (failed || !image) return <i>{initials(name)}</i>;
+  return <img src={image} alt="" onError={() => setFailed(true)} />;
+}
+
 export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const voice = useCrewVoice();
   const [selectedSeat, setSelectedSeat] = useState(1);
@@ -108,7 +114,7 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
           const unavailable = Boolean(occupant && !isOurs);
           const selected = !isThisRoom && selectedSeat === seatIndex;
           return <button key={seatIndex} type="button" className={`briefing-seat ${seatPosition(seatIndex)}${selected ? " selected" : ""}${occupant ? " occupied" : ""}${isOurs ? " yours" : ""}`} aria-label={seatLabel(seatIndex, occupant)} disabled={unavailable || isThisRoom} onClick={() => setSelectedSeat(seatIndex)}>
-            <span className="briefing-seat-name">{occupant ? <>{occupant.profileImage ? <img src={occupant.profileImage} alt="" /> : <i>{initials(occupant.name)}</i>}<span><b>{isOurs ? "You" : occupant.name}</b><small>{occupant.pilotNumber}</small><em>● Connected</em></span><strong aria-hidden="true">⌁</strong></> : <><i>{seatIndex}</i><span><b>{selected ? "Your chair" : "Open chair"}</b><small>{selected ? "Ready to join" : "Select this seat"}</small><em>○ Available</em></span><strong aria-hidden="true">＋</strong></>}</span>
+            <span className="briefing-seat-name">{occupant ? <><PilotPortrait image={occupant.profileImage} name={occupant.name} /><span><b>{isOurs ? "You" : occupant.name}</b><small>{occupant.pilotNumber}</small><em>● Connected</em></span><strong aria-hidden="true">⌁</strong></> : <><i>{seatIndex}</i><span><b>{selected ? "Your chair" : "Open chair"}</b><small>{selected ? "Ready to join" : "Select this seat"}</small><em>○ Available</em></span><strong aria-hidden="true">＋</strong></>}</span>
           </button>;
         })}
       </div>
