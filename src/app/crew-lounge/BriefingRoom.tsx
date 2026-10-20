@@ -121,7 +121,9 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
       </div>
       <div className="briefing-room-capacity"><span className={isThisRoom ? "live" : ""} aria-hidden="true" />{participants.length}/{room.maxParticipants} in room</div>
       <div className="briefing-room-actions">
-        {isPic && !plan ? <button type="button" onClick={() => void publishBriefing()} disabled={publishingBriefing}>{publishingBriefing ? "Publishing…" : "Publish my booking"}</button> : null}
+        {!sharedBriefing ? <span>Awaiting staff PIC assignment</span> : null}
+        {isPic ? <button type="button" onClick={() => void publishBriefing()} disabled={publishingBriefing}>{publishingBriefing ? "Publishing…" : plan ? "Update shared booking" : "Publish my booking"}</button> : null}
+        {sharedBriefing && !plan && !isPic ? <span>Waiting for the PIC to publish a flight</span> : null}
         {plan ? <a href={`/book?from=${encodeURIComponent(plan.from)}&to=${encodeURIComponent(plan.to)}&date=${encodeURIComponent(plan.date)}&flight=${encodeURIComponent(plan.flightNumber)}`}>Book {plan.flightNumber}</a> : null}
       </div>
     </header>
