@@ -726,7 +726,7 @@ export async function registerPilot(input: { name: string; email: string; passwo
   const account: PilotAccount = {
     id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(password), status: "active",
     authVersion: 1,
-    createdAt: now, lastLoginAt: now, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub(input.hub), passportNationality: normalizePassportNationality(input.passportNationality), tier: "Blue",
+    createdAt: now, lastLoginAt: now, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub(input.hub), passportNationality: normalizePassportNationality(input.passportNationality), passportStudio: normalizePassportStudio(null), tier: "Blue",
     points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0, heathrowDepartures: 0,
     averageLanding: null, bestLanding: null, onTime: 100, streak: 0,
     simbriefPilotId: null,
@@ -778,7 +778,7 @@ export async function createClosedBetaPilot(input: { name: string; email: string
     account = {
       id: randomUUID(), pilotNumber, email, name, passwordHash: hashPilotPassword(temporaryPassword), status: "active",
       authVersion: 1,
-      createdAt: now, lastLoginAt: null, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub("LHR"), passportNationality: normalizePassportNationality(null), tier: "Blue",
+      createdAt: now, lastLoginAt: null, rank: "Cadet", rankOverride: null, typeRatings: [], hub: normalizeBavHub("LHR"), passportNationality: normalizePassportNationality(null), passportStudio: normalizePassportStudio(null), tier: "Blue",
       points: 0, tierPoints: 0, lifetimeTierPoints: 0, flights: 0, hours: 0, distanceNm: 0, heathrowDepartures: 0,
       averageLanding: null, bestLanding: null, onTime: 100, streak: 0, simbriefPilotId: null, profileImage: null, accountBackground: null,
       pilotRulesAcceptedAt: null, pilotRulesVersion: null, betaAccess: true, mustChangePassword: true, awards: [],
