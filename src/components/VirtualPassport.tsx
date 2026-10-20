@@ -3,12 +3,13 @@
 import { useState, type CSSProperties } from "react";
 import type { PilotPirep } from "@/lib/pilot-operations-store";
 import { passportTheme, type PassportNationality } from "@/lib/passport-nationalities";
+import type { PassportStudio } from "@/lib/passport-studio";
 import { virtualPassportStamps } from "@/lib/virtual-passport";
 
 const STAMPS_PER_PAGE = 4;
 type PageTurn = { direction: "forward" | "back"; nextPage: number };
 
-export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }: { pireps: readonly PilotPirep[]; pilotName: string; pilotNumber: string; nationality: PassportNationality }) {
+export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, studio }: { pireps: readonly PilotPirep[]; pilotName: string; pilotNumber: string; nationality: PassportNationality; studio: PassportStudio }) {
   const stamps = virtualPassportStamps(pireps);
   const pages = Array.from({ length: Math.max(1, Math.ceil(stamps.length / STAMPS_PER_PAGE)) }, (_, index) => stamps.slice(index * STAMPS_PER_PAGE, (index + 1) * STAMPS_PER_PAGE));
   const theme = passportTheme(nationality);
@@ -16,6 +17,7 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }:
   const [pageIndex, setPageIndex] = useState(0);
   const [turn, setTurn] = useState<PageTurn | null>(null);
   const palette = { "--passport-cover": theme.cover, "--passport-edge": theme.edge, "--passport-gold": theme.ink } as CSSProperties;
+  const studioClass = `passport-design-${studio.design} passport-material-${studio.material} passport-tint-${studio.tint} passport-wear-${studio.wear}`;
   const page = pages[pageIndex];
 
   function turnPage(nextPage: number) {
@@ -25,23 +27,23 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality }:
     window.setTimeout(() => setPageIndex(nextPage), 290);
   }
 
-  if (!isOpen) return <section className="account-v2-passport passport-real-shell" style={palette} aria-labelledby="passport-heading">
+  if (!isOpen) return <section className={"account-v2-passport passport-real-shell " + studioClass} style={palette} aria-labelledby="passport-heading">
     <button className="passport-real-cover" type="button" onClick={() => setIsOpen(true)} aria-describedby="passport-open-help">
       <span className="passport-real-flag" aria-hidden="true">{theme.flag}</span>
       <span className="passport-real-cover-title" id="passport-heading">{nationality.toUpperCase()}</span>
-      <span className="passport-real-cover-subtitle">VIRTUAL PASSPORT</span>
+      <span className="passport-real-cover-subtitle">BAV TRAVEL JOURNAL</span>
       <span className="passport-real-cover-rule" aria-hidden="true" />
-      <span className="passport-real-cover-caption">BRITISH AIRWAYS VIRTUAL</span>
+      <span className="passport-real-cover-caption">PERSONALISED FOR VIRTUAL FLYING</span>
     </button>
     <p className="passport-real-open-help" id="passport-open-help">Open your virtual passport · {stamps.length} recorded arrival{stamps.length === 1 ? "" : "s"}</p>
   </section>;
 
-  return <section className="account-v2-passport passport-real-shell is-open" style={palette} aria-labelledby="passport-heading">
-    <div className="passport-real-toolbar"><div><p>BRITISH AIRWAYS VIRTUAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">Your virtual passport</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
+  return <section className={"account-v2-passport passport-real-shell is-open " + studioClass} style={palette} aria-labelledby="passport-heading">
+    <div className="passport-real-toolbar"><div><p>BAV TRAVEL JOURNAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">Your virtual passport</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
     <div className="passport-real-book">
       <section className="passport-real-identity">
         <span className="passport-real-watermark" aria-hidden="true">{theme.flag}</span>
-        <p className="passport-real-page-label">VIRTUAL PILOT IDENTITY</p>
+        <p className="passport-real-page-label">PILOT TRAVEL RECORD</p>
         <div className="passport-real-photo" aria-hidden="true">{pilotName.slice(0, 1).toUpperCase()}</div>
         <dl><div><dt>PILOT</dt><dd>{pilotName}</dd></div><div><dt>BAV PILOT ID</dt><dd>{pilotNumber}</dd></div><div><dt>PASSPORT NATIONALITY</dt><dd>{nationality}</dd></div></dl>
         <small>Created for flight-simulation records only.</small>
