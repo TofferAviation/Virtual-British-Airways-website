@@ -6,7 +6,8 @@ import { passportTheme, type PassportNationality } from "@/lib/passport-national
 import type { PassportStudio } from "@/lib/passport-studio";
 import { virtualPassportStamps, type VirtualPassportStamp } from "@/lib/virtual-passport";
 
-const STAMPS_PER_SPREAD = 8;
+const STAMPS_PER_PAGE = 6;
+const STAMPS_PER_SPREAD = STAMPS_PER_PAGE * 2;
 type PageTurn = { direction: "forward" | "back"; nextPage: number };
 
 function PassportLayers({ studio }: { studio: PassportStudio }) {
@@ -62,8 +63,8 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
   const studioClass = `passport-design-${studio.design} passport-material-${studio.material} passport-tint-${studio.tint} passport-font-${studio.font} passport-motif-${studio.motif} passport-foil-${studio.foil} passport-wear-${studio.wear}`;
   const isMemberSpread = spreadIndex === 0;
   const currentSpread = spreads[Math.max(0, spreadIndex - 1)];
-  const leftStamps = currentSpread.slice(0, 4);
-  const rightStamps = currentSpread.slice(4, 8);
+  const leftStamps = currentSpread.slice(0, STAMPS_PER_PAGE);
+  const rightStamps = currentSpread.slice(STAMPS_PER_PAGE, STAMPS_PER_SPREAD);
 
   function turnPage(nextPage: number) {
     if (turn || nextPage < 0 || nextPage > spreads.length) return;
