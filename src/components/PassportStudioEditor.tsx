@@ -1,23 +1,16 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
-import { DEFAULT_PASSPORT_STUDIO, PASSPORT_STUDIO_DESIGNS, PASSPORT_STUDIO_FOILS, PASSPORT_STUDIO_FONTS, PASSPORT_STUDIO_MATERIALS, PASSPORT_STUDIO_MOTIFS, PASSPORT_STUDIO_WEARS, type PassportStudio } from "@/lib/passport-studio";
+import { DEFAULT_PASSPORT_STUDIO, PASSPORT_STUDIO_FONTS, PASSPORT_STUDIO_INTERIORS, PASSPORT_STUDIO_MATERIALS, PASSPORT_STUDIO_MOTIFS, PASSPORT_STUDIO_WEARS, type PassportStudio, type PassportStudioLayer, type PassportStudioSurface } from "@/lib/passport-studio";
 
 const COLOUR_LIBRARY = [
-  { name: "Midnight", cover: "#102C5F", accent: "#E5BF60" },
-  { name: "Oxblood", cover: "#6B1F36", accent: "#EDC77C" },
-  { name: "Emerald", cover: "#175C4B", accent: "#EAD085" },
-  { name: "Sapphire", cover: "#194F92", accent: "#DBE9FF" },
-  { name: "Silver mist", cover: "#76818D", accent: "#F4F0DF" },
+  { name: "Midnight", cover: "#102C5F", accent: "#E5BF60" }, { name: "Oxblood", cover: "#6B1F36", accent: "#EDC77C" },
+  { name: "Emerald", cover: "#175C4B", accent: "#EAD085" }, { name: "Sapphire", cover: "#194F92", accent: "#DBE9FF" },
 ] as const;
-
-const SURFACE_LIBRARY = [
-  { name: "Quiet", texture: 18, sheen: 14, note: "restrained" },
-  { name: "Tactile", texture: 48, sheen: 35, note: "balanced" },
-  { name: "Lacquered", texture: 28, sheen: 82, note: "high sheen" },
-  { name: "Rugged", texture: 83, sheen: 18, note: "field worn" },
-] as const;
+const SURFACE_LIBRARY = [{ name: "Quiet", texture: 18, sheen: 14 }, { name: "Tactile", texture: 48, sheen: 35 }, { name: "Lacquered", texture: 28, sheen: 82 }, { name: "Rugged", texture: 83, sheen: 18 }] as const;
+type DragState = { id: string } | null;
+const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, Math.round(value)));
 
 async function saveStudio(passportStudio: PassportStudio) {
   const response = await fetch("/api/pilot/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ passportStudio }) });
@@ -27,50 +20,60 @@ async function saveStudio(passportStudio: PassportStudio) {
 
 export function PassportStudioEditor({ initialStudio, pilotName }: { initialStudio: PassportStudio; pilotName: string }) {
   const [studio, setStudio] = useState(initialStudio);
+  const [surface, setSurface] = useState<PassportStudioSurface>("cover");
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState>(null);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const layers = useMemo(() => studio.layers.filter((layer) => layer.surface === surface), [studio.layers, surface]);
+  const selectedLayer = studio.layers.find((layer) => layer.id === selectedLayerId) ?? null;
   const previewStyle = { "--studio-editor-cover": studio.coverColor, "--studio-editor-accent": studio.accentColor, "--studio-editor-texture": String(studio.texture / 100), "--studio-editor-sheen": String(studio.sheen / 100) } as CSSProperties;
-  const previewClass = `passport-studio-canvas passport-material-${studio.material} passport-design-${studio.design} passport-font-${studio.font} passport-motif-${studio.motif} passport-foil-${studio.foil} passport-wear-${studio.wear}`;
+  const previewClass = `passport-studio-canvas ${surface === "interior" ? `is-interior interior-${studio.interior}` : ""} passport-material-${studio.material} passport-font-${studio.font} passport-motif-${studio.motif} passport-foil-${studio.foil} passport-wear-${studio.wear}`;
 
-  function update<K extends keyof PassportStudio>(key: K, value: PassportStudio[K]) {
-    setStudio((current) => ({ ...current, [key]: value }));
+  function update<K extends keyof PassportStudio>(key: K, value: PassportStudio[K]) { setStudio((current) => ({ ...current, [key]: value })); }
+  function patchLayer(id: string, patch: Partial<PassportStudioLayer>) { setStudio((current) => ({ ...current, layers: current.layers.map((layer) => layer.id === id ? { ...layer, ...patch } : layer) })); }
+  function addLayer(kind: PassportStudioLayer["kind"], value = "") {
+    const id = `layer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const layer: PassportStudioLayer = { id, surface, kind, value: kind === "text" ? "YOUR TEXT" : value, color: surface === "cover" ? studio.accentColor : "#243A5C", outline: studio.accentColor, outlineWidth: kind === "frame" ? 2 : 0, x: 50, y: 50, width: kind === "photo" ? 30 : kind === "frame" ? 66 : 44, height: kind === "photo" ? 42 : kind === "frame" ? 44 : 16 };
+    setStudio((current) => ({ ...current, layers: [...current.layers, layer] })); setSelectedLayerId(id);
   }
-
-  async function save() {
-    setSaving(true);
-    setMessage("");
-    try {
-      await saveStudio(studio);
-      setMessage("Saved. Your Virtual Passport now uses this cover.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save Passport Studio.");
-    } finally {
-      setSaving(false);
-    }
+  function removeLayer() { if (!selectedLayer) return; setStudio((current) => ({ ...current, layers: current.layers.filter((layer) => layer.id !== selectedLayer.id) })); setSelectedLayerId(null); }
+  function moveSelected(x: number, y: number) { if (selectedLayer) patchLayer(selectedLayer.id, { x: clamp(selectedLayer.x + x, 0, 100), y: clamp(selectedLayer.y + y, 0, 100) }); }
+  function resizeSelected(amount: number) { if (selectedLayer) patchLayer(selectedLayer.id, { width: clamp(selectedLayer.width + amount, 10, 90), height: clamp(selectedLayer.height + amount, 8, 90) }); }
+  function beginDrag(event: ReactPointerEvent<HTMLButtonElement>, id: string) { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); setSelectedLayerId(id); setDrag({ id }); }
+  function moveDrag(event: ReactPointerEvent<HTMLDivElement>) { if (!drag) return; const rect = event.currentTarget.getBoundingClientRect(); patchLayer(drag.id, { x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100), y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100) }); }
+  function uploadPhoto(file: File | undefined) {
+    if (!file) return;
+    if (!/image\/(png|jpeg|webp)/.test(file.type) || file.size > 280000) { setMessage("Choose a PNG, JPEG or WebP image under 280 KB."); return; }
+    const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") { addLayer("photo", reader.result); setMessage("Photo added. Drag it on the canvas to position it."); } }; reader.readAsDataURL(file);
   }
+  async function save() { setSaving(true); setMessage(""); try { await saveStudio(studio); setMessage("Saved. Your cover and interior layout are now live in your Virtual Passport."); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save Passport Studio."); } finally { setSaving(false); } }
 
   return <main className="passport-studio-page">
     <header className="passport-studio-topbar"><Link href="/account/profile">← Account settings</Link><span>PASSPORT STUDIO</span><Link href="/account/passport">View passport ↗</Link></header>
-    <section className="passport-studio-hero"><div><span>PERSONAL BAV TRAVEL JOURNAL</span><h1>Build a cover that feels like yours.</h1><p>{pilotName}, select from the material library, combine finishes and make changes directly on the live cover.</p></div><button type="button" onClick={() => setStudio(DEFAULT_PASSPORT_STUDIO)}>Reset to studio default</button></section>
-    <div className="passport-studio-layout">
-      <aside className="passport-studio-library" aria-label="Passport material library">
-        <div className="passport-studio-panel-heading"><span>01</span><div><strong>Material library</strong><small>Apply a physical base</small></div></div>
-        <div className="passport-studio-tile-grid">{PASSPORT_STUDIO_MATERIALS.map((item) => <button key={item.value} type="button" className={`passport-studio-library-tile material-${item.value}${studio.material === item.value ? " selected" : ""}`} onClick={() => update("material", item.value)} aria-pressed={studio.material === item.value}><i /><strong>{item.label}</strong></button>)}</div>
-        <div className="passport-studio-panel-heading"><span>02</span><div><strong>Colour library</strong><small>Start with a palette</small></div></div>
-        <div className="passport-studio-colour-library">{COLOUR_LIBRARY.map((colour) => <button key={colour.name} type="button" className={studio.coverColor === colour.cover ? "selected" : ""} style={{ "--cover": colour.cover, "--accent": colour.accent } as CSSProperties} onClick={() => setStudio((current) => ({ ...current, coverColor: colour.cover, accentColor: colour.accent }))}><i /><span>{colour.name}</span></button>)}</div>
+    <section className="passport-studio-hero"><div><span>PERSONAL BAV TRAVEL JOURNAL</span><h1>Design every page, your way.</h1><p>{pilotName}, build your cover or open the inside pages. Add text, frames and up to three private photos, then drag each item directly into place.</p></div><button type="button" onClick={() => { setStudio(DEFAULT_PASSPORT_STUDIO); setSelectedLayerId(null); }}>Reset to studio default</button></section>
+    <nav className="passport-studio-surface-tabs" aria-label="Passport surface"><button type="button" className={surface === "cover" ? "selected" : ""} onClick={() => { setSurface("cover"); setSelectedLayerId(null); }}>Cover</button><button type="button" className={surface === "interior" ? "selected" : ""} onClick={() => { setSurface("interior"); setSelectedLayerId(null); }}>Inside pages</button></nav>
+    <div className="passport-studio-layout passport-studio-layout-expanded">
+      <aside className="passport-studio-library" aria-label="Studio library">
+        <div className="passport-studio-panel-heading"><span>01</span><div><strong>Layers</strong><small>Add and arrange your own elements</small></div></div>
+        <div className="passport-studio-add-tools"><button type="button" onClick={() => addLayer("text")}>＋ Add text</button><button type="button" onClick={() => addLayer("frame")}>□ Add frame</button><label>▣ Upload photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadPhoto(event.target.files?.[0])} /></label></div>
+        <div className="passport-studio-layer-list">{layers.length ? layers.map((layer, index) => <button key={layer.id} type="button" className={selectedLayer?.id === layer.id ? "selected" : ""} onClick={() => setSelectedLayerId(layer.id)}><span>{layer.kind === "photo" ? "PHOTO" : layer.kind === "frame" ? "FRAME" : "TEXT"}</span><strong>{layer.kind === "text" ? layer.value || "Untitled text" : `${layer.kind[0].toUpperCase()}${layer.kind.slice(1)} ${index + 1}`}</strong></button>) : <p>Start with a text label, frame or photo.</p>}</div>
+        {surface === "cover" ? <><div className="passport-studio-panel-heading"><span>02</span><div><strong>Material library</strong><small>Apply a physical base</small></div></div><div className="passport-studio-tile-grid">{PASSPORT_STUDIO_MATERIALS.map((item) => <button key={item.value} type="button" className={`passport-studio-library-tile material-${item.value}${studio.material === item.value ? " selected" : ""}`} onClick={() => update("material", item.value)}><i /><strong>{item.label}</strong></button>)}</div></> : <><div className="passport-studio-panel-heading"><span>02</span><div><strong>Interior paper</strong><small>Give each page a base</small></div></div><div className="passport-studio-choice-list">{PASSPORT_STUDIO_INTERIORS.map((item) => <button key={item.value} type="button" className={studio.interior === item.value ? "selected" : ""} onClick={() => update("interior", item.value)}>{item.label}</button>)}</div></>}
       </aside>
-      <section className="passport-studio-stage" aria-label="Live cover preview">
-        <div className="passport-studio-stage-head"><span>LIVE REVIEW</span><small>Changes are not saved until you apply them.</small></div>
-        <div className={previewClass} style={previewStyle}><span className="passport-studio-canvas-monogram">{studio.monogram || "BAV"}</span><strong>{studio.title || "BAV FLIGHT PASSPORT"}</strong><span>BAV TRAVEL JOURNAL</span><i /><small>PERSONALISED FOR VIRTUAL FLYING</small></div>
-        <div className="passport-studio-name-controls"><label>Cover title<input value={studio.title} maxLength={32} onChange={(event) => update("title", event.target.value)} /></label><label>Monogram<input value={studio.monogram} maxLength={5} onChange={(event) => update("monogram", event.target.value.toUpperCase())} /></label></div>
+      <section className="passport-studio-stage" aria-label="Live passport editor">
+        <div className="passport-studio-stage-head"><span>LIVE CANVAS · {surface === "cover" ? "COVER" : "INSIDE PAGE"}</span><small>Click and drag an element to move it.</small></div>
+        <div className={previewClass} style={previewStyle} onPointerMove={moveDrag} onPointerUp={() => setDrag(null)} onPointerCancel={() => setDrag(null)}>
+          {surface === "cover" ? <div className="passport-studio-cover-base"><span className="passport-studio-canvas-monogram">{studio.monogram || "BAV"}</span><strong>{studio.title || "BAV FLIGHT PASSPORT"}</strong><span>BAV TRAVEL JOURNAL</span><i /><small>PERSONALISED FOR VIRTUAL FLYING</small></div> : <div className="passport-studio-interior-base"><span>PILOT TRAVEL RECORD</span><strong>YOUR FLIGHT STORY</strong><i /><small>Personalise this inside page with your own layout.</small></div>}
+          {layers.map((layer) => <button key={layer.id} type="button" className={`passport-studio-layer passport-studio-layer-${layer.kind}${selectedLayer?.id === layer.id ? " selected" : ""}`} style={{ left: `${layer.x}%`, top: `${layer.y}%`, width: `${layer.width}%`, height: `${layer.height}%`, color: layer.color, borderColor: layer.outline, borderWidth: layer.outlineWidth }} onPointerDown={(event) => beginDrag(event, layer.id)} onClick={() => setSelectedLayerId(layer.id)} aria-label={`Edit ${layer.kind}`}>{layer.kind === "photo" ? <img src={layer.value} alt="Personal passport upload" draggable={false} /> : layer.kind === "text" ? layer.value : null}</button>)}
+        </div>
+        {surface === "cover" ? <div className="passport-studio-name-controls"><label>Cover title<input value={studio.title} maxLength={32} onChange={(event) => update("title", event.target.value)} /></label><label>Monogram<input value={studio.monogram} maxLength={5} onChange={(event) => update("monogram", event.target.value.toUpperCase())} /></label></div> : null}
       </section>
-      <aside className="passport-studio-library passport-studio-finishing" aria-label="Passport finishing tools">
-        <div className="passport-studio-panel-heading"><span>03</span><div><strong>Cover language</strong><small>Typography and motif</small></div></div>
-        <div className="passport-studio-choice-list"><div><span>Typeface</span>{PASSPORT_STUDIO_FONTS.map((item) => <button key={item.value} type="button" className={studio.font === item.value ? "selected" : ""} onClick={() => update("font", item.value)}>{item.label}</button>)}</div><div><span>Motif</span>{PASSPORT_STUDIO_MOTIFS.map((item) => <button key={item.value} type="button" className={studio.motif === item.value ? "selected" : ""} onClick={() => update("motif", item.value)}>{item.label}</button>)}</div></div>
-        <div className="passport-studio-panel-heading"><span>04</span><div><strong>Finishing bench</strong><small>Foil, surface and wear</small></div></div>
-        <div className="passport-studio-choice-list"><div><span>Foil</span>{PASSPORT_STUDIO_FOILS.map((item) => <button key={item.value} type="button" className={studio.foil === item.value ? "selected" : ""} onClick={() => update("foil", item.value)}>{item.label}</button>)}</div><div><span>Wear</span>{PASSPORT_STUDIO_WEARS.map((item) => <button key={item.value} type="button" className={studio.wear === item.value ? "selected" : ""} onClick={() => update("wear", item.value)}>{item.label}</button>)}</div></div>
+      <aside className="passport-studio-library passport-studio-finishing" aria-label="Layer properties">
+        <div className="passport-studio-panel-heading"><span>03</span><div><strong>{selectedLayer ? "Element inspector" : "Design controls"}</strong><small>{selectedLayer ? "Edit the selected element" : "Select an element on the canvas"}</small></div></div>
+        {selectedLayer ? <div className="passport-studio-inspector">{selectedLayer.kind === "text" ? <label>Text<input value={selectedLayer.value} maxLength={48} onChange={(event) => patchLayer(selectedLayer.id, { value: event.target.value })} /></label> : null}<div className="passport-studio-colour-fields"><label>Fill<input type="color" value={selectedLayer.color} onChange={(event) => patchLayer(selectedLayer.id, { color: event.target.value.toUpperCase() })} /></label><label>Outline<input type="color" value={selectedLayer.outline} onChange={(event) => patchLayer(selectedLayer.id, { outline: event.target.value.toUpperCase() })} /></label></div><div className="passport-studio-inspector-row"><span>Outline</span>{[0, 1, 3, 6].map((width) => <button key={width} type="button" className={selectedLayer.outlineWidth === width ? "selected" : ""} onClick={() => patchLayer(selectedLayer.id, { outlineWidth: width })}>{width === 0 ? "None" : `${width}px`}</button>)}</div><div className="passport-studio-nudge"><span>Position</span><button type="button" onClick={() => moveSelected(0, -3)}>↑</button><button type="button" onClick={() => moveSelected(-3, 0)}>←</button><button type="button" onClick={() => moveSelected(3, 0)}>→</button><button type="button" onClick={() => moveSelected(0, 3)}>↓</button></div><div className="passport-studio-inspector-row"><span>Size</span><button type="button" onClick={() => resizeSelected(-5)}>Smaller</button><button type="button" onClick={() => resizeSelected(5)}>Larger</button></div><button type="button" className="passport-studio-delete" onClick={removeLayer}>Remove element</button></div> : <p className="passport-studio-inspector-empty">Your canvas is freeform. Add an element from the library, then choose it here to edit its contents, colour, outline, size and position.</p>}
+        {surface === "cover" ? <><div className="passport-studio-panel-heading"><span>04</span><div><strong>Finishing bench</strong><small>Typography, motif and wear</small></div></div><div className="passport-studio-choice-list"><div><span>Typeface</span>{PASSPORT_STUDIO_FONTS.map((item) => <button key={item.value} type="button" className={studio.font === item.value ? "selected" : ""} onClick={() => update("font", item.value)}>{item.label}</button>)}</div><div><span>Motif</span>{PASSPORT_STUDIO_MOTIFS.map((item) => <button key={item.value} type="button" className={studio.motif === item.value ? "selected" : ""} onClick={() => update("motif", item.value)}>{item.label}</button>)}</div><div><span>Wear</span>{PASSPORT_STUDIO_WEARS.map((item) => <button key={item.value} type="button" className={studio.wear === item.value ? "selected" : ""} onClick={() => update("wear", item.value)}>{item.label}</button>)}</div></div></> : null}
       </aside>
     </div>
-    <section className="passport-studio-bottom"><div><span>05 · SURFACE PRESETS</span><div className="passport-studio-surface-library">{SURFACE_LIBRARY.map((surface) => <button key={surface.name} type="button" className={studio.texture === surface.texture && studio.sheen === surface.sheen ? "selected" : ""} onClick={() => setStudio((current) => ({ ...current, texture: surface.texture, sheen: surface.sheen }))}><strong>{surface.name}</strong><small>{surface.note}</small></button>)}</div></div><div className="passport-studio-custom-colours"><label>Custom cover colour<input type="color" value={studio.coverColor} onChange={(event) => update("coverColor", event.target.value.toUpperCase())} /><input value={studio.coverColor} maxLength={7} onChange={(event) => update("coverColor", event.target.value.toUpperCase())} /></label><label>Custom accent<input type="color" value={studio.accentColor} onChange={(event) => update("accentColor", event.target.value.toUpperCase())} /><input value={studio.accentColor} maxLength={7} onChange={(event) => update("accentColor", event.target.value.toUpperCase())} /></label></div><div className="passport-studio-save"><button type="button" onClick={save} disabled={saving}>{saving ? "Applying cover…" : "Apply to my passport"}</button>{message ? <p role="status">{message}</p> : null}</div></section>
+    <section className="passport-studio-bottom"><div><span>05 · FINISHING LIBRARY</span>{surface === "cover" ? <><div className="passport-studio-colour-library passport-studio-colour-library-wide">{COLOUR_LIBRARY.map((colour) => <button key={colour.name} type="button" className={studio.coverColor === colour.cover ? "selected" : ""} style={{ "--cover": colour.cover, "--accent": colour.accent } as CSSProperties} onClick={() => setStudio((current) => ({ ...current, coverColor: colour.cover, accentColor: colour.accent }))}><i /><span>{colour.name}</span></button>)}</div><div className="passport-studio-surface-library">{SURFACE_LIBRARY.map((item) => <button key={item.name} type="button" className={studio.texture === item.texture && studio.sheen === item.sheen ? "selected" : ""} onClick={() => setStudio((current) => ({ ...current, texture: item.texture, sheen: item.sheen }))}><strong>{item.name}</strong></button>)}</div></> : <p className="passport-studio-bottom-copy">Changes to your inside page remain separate from your cover. Add photos or labels and build the page around your flight record.</p>}</div><div className="passport-studio-custom-colours"><label>Custom cover colour<input type="color" value={studio.coverColor} onChange={(event) => update("coverColor", event.target.value.toUpperCase())} /><input value={studio.coverColor} maxLength={7} onChange={(event) => update("coverColor", event.target.value.toUpperCase())} /></label><label>Custom accent<input type="color" value={studio.accentColor} onChange={(event) => update("accentColor", event.target.value.toUpperCase())} /><input value={studio.accentColor} maxLength={7} onChange={(event) => update("accentColor", event.target.value.toUpperCase())} /></label></div><div className="passport-studio-save"><button type="button" onClick={save} disabled={saving}>{saving ? "Saving passport…" : "Apply to my passport"}</button>{message ? <p role="status">{message}</p> : null}</div></section>
   </main>;
 }

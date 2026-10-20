@@ -9,6 +9,14 @@ import { virtualPassportStamps } from "@/lib/virtual-passport";
 const STAMPS_PER_PAGE = 4;
 type PageTurn = { direction: "forward" | "back"; nextPage: number };
 
+function PassportLayers({ studio, surface }: { studio: PassportStudio; surface: "cover" | "interior" }) {
+  return <div className="passport-real-custom-layers" aria-label="Personal passport design">
+    {studio.layers.filter((layer) => layer.surface === surface).map((layer) => <span key={layer.id} className={`passport-real-custom-layer passport-real-custom-layer-${layer.kind}`} style={{ left: `${layer.x}%`, top: `${layer.y}%`, width: `${layer.width}%`, height: `${layer.height}%`, color: layer.color, borderColor: layer.outline, borderWidth: layer.outlineWidth } as CSSProperties}>
+      {layer.kind === "photo" ? <img src={layer.value} alt="Pilot's personal passport design" /> : layer.kind === "text" ? layer.value : null}
+    </span>)}
+  </div>;
+}
+
 export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, studio }: { pireps: readonly PilotPirep[]; pilotName: string; pilotNumber: string; nationality: PassportNationality; studio: PassportStudio }) {
   const stamps = virtualPassportStamps(pireps);
   const pages = Array.from({ length: Math.max(1, Math.ceil(stamps.length / STAMPS_PER_PAGE)) }, (_, index) => stamps.slice(index * STAMPS_PER_PAGE, (index + 1) * STAMPS_PER_PAGE));
@@ -34,6 +42,7 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
       <span className="passport-real-cover-subtitle">BAV TRAVEL JOURNAL</span>
       <span className="passport-real-cover-rule" aria-hidden="true" />
       <span className="passport-real-cover-caption">PERSONALISED FOR VIRTUAL FLYING</span>
+      <PassportLayers studio={studio} surface="cover" />
     </button>
     <p className="passport-real-open-help" id="passport-open-help">Open your virtual passport · {stamps.length} recorded arrival{stamps.length === 1 ? "" : "s"}</p>
   </section>;
@@ -41,12 +50,13 @@ export function VirtualPassport({ pireps, pilotName, pilotNumber, nationality, s
   return <section className={"account-v2-passport passport-real-shell is-open " + studioClass} style={palette} aria-labelledby="passport-heading">
     <div className="passport-real-toolbar"><div><p>BAV TRAVEL JOURNAL · {nationality.toUpperCase()}</p><h2 id="passport-heading">{studio.title}</h2></div><button type="button" onClick={() => setIsOpen(false)}>Close passport</button></div>
     <div className="passport-real-book">
-      <section className="passport-real-identity">
+      <section className={`passport-real-identity passport-real-interior-${studio.interior}`}>
         <span className="passport-real-watermark" aria-hidden="true">{theme.flag}</span>
         <p className="passport-real-page-label">PILOT TRAVEL RECORD</p>
         <div className="passport-real-photo" aria-hidden="true">{pilotName.slice(0, 1).toUpperCase()}</div>
         <dl><div><dt>PILOT</dt><dd>{pilotName}</dd></div><div><dt>BAV PILOT ID</dt><dd>{pilotNumber}</dd></div><div><dt>PASSPORT NATIONALITY</dt><dd>{nationality}</dd></div></dl>
         <small>Created for flight-simulation records only.</small>
+        <PassportLayers studio={studio} surface="interior" />
       </section>
       <section className="passport-real-record-page" aria-live="polite" aria-atomic="true">
         <div className="passport-real-page-header"><span>ARRIVAL STAMPS</span><b>{pageIndex + 1} / {pages.length}</b></div>
