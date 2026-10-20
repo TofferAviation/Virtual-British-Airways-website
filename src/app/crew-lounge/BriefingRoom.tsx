@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type VoicePilot, type VoiceRoom, useCrewVoice } from "@/components/CrewVoiceProvider";
 import { PeerVoiceCall } from "./PeerVoiceCall";
 
@@ -36,6 +36,12 @@ function formattedDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 }
 
+function PresentationVideo({ stream }: { stream: MediaStream }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
+  return <video ref={ref} className="briefing-presentation-video" autoPlay muted playsInline />;
+}
+
 export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const voice = useCrewVoice();
   const [selectedSeat, setSelectedSeat] = useState(1);
@@ -43,6 +49,9 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
   const isThisRoom = voice.activeRoom?.id === room.id;
   const briefing = useMemo(() => events.find((event) => event.id === room.eventId) ?? null, [events, room.eventId]);
   const participants = isThisRoom ? voice.participants : [];
+  const remotePresentation = Object.entries(voice.remoteStreams).find(([, stream]) => stream.getVideoTracks().some((track) => track.readyState === "live" && !track.muted));
+  const presentationStream = voice.screenOn ? voice.previewStream : remotePresentation?.[1] ?? null;
+  const presentationPilot = voice.screenOn ? "Your screen" : participants.find((participant) => participant.sessionId === remotePresentation?.[0])?.name ?? "Live presentation";
   const localSeat = participants.find((participant) => participant.pilotId === pilot.id)?.seatIndex;
   const seats = Array.from({ length: room.maxParticipants }, (_, index) => {
     const seatIndex = index + 1;
@@ -71,7 +80,8 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
         <nav aria-label="Briefing wall views">
           {(["briefing", "route", "weather", "notes"] as WallView[]).map((view) => <button key={view} type="button" className={wallView === view ? "active" : ""} onClick={() => setWallView(view)}>{view}</button>)}
         </nav>
-        <div className="briefing-wall-content">
+        <div className={`briefing-wall-content${presentationStream ? " is-presenting" : ""}`}>
+          {presentationStream ? <><PresentationVideo stream={presentationStream} /><span className="briefing-presentation-label">Live presentation · {presentationPilot}</span></> : <>
           {wallView === "briefing" ? <>
             <span>British Airways Virtual · pre-flight brief</span>
             <strong>{briefing ? briefing.title : "Crew briefing"}</strong>
@@ -87,6 +97,7 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
           {wallView === "notes" ? <>
             <span>Briefing notes</span><strong>Keep the table clear</strong><b>Voice, camera and screen sharing are ready.</b><small>Shared, host-controlled notes will be added on the same room state when the community briefing upgrade is enabled.</small>
           </> : null}
+          </>}
         </div>
       </div>
 
@@ -97,7 +108,7 @@ export function BriefingRoom({ room, pilot, events }: BriefingRoomProps) {
           const unavailable = Boolean(occupant && !isOurs);
           const selected = !isThisRoom && selectedSeat === seatIndex;
           return <button key={seatIndex} type="button" className={`briefing-seat ${seatPosition(seatIndex)}${selected ? " selected" : ""}${occupant ? " occupied" : ""}${isOurs ? " yours" : ""}`} aria-label={seatLabel(seatIndex, occupant)} disabled={unavailable || isThisRoom} onClick={() => setSelectedSeat(seatIndex)}>
-            <span className="briefing-seat-name">{occupant ? <>{occupant.profileImage ? <img src={occupant.profileImage} alt="" /> : <i>{initials(occupant.name)}</i>}<b>{isOurs ? "You" : occupant.name}</b><small>{occupant.pilotNumber}</small></> : <><i>{seatIndex}</i><b>{selected ? "Your chair" : "Available"}</b><small>{selected ? "Ready to join" : "Select seat"}</small></>}</span>
+            <span className="briefing-seat-name">{occupant ? <>{occupant.profileImage ? <img src={occupant.profileImage} alt="" /> : <i>{initials(occupant.name)}</i>}<span><b>{isOurs ? "You" : occupant.name}</b><small>{occupant.pilotNumber}</small><em>● Connected</em></span><strong aria-hidden="true">⌁</strong></> : <><i>{seatIndex}</i><span><b>{selected ? "Your chair" : "Open chair"}</b><small>{selected ? "Ready to join" : "Select this seat"}</small><em>○ Available</em></span><strong aria-hidden="true">＋</strong></>}</span>
           </button>;
         })}
       </div>
