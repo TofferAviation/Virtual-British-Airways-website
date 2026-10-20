@@ -30,6 +30,8 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
   const [profileMessage, setProfileMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [studioMessage, setStudioMessage] = useState("");
+  const [savingStudio, setSavingStudio] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [simbriefMessage, setSimbriefMessage] = useState("");
   const [savingSimbrief, setSavingSimbrief] = useState(false);
@@ -89,6 +91,22 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
     }
   }
 
+  async function savePassportStudio(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSavingStudio(true);
+    setStudioMessage("");
+    try {
+      await patchProfile({ passportStudio: { design: String(form.get("passportStudioDesign") || ""), material: String(form.get("passportStudioMaterial") || ""), tint: String(form.get("passportStudioTint") || ""), wear: String(form.get("passportStudioWear") || "") } });
+      setStudioMessage("Passport Studio saved. Open Virtual passport to see your new cover.");
+      router.refresh();
+    } catch (error) {
+      setStudioMessage(error instanceof Error ? error.message : "Unable to save Passport Studio.");
+    } finally {
+      setSavingStudio(false);
+    }
+  }
+
   async function saveSimbrief(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -134,11 +152,18 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
         <label>Full name<input name="name" defaultValue={name} autoComplete="name" required /></label>
         <label>Email address<input name="email" type="email" defaultValue={email} autoComplete="email" required /></label>
         <label>Home hub<select className={hubStyles.select} name="hub" defaultValue={hub}>{BAV_HUBS.map((item) => <option key={item.code} value={item.name}>{item.name} ({item.code}) — {item.role}</option>)}</select><small className={hubStyles.hint}>This sets the default departure hub on the BAV flight search. You can change it whenever you like.</small></label>
-        <label>Virtual passport nationality<select className={hubStyles.select} name="passportNationality" defaultValue={passportNationality}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small className={hubStyles.hint}>A starting influence for your BAV travel journal. It is not identity verification.</small></label><div className="pilot-passport-studio"><span className="pilot-profile-kicker">PASSPORT STUDIO</span><h3>Design your BAV travel journal</h3><p>Choose a cover style, material, tint and amount of travel wear. This is a fictional keepsake, never an official travel document.</p><div className="pilot-passport-studio-grid"><label>Cover design<select className={hubStyles.select} name="passportStudioDesign" defaultValue={passportStudio.design}>{PASSPORT_STUDIO_DESIGNS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Material<select className={hubStyles.select} name="passportStudioMaterial" defaultValue={passportStudio.material}>{PASSPORT_STUDIO_MATERIALS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Colour tint<select className={hubStyles.select} name="passportStudioTint" defaultValue={passportStudio.tint}>{PASSPORT_STUDIO_TINTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Travel wear<select className={hubStyles.select} name="passportStudioWear" defaultValue={passportStudio.wear}>{PASSPORT_STUDIO_WEARS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div></div>
+        <label>Virtual passport nationality<select className={hubStyles.select} name="passportNationality" defaultValue={passportNationality}>{PASSPORT_NATIONALITIES.map((country) => <option key={country} value={country}>{country}</option>)}</select><small className={hubStyles.hint}>A starting influence for your BAV travel journal. It is not identity verification.</small></label>
         <ProfileImagePicker value={profileImage} name={name} onChange={saveProfileImage} />
         <AccountBackgroundPicker value={accountBackground} onChange={saveAccountBackground} />
         <button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
         {profileMessage ? <p className="pilot-profile-message">{profileMessage}</p> : null}
+      </form>
+
+      <form className="pilot-profile-card pilot-passport-studio" onSubmit={savePassportStudio}>
+        <div><span className="pilot-profile-kicker">PASSPORT STUDIO</span><h2>Design your BAV travel journal</h2><p>Choose a fictional cover style, material, tint and amount of travel wear. Your completed-flight stamps stay exactly as they are.</p></div>
+        <div className="pilot-passport-studio-grid"><label>Cover design<select className={hubStyles.select} name="passportStudioDesign" defaultValue={passportStudio.design}>{PASSPORT_STUDIO_DESIGNS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Material<select className={hubStyles.select} name="passportStudioMaterial" defaultValue={passportStudio.material}>{PASSPORT_STUDIO_MATERIALS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Colour tint<select className={hubStyles.select} name="passportStudioTint" defaultValue={passportStudio.tint}>{PASSPORT_STUDIO_TINTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Travel wear<select className={hubStyles.select} name="passportStudioWear" defaultValue={passportStudio.wear}>{PASSPORT_STUDIO_WEARS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>
+        <button type="submit" disabled={savingStudio}>{savingStudio ? "Saving…" : "Save Passport Studio"}</button>
+        {studioMessage ? <p className="pilot-profile-message">{studioMessage}</p> : null}
       </form>
 
       <form className="pilot-profile-card" onSubmit={savePassword}>
@@ -187,3 +212,4 @@ export function ProfileForms({ name, email, hub, passportNationality, passportSt
     </div>
   );
 }
+
