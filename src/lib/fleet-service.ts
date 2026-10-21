@@ -40,6 +40,7 @@ function aircraftIcaoForVirtualType(value: string | null | undefined) {
   if (normalized.includes("A321NEO") || normalized.includes("A21N")) return "A21N";
   if (normalized.includes("A321")) return "A321";
   if (normalized.includes("A350") || normalized.includes("A359") || normalized.includes("A35K")) return "A359";
+  if (normalized.includes("A380") || normalized.includes("A388")) return "A388";
   if (normalized.includes("E190")) return "E190";
   return null;
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { ActivePilotBookingError, clearPilotBookingFleetSelection, createFlightPlanForBooking, createPilotBooking, getActivePilotBooking } from "@/lib/pilot-operations-store";
+import { ActivePilotBookingError, cancelActivePilotBooking, clearPilotBookingFleetSelection, createFlightPlanForBooking, createPilotBooking, getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
@@ -11,7 +11,7 @@ import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
 import { resolveFlightCallsign } from "@/lib/flight-callsigns";
-import { ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
+import { cancelFleetAircraftReservation, ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
 
 export async function bookFlight(formData: FormData) {
   const session = await requirePilotSession();
@@ -72,24 +72,44 @@ export async function bookFlight(formData: FormData) {
     }
   }
 
-  // A double-click, stale page, or a second browser must not be able to
-  // replace the pilot's live Ember assignment. Send them back to the existing
-  // briefing instead; an explicit future cancellation flow is required to
-  // change it.
+  // Selecting a different service is an explicit instruction to replace an
+  // unstarted assignment. An actual in-progress Ember flight remains locked.
   const activeBooking = await getActivePilotBooking(session.pilotId);
   if (activeBooking) {
-    // Older assignments can pre-date the flight-plan record. Repair that
-    // relationship before redirecting so an active booking never lands on a
-    // missing planning page.
-    await createFlightPlanForBooking({
-      bookingId: activeBooking.id,
-      pilotId: session.pilotId,
-      simbriefPilotId: pilot.simbriefPilotId ?? null,
-      simbriefDispatchUrl: pilot.simbriefPilotId
-        ? buildSimbriefDispatchUrl(activeBooking, pilot.name, pilot.simbriefPilotId)
-        : null,
-    });
-    redirect(`/flight-plans/${encodeURIComponent(activeBooking.id)}?protected=1`);
+    const selectingSameFlight = activeBooking.routeId === flight.routeId &&
+      activeBooking.flightNumber === flight.number &&
+      activeBooking.from === from &&
+      activeBooking.to === to &&
+      activeBooking.date === date &&
+      activeBooking.aircraft === selectedAircraft &&
+      activeBooking.fleetAircraftId === (selectedFleetAircraft?.id ?? null);
+
+    if (activeBooking.status === "in_progress" || selectingSameFlight) {
+      // Older assignments can pre-date the flight-plan record. Repair that
+      // relationship before redirecting so an active booking never lands on a
+      // missing planning page.
+      await createFlightPlanForBooking({
+        bookingId: activeBooking.id,
+        pilotId: session.pilotId,
+        simbriefPilotId: pilot.simbriefPilotId ?? null,
+        simbriefDispatchUrl: pilot.simbriefPilotId
+          ? buildSimbriefDispatchUrl(activeBooking, pilot.name, pilot.simbriefPilotId)
+          : null,
+      });
+      redirect(`/flight-plans/${encodeURIComponent(activeBooking.id)}?protected=1`);
+    }
+
+    if (activeBooking.fleetAircraftId) {
+      const actor = { subject: `bav:${session.pilotId}`, displayName: pilot.name, fleetRole: "pilot" };
+      await cancelFleetAircraftReservation(activeBooking.fleetAircraftId, actor, {
+        pilotSubject: actor.subject,
+        pilotDisplayName: actor.displayName,
+        flightReference: activeBooking.flightNumber,
+        departureStation: activeBooking.from,
+        arrivalStation: activeBooking.to,
+      });
+    }
+    await cancelActivePilotBooking(session.pilotId);
   }
 
   let booking;
