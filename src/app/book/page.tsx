@@ -9,6 +9,7 @@ import { airportByCode } from "@/data/airports";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getPilotById } from "@/lib/pilot-store";
 import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { staffHasPermission } from "@/lib/staff-auth";
 import { fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, isFleetAircraftBookable, listFleetAircraft } from "@/lib/fleet-service";
 import { bookFlight } from "./actions";
 import { BookingAssignmentControls } from "./BookingAssignmentControls";
@@ -87,6 +88,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   const distinctRouteCount = new Set(flights.map((flight) => `${flight.from}-${flight.to}`)).size;
   const pilotSession = await getPilotSession();
   const pilot = pilotSession ? await getPilotById(pilotSession.pilotId) : null;
+  const staffAircraftOverride = await staffHasPermission("settings.edit");
   const fleetAircraft = pilot ? await listFleetAircraft().catch(() => []) : [];
   const unavailable = params.error === "unavailable";
   const qualificationError = params.error === "qualification";
@@ -156,7 +158,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             {flights.length ? flights.map((flight) => {
               const eligibility = pilot ? getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: flight.aircraft }) : null;
               const approvedAircraft = Array.from(new Set([flight.aircraft, ...(flight.aircraftOptions ?? [])]));
-              const eligibleAircraft = pilot ? approvedAircraft.filter((candidate) => getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: candidate }).eligible) : [];
+              const eligibleAircraft = pilot ? approvedAircraft.filter((candidate) => staffAircraftOverride || getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: candidate }).eligible) : [];
               const selectedAircraft = aircraft && eligibleAircraft.includes(aircraft) ? aircraft : eligibleAircraft.includes(flight.aircraft) ? flight.aircraft : (eligibleAircraft[0] ?? flight.aircraft);
               const registrationOptions = Object.fromEntries(eligibleAircraft.map((candidate) => [candidate, fleetAircraft
                 .filter((item) => isFleetAircraftBookable(item) && fleetAircraftMatchesVirtualType(item, candidate) && fleetAircraftIsAtStation(item, flight.from))

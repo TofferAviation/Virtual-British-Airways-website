@@ -16,6 +16,7 @@ const aircraftTypes = [
   "Airbus A320neo",
   "Airbus A321neo",
   "Airbus A350-1000",
+  "Airbus A380-800",
   "Boeing 777-200ER",
   "Boeing 777-300ER",
   "Boeing 787-8",

@@ -23,6 +23,7 @@ export const PILOT_TYPE_RATINGS = [
   { id: "a350", label: "Airbus A350 type rating", aircraftLabel: "Airbus A350 family" },
   { id: "b777", label: "Boeing 777 type rating", aircraftLabel: "Boeing 777 family" },
   { id: "b787", label: "Boeing 787 type rating", aircraftLabel: "Boeing 787 family" },
+  { id: "a380", label: "Airbus A380 type rating", aircraftLabel: "Airbus A380 family" },
 ] as const;
 
 export type PilotTypeRating = (typeof PILOT_TYPE_RATINGS)[number]["id"];
@@ -68,6 +69,7 @@ function rankAtLeast(rank: PilotRank, minimum: PilotRank) {
 export function typeRatingForAircraft(aircraft: string): PilotTypeRating | null {
   const normalized = aircraft.toLowerCase();
   if (normalized.includes("a350")) return "a350";
+  if (normalized.includes("a380")) return "a380";
   if (normalized.includes("777")) return "b777";
   if (normalized.includes("787")) return "b787";
   return null;

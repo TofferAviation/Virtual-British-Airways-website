@@ -5,6 +5,7 @@ import { ActivePilotBookingError, clearPilotBookingFleetSelection, createFlightP
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
+import { staffHasPermission } from "@/lib/staff-auth";
 import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
 import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 import { getFlightsForRoute } from "@/lib/route-store";
@@ -40,7 +41,8 @@ export async function bookFlight(formData: FormData) {
   const careerEligibility = accessPolicy === "realistic_operations"
     ? await checkAircraftCareerEligibility(pilot, selectedAircraft)
     : null;
-  const eligibility = accessPolicy === "optional"
+  const staffOverride = await staffHasPermission("settings.edit");
+  const eligibility = staffOverride || accessPolicy === "optional"
     ? { eligible: true }
     : careerEligibility
       ? { eligible: careerEligibility.eligible }
