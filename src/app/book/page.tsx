@@ -13,6 +13,7 @@ import { staffHasPermission } from "@/lib/staff-auth";
 import { fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, isFleetAircraftBookable, listFleetAircraft } from "@/lib/fleet-service";
 import { bookFlight } from "./actions";
 import { BookingAssignmentControls } from "./BookingAssignmentControls";
+import { BookingSubmitButton } from "./BookingSubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -171,7 +172,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                   flight.slots > 0 && eligibleAircraft.length > 0 ? <form action={bookFlight}>
                     <input type="hidden" name="from" value={flight.from} /><input type="hidden" name="to" value={flight.to} /><input type="hidden" name="date" value={date} /><input type="hidden" name="flightNumber" value={flight.number} /><input type="hidden" name="routeId" value={flight.routeId} />{flexible ? <input type="hidden" name="flexible" value="1" /> : null}
                     <BookingAssignmentControls aircraft={eligibleAircraft} selectedAircraft={selectedAircraft} registrationOptions={registrationOptions} />
-                    <button className="button button-primary" type="submit">Select flight</button>
+                    <BookingSubmitButton />
                   </form> : flight.slots > 0 && eligibility && !eligibility.eligible ? <div className="pilot-qualification-lock"><button className="button button-primary" type="button" disabled>Qualification required</button><span>{eligibility.reason}</span></div> : <button className="button button-primary" type="button" disabled>Flight full</button>
                 ) : <Link className="button button-primary" href="/login">Log in to book</Link>}
               </article>;

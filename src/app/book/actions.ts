@@ -78,6 +78,17 @@ export async function bookFlight(formData: FormData) {
   // change it.
   const activeBooking = await getActivePilotBooking(session.pilotId);
   if (activeBooking) {
+    // Older assignments can pre-date the flight-plan record. Repair that
+    // relationship before redirecting so an active booking never lands on a
+    // missing planning page.
+    await createFlightPlanForBooking({
+      bookingId: activeBooking.id,
+      pilotId: session.pilotId,
+      simbriefPilotId: pilot.simbriefPilotId ?? null,
+      simbriefDispatchUrl: pilot.simbriefPilotId
+        ? buildSimbriefDispatchUrl(activeBooking, pilot.name, pilot.simbriefPilotId)
+        : null,
+    });
     redirect(`/flight-plans/${encodeURIComponent(activeBooking.id)}?protected=1`);
   }
 
@@ -123,6 +134,14 @@ export async function bookFlight(formData: FormData) {
     // Covers two submissions racing each other between the check above and
     // the write. The existing assignment remains untouched.
     if (error instanceof ActivePilotBookingError) {
+      await createFlightPlanForBooking({
+        bookingId: error.booking.id,
+        pilotId: session.pilotId,
+        simbriefPilotId: pilot.simbriefPilotId ?? null,
+        simbriefDispatchUrl: pilot.simbriefPilotId
+          ? buildSimbriefDispatchUrl(error.booking, pilot.name, pilot.simbriefPilotId)
+          : null,
+      });
       redirect(`/flight-plans/${encodeURIComponent(error.booking.id)}?protected=1`);
     }
     throw error;
