@@ -1,15 +1,50 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { configureFlightPlanSimbrief, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
+import { cancelActivePilotBooking, configureFlightPlanSimbrief, getActivePilotBooking, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { buildSimbriefDispatchUrl, fetchLatestSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getBookableRoute } from "@/lib/route-store";
+import { cancelFleetAircraftReservation, FleetServiceError } from "@/lib/fleet-service";
 
 function flightPlanPath(bookingId: string) {
   return `/flight-plans/${encodeURIComponent(bookingId)}`;
+}
+
+/** Cancels an unstarted assignment so the pilot can select a new BAV service. */
+export async function cancelBooking(formData: FormData) {
+  const session = await requirePilotSession();
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const [booking, pilot, activeBooking] = await Promise.all([
+    getPilotBooking(bookingId, session.pilotId),
+    getPilotById(session.pilotId),
+    getActivePilotBooking(session.pilotId),
+  ]);
+  if (!booking || !pilot || !activeBooking || activeBooking.id !== booking.id || booking.status !== "booked") {
+    redirect("/book");
+  }
+
+  if (booking.fleetAircraftId) {
+    const actor = { subject: `bav:${session.pilotId}`, displayName: pilot.name, fleetRole: "pilot" };
+    try {
+      await cancelFleetAircraftReservation(booking.fleetAircraftId, actor, {
+        pilotSubject: actor.subject,
+        pilotDisplayName: actor.displayName,
+        flightReference: booking.flightNumber,
+        departureStation: booking.from,
+        arrivalStation: booking.to,
+      });
+    } catch (error) {
+      // Do not trap the pilot in a stale website assignment if Fleet has
+      // already released (or cannot find) an old reservation.
+      if (!(error instanceof FleetServiceError)) throw error;
+    }
+  }
+
+  await cancelActivePilotBooking(session.pilotId);
+  redirect("/book?assignmentCancelled=1");
 }
 
 export async function changeBookingAircraft(formData: FormData) {

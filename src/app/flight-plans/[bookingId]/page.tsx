@@ -10,7 +10,7 @@ import { getBookableRoute } from "@/lib/route-store";
 import { getSimbriefCodes, isSimbriefApiConfigured } from "@/lib/simbrief";
 import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
 import { getActiveFleetFlightAssignmentForPilot, getFleetAircraft } from "@/lib/fleet-service";
-import { changeBookingAircraft, openSimbriefDispatch, syncSimbriefFlightPlan } from "./actions";
+import { cancelBooking, changeBookingAircraft, openSimbriefDispatch, syncSimbriefFlightPlan } from "./actions";
 import { SimbriefDispatchButton } from "./SimbriefDispatchButton";
 import { FlightPlanBriefing } from "./FlightPlanBriefing";
 import "./flight-plan.css";
@@ -45,7 +45,7 @@ export default async function FlightPlanPage({ params, searchParams }: { params:
 
   return <><SiteHeader /><main className="page-shell flight-plan-page"><div className="page-container flight-plan-container">
     <div className="booking-steps"><div className="booking-step"><span>1</span>Choose virtual flight</div><div className="booking-step active"><span>2</span>Flight briefing</div><div className="booking-step"><span>3</span>Confirm assignment</div></div>
-    <section className="flight-plan-hero"><div><span className="section-kicker">BAV FLIGHT PLANNING</span><h1>{booking.flightNumber} · {booking.from} → {booking.to}</h1><p>Your BAV assignment is saved. Prepare the dispatch below before you fly.</p></div><Link className="button button-outline" href="/account">View account</Link></section>
+    <section className="flight-plan-hero"><div><span className="section-kicker">BAV FLIGHT PLANNING</span><h1>{booking.flightNumber} · {booking.from} → {booking.to}</h1><p>Your BAV assignment is saved. Prepare the dispatch below before you fly.</p></div><div className="flight-plan-hero-actions"><Link className="button button-outline" href="/account">View account</Link>{booking.status === "booked" ? <form action={cancelBooking}><input type="hidden" name="bookingId" value={booking.id} /><button className="button button-outline" type="submit">Cancel assignment</button></form> : null}</div></section>
     {protectedAssignment ? <div className="flight-plan-notice success"><strong>Your active BAV flight is protected.</strong> It was kept in place instead of being replaced. Complete it before selecting another service.</div> : null}
     {synced ? <div className="flight-plan-notice success"><strong>Flight plan saved to your BAV account.</strong> The latest matching SimBrief OFP is now linked to this assignment.</div> : null}
     {aircraftUpdated ? <div className="flight-plan-notice success"><strong>Virtual aircraft updated.</strong> Generate a fresh SimBrief OFP for {booking.aircraft} before beginning the Ember flight.</div> : null}

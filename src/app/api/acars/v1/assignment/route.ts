@@ -7,6 +7,9 @@ import { getPilotById } from "@/lib/pilot-store";
 import { getSimbriefCodes } from "@/lib/simbrief";
 import { getFleetAircraft } from "@/lib/fleet-service";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   const auth = await requireAcarsBearer(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -51,5 +54,5 @@ export async function GET(request: Request) {
             : null,
         }
       : null,
-  });
+  }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }
