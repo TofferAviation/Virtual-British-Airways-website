@@ -347,8 +347,8 @@ export async function getFlightsFromHub(from: string, date?: string, options: Fl
   return getFlightsFromStation(from, date, options);
 }
 
-export async function getFlightsForAircraft(aircraft: string, date?: string) {
-  const managed = publishedOperationalServices(await getBookableRoutes(), date)
+export async function getFlightsForAircraft(aircraft: string, date?: string, options: FlightSearchOptions = {}) {
+  const managed = publishedOperationalServices(await getBookableRoutes(), date, options)
     .filter((route) => route.aircraft === aircraft || route.aircraftOptions?.includes(aircraft));
   return withAvailability(managed, date);
 }

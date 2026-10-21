@@ -102,6 +102,10 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
     setFrom(departure);
     const params = new URLSearchParams(stationSearchActive ? { from: departure, date } : { from: departure, to: arrival!, date });
     if (aircraft !== "Any aircraft") params.set("aircraft", aircraft);
+    // The imported A380 rotations are date-bounded research records. Keep the
+    // timetable usable for virtual planning after the last checked rotation,
+    // rather than making the A380 appear to have vanished from the selector.
+    if (aircraft === "Airbus A380-800") params.set("flexible", "1");
     if (minimum !== null) params.set("minHours", String(minimum));
     if (maximum !== null) params.set("maxHours", String(maximum));
     router.push(`/book?${params.toString()}`);
@@ -173,7 +177,7 @@ export function FlightSearch({ initialHub = "LHR" }: { initialHub?: BavHubCode }
       </div>
       <div className="search-helper">
         <span><strong>{BAV_NETWORK_ROUTE_COUNTS.total} BA London-hub airport-pair routes</strong> loaded: {BAV_NETWORK_ROUTE_COUNTS.LHR} Heathrow, {BAV_NETWORK_ROUTE_COUNTS.LGW} Gatwick and {BAV_NETWORK_ROUTE_COUNTS.LCY} City.</span>
-        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : aircraftStationSearch ? <span>{aircraft} · showing every route from {from} that can operate with this airframe</span> : <span>{aircraft} · filter this city pair by the aircraft scheduled for that service</span>}
+        {aircraft === "Any aircraft" ? <button type="button" className="hub-search-link" onClick={() => router.push(`/book?${new URLSearchParams({ from, date }).toString()}`)}>Browse every BAV service from {from} →</button> : aircraft === "Airbus A380-800" ? <span>Airbus A380-800 · A380 timetable reference is included for flexible BAV planning.</span> : aircraftStationSearch ? <span>{aircraft} · showing every route from {from} that can operate with this airframe</span> : <span>{aircraft} · filter this city pair by the aircraft scheduled for that service</span>}
       </div>
     </form>
   );

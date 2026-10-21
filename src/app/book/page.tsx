@@ -71,7 +71,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
       : departureStation
         ? await getFlightsFromStation(departureStation, date, flightSearchOptions)
       : aircraft
-        ? await getFlightsForAircraft(aircraft, date)
+        ? await getFlightsForAircraft(aircraft, date, flightSearchOptions)
         : [];
   const aircraftFlights = aircraft && (departureStation || hasCityPair)
     ? scheduledFlights.filter((flight) => !flight.catalogueOnly && (flight.aircraft === aircraft || flight.aircraftOptions?.includes(aircraft)))
