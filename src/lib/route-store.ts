@@ -202,6 +202,32 @@ function durationToMinutes(value: string) {
   return Number(match[1]) * 60 + Number(match[2] ?? 0);
 }
 
+function isA380TimetableRoute(route: ManagedRoute) {
+  return /(?:A380|A388)/i.test(route.aircraft) && route.id.startsWith("ba-a380-2026-");
+}
+
+/**
+ * The supplied A380 workbook is a researched seasonal source, not a live
+ * feed. Its final source date must not strand an aircraft in BAV operations.
+ * Keep the latest planning variant for each service and weekday pattern, then
+ * make that checked service available on every planning date. This avoids
+ * showing every historical seasonal variation as a duplicate flight.
+ */
+function dateIndependentA380Timetable(routes: ManagedRoute[]) {
+  const latestByService = new Map<string, ManagedRoute>();
+  const otherRoutes: ManagedRoute[] = [];
+  for (const route of routes) {
+    if (!isA380TimetableRoute(route)) {
+      otherRoutes.push(route);
+      continue;
+    }
+    const key = `${route.from}-${route.to}-${route.flightNumber}-${(route.operatingDays ?? []).slice().sort((left, right) => left - right).join(",")}`;
+    const existing = latestByService.get(key);
+    if (!existing || (route.validUntil ?? "") > (existing.validUntil ?? "")) latestByService.set(key, route);
+  }
+  return [...otherRoutes, ...latestByService.values()];
+}
+
 /**
  * BAV virtual services are deliberately generated from the published
  * London-hub network. A pilot who takes one of those airframes away from a
@@ -313,7 +339,8 @@ async function withAvailability(routes: ManagedRoute[], date?: string) {
       referenceOnly: route.referenceOnly === true,
       continuesTo: route.continuesTo,
       connectionSegment: route.connectionSegment === true,
-      scheduledForSelectedDate: route.referenceOnly !== true && routeOperatesOn(route, date),
+      scheduledForSelectedDate: route.referenceOnly !== true && (isA380TimetableRoute(route) || routeOperatesOn(route, date)),
+      dateIndependentPlanningReference: isA380TimetableRoute(route),
       capacity: route.slots,
       slots: Math.max(0, route.slots - reserved),
     };
@@ -342,18 +369,19 @@ function isPublishedOperationalService(route: ManagedRoute, date?: string, inclu
     !route.catalogueOnly &&
     !route.virtualTimetable &&
     Boolean(normaliseApprovedBaGroupCallsign(route.callsign)) &&
-    (route.referenceOnly === true || includeFlexible || routeOperatesOn(route, date));
+    (route.referenceOnly === true || isA380TimetableRoute(route) || includeFlexible || routeOperatesOn(route, date));
 }
 
 function publishedOperationalServices(routes: ManagedRoute[], date?: string, options: FlightSearchOptions = {}) {
-  const exact = routes.filter((route) =>
+  const dateIndependent = dateIndependentA380Timetable(routes);
+  const exact = dateIndependent.filter((route) =>
     route.referenceOnly !== true && isPublishedOperationalService(route, date, false),
   );
   const flexible = options.includeVirtualFlexible
-    ? routes.filter((route) => route.referenceOnly !== true && !routeOperatesOn(route, date) && isPublishedOperationalService(route, date, true))
+    ? dateIndependent.filter((route) => route.referenceOnly !== true && !isA380TimetableRoute(route) && !routeOperatesOn(route, date) && isPublishedOperationalService(route, date, true))
     : [];
   const scheduledPairs = new Set([...exact, ...flexible].map((route) => `${route.from}-${route.to}`));
-  const references = routes.filter((route) =>
+  const references = dateIndependent.filter((route) =>
     route.referenceOnly === true &&
     isPublishedOperationalService(route, date, false) &&
     !scheduledPairs.has(`${route.from}-${route.to}`),
