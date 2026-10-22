@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getPilotSession } from "@/lib/pilot-auth";
 import { getTomorrowIsoDate } from "@/lib/serverDate";
 import { getFlightsForAircraft, getFlightsForRoute, getFlightsFromStation } from "@/lib/route-store";
-import { getBavHub } from "@/lib/hubs";
+import { BAV_HUBS, getBavHub } from "@/lib/hubs";
 import { airportByCode } from "@/data/airports";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getPilotById } from "@/lib/pilot-store";
@@ -56,7 +56,13 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   const hub = getBavHub(typeof params.hub === "string" ? params.hub : null);
   const departureStation = hub?.code ?? (hasDeparture ? from : null);
   const date = typeof params.date === "string" ? params.date : getTomorrowIsoDate();
-  const flexible = params.flexible === "1";
+  // A pilot taking a physical airframe away from a BAV hub must be able to
+  // plan its return when their simulator session suits them.  Outstation-to-
+  // hub searches therefore include our verified flexible references by
+  // default (including the date-bounded A380 reference), while outbound hub
+  // searches remain tied to their selected timetable date.
+  const returnToHub = hasCityPair && BAV_HUBS.some((candidate) => candidate.code === to) && !BAV_HUBS.some((candidate) => candidate.code === from);
+  const flexible = params.flexible === "1" || returnToHub;
   const requestedFlightNumber = typeof params.flight === "string" ? params.flight.trim().toUpperCase() : "";
   const minimumHours = durationHoursParam(params.minHours);
   const maximumHours = durationHoursParam(params.maxHours);
