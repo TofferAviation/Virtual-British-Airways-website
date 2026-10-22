@@ -44,6 +44,10 @@ services:
         value: https://virtualairline.co.uk
       - key: BAV_PASSWORD_RESET_SECRET
         generateValue: true
+      # Comma-separated partner keys for the read-only normalized aurora feed.
+      # Set the actual values only in Render's encrypted environment settings.
+      - key: BAV_AURORA_PARTNER_API_KEYS
+        sync: false
       # Dedicated signing key shared by the closed-beta issuer and request gate.
       - key: BAV_CLOSED_BETA_GATE_SECRET
         generateValue: true
