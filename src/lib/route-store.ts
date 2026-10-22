@@ -232,6 +232,42 @@ function virtualReturnService(route: ManagedRoute): ManagedRoute | null {
   };
 }
 
+function aircraftCandidates(route: ManagedRoute) {
+  return Array.from(new Set([route.aircraft, ...(route.aircraftOptions ?? [])].filter(Boolean)));
+}
+
+/**
+ * A registration that has physically arrived at a station must be able to
+ * operate an available service back over the same city pair. Timetable
+ * imports often describe each directional leg independently, so their static
+ * equipment samples can differ despite representing an aircraft's outbound
+ * and return rotation. This is a derived booking rule only: it never rewrites
+ * the staff-managed timetable, and Fleet still requires the registration to
+ * be at the departure station, serviceable and dispatchable.
+ */
+function applyReturnEquipmentContinuity(routes: ManagedRoute[]) {
+  const byUndirectedPair = new Map<string, ManagedRoute[]>();
+  for (const route of routes) {
+    const pair = [route.from, route.to].sort().join("-");
+    const group = byUndirectedPair.get(pair) ?? [];
+    group.push(route);
+    byUndirectedPair.set(pair, group);
+  }
+
+  return routes.map((route) => {
+    const group = byUndirectedPair.get([route.from, route.to].sort().join("-")) ?? [];
+    const returnLegs = group.filter((candidate) => candidate.from === route.to && candidate.to === route.from);
+    if (!returnLegs.length) return route;
+    return {
+      ...route,
+      aircraftOptions: Array.from(new Set([
+        ...aircraftCandidates(route),
+        ...returnLegs.flatMap(aircraftCandidates),
+      ])),
+    };
+  });
+}
+
 /** Includes generated BAV return services while leaving editable routes unchanged. */
 export async function getBookableRoutes(): Promise<ManagedRoute[]> {
   const routes = await getManagedRoutes();
@@ -242,7 +278,7 @@ export async function getBookableRoutes(): Promise<ManagedRoute[]> {
     if (!returnRoute || existingPairs.has(`${returnRoute.from}-${returnRoute.to}`) || existingIds.has(returnRoute.id)) return [];
     return [returnRoute];
   });
-  return [...routes, ...returns];
+  return applyReturnEquipmentContinuity([...routes, ...returns]);
 }
 
 export async function getBookableRoute(id: string) {
