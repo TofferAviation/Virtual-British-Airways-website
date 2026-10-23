@@ -5,7 +5,7 @@ import type { GlobeSceneState } from "@/components/radar-globe/scene";
 import { auroraKpOverride } from "@/lib/radar-aurora-kp";
 export type { GlobeCamera } from "@/components/radar-globe/scene";
 
-export function BaRadarThreeGlobe(props: GlobeSceneState) {
+export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: boolean }) {
   const container = useRef<HTMLDivElement>(null),
     current = useRef(props);
   const [error, setError] = useState<string | null>(null);
@@ -49,13 +49,15 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
       <div className="ba-radar-globe-caption">
         <strong>Earth · WGS84</strong>
         {props.auroraEnabled&&auroraKpOverride(props.auroraSettings)!==null?<strong style={{color:"#ffcf83"}}>SIMULATION · manual Kp {auroraKpOverride(props.auroraSettings)} · not live NOAA</strong>:null}
+        <details className="ba-radar-globe-help" open={!props.compactControls}>
+        <summary>Camera controls &amp; sources</summary>
+        <div className="ba-radar-globe-help-body">
         <span>
           {error ?? "Left-drag: orbit · Middle-drag: pan · Right / Shift+middle: look · Wheel: zoom"}
         </span>
         <span>WASD: move · Q/E: down/up · Shift: faster · Home: reset view</span>
         <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA GFS / SWPC</span>
         <a href="/globe-sources" target="_blank" rel="noreferrer" style={{pointerEvents:"auto",color:"#a8c6d9"}}>Terrain: Mapzen / USGS / NOAA and contributors · credits & limits</a>
-        <span aria-live="off">{error ? "3D unavailable" : performanceLabel}</span>
         <button type="button" style={{ pointerEvents: "auto", justifySelf: "start", font: "10px Arial", padding: "4px 7px", color: "#d7ebff", background: "#12344b", border: "1px solid #4982a6", borderRadius: 3 }} onClick={() => {
           const canvas = container.current?.querySelector("canvas");
           canvas?.dispatchEvent(new Event("globe-reset-view"));
@@ -64,6 +66,9 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
         <button type="button" style={{pointerEvents:"auto",font:"10px Arial",padding:"4px 7px",color:"#d7ebff",background:"#12344b",border:"1px solid #4982a6",borderRadius:3}} onClick={()=>{
           const canvas=container.current?.querySelector("canvas"); canvas?.dispatchEvent(new Event("globe-ground-view")); canvas?.focus({preventScroll:true});
         }}>Go to ground · 5 m</button>
+        </div>
+        </details>
+        <span aria-live="off">{error ?? performanceLabel}</span>
       </div>
     </div>
   );

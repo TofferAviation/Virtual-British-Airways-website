@@ -7,6 +7,7 @@ import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
 import { AuroraPhotoControls } from "@/components/AuroraPhotoControls";
 import type { AuroraPhotoSettings } from "@/lib/radar-aurora-photo";
 import { DEFAULT_AURORA_MOTION_SPEED } from "@/lib/radar-aurora-motion";
+import { createGlobeAuroraSettings, createGlobeCloudSettings } from "@/lib/radar-globe-settings";
 import { AuroraKpControls } from "@/components/AuroraKpControls";
 import { auroraKpOverride,type AuroraKpSettings } from "@/lib/radar-aurora-kp";
 
@@ -197,6 +198,7 @@ export function GlobeVisualCheck() {
           auroraEnabled
           aurora={displayAurora}
           auroraSettings={{
+            ...createGlobeAuroraSettings(),
             ...photo,
             activity: 1,
             animationSpeed: paused?0:motionSpeed,
@@ -208,15 +210,8 @@ export function GlobeVisualCheck() {
           cloudsEnabled={clouds}
           cloudData={data}
           cloudSettings={{
-            realWorld: true,
-            opacity: 0.65,
+            ...createGlobeCloudSettings(),
             quality,
-            low: true,
-            middle: true,
-            high: true,
-            selfShadows: true,
-            enhancedPresentation: false,
-            debugMode: "lit",
           }}
           dayNightEnabled
           initialCamera={null}

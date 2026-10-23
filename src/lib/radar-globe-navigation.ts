@@ -1,4 +1,10 @@
 export type GlobeDragMode = "orbit" | "pan" | "look" | null;
+/** Available CSS pixels below the actual header/toolbar, including inherited
+ * CSS zoom. A tiny viewport may scroll instead of making controls unusable. */
+export function globeViewportHeight(viewportHeight: number, top: number, scale: number) {
+  const zoom = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return Math.max(240, (viewportHeight - top) / zoom);
+}
 const RAD = Math.PI / 180;
 const wrap = (angle: number) => ((angle + 180) % 360 + 360) % 360 - 180;
 

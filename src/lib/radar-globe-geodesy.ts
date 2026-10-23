@@ -123,6 +123,16 @@ export function globeClipRange(distanceKm: number, nearbyEmission = false) {
   };
 }
 
+/** Fit the full atmosphere using the narrower perspective angle, including
+ * portrait/embedded radar viewports. Apply only to a new, unsaved orbit. */
+export function globeOverviewDistance(aspect: number, fovDegrees = 35) {
+  const ratio = Number.isFinite(aspect) ? Math.max(.1, aspect) : 1;
+  const fov = Number.isFinite(fovDegrees) ? Math.max(10, Math.min(100, fovDegrees)) : 35;
+  const vertical = fov * RAD / 2;
+  const angle = Math.min(vertical, Math.atan(Math.tan(vertical) * ratio));
+  return Math.min(WGS84_A_KM + 40000, (WGS84_A_KM + 450) / Math.sin(angle * .9));
+}
+
 /** Wheel modes are pixels, lines or pages; clamp spikes before exponentiation. */
 export function globeZoomTarget(
   distanceKm: number,

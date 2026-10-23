@@ -18,6 +18,7 @@ import {
   solarDirection,
   wrapLongitude,
   globeClipRange,
+  globeOverviewDistance,
   globeZoomTarget,
   globeAltitudeStep, globeDescentFloor,
 } from "@/lib/radar-globe-geodesy";
@@ -176,7 +177,7 @@ export function createGlobeScene(
   camera.position.set(
     0,
     0,
-    testView?.distanceKm ?? zoomDistance(initial?.zoom ?? 0.6),
+    testView?.distanceKm ?? (initial ? zoomDistance(initial.zoom) : globeOverviewDistance(host.clientWidth / Math.max(1, host.clientHeight), camera.fov)),
   );
   camera.lookAt(0, 0, 0);
   let targetDistance = camera.position.z,

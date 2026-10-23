@@ -1,7 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WGS84_A_KM } from "./radar-globe-geodesy.ts";
-import { globeClipRange, globeZoomTarget, globeZoomStep, globeAltitudeStep, globeDescentFloor } from "./radar-globe-geodesy.ts";
+import { globeClipRange, globeZoomTarget, globeZoomStep, globeAltitudeStep, globeDescentFloor, globeOverviewDistance } from "./radar-globe-geodesy.ts";
+
+test("a fresh embedded globe fits its atmosphere in landscape and portrait viewports", () => {
+  for (const aspect of [.8, 1, 16/9, 3]) {
+    const distance = globeOverviewDistance(aspect);
+    const halfAngle = Math.min(35*Math.PI/360, Math.atan(Math.tan(35*Math.PI/360)*aspect));
+    assert.ok(Math.asin((WGS84_A_KM+450)/distance) < halfAngle, `cropped atmosphere at ${aspect}`);
+    assert.ok(distance < WGS84_A_KM+40000);
+    // Camera persistence still uses the existing reversible zoom mapping.
+    const zoom = -Math.log((distance/WGS84_A_KM-1)/1.7)/.38;
+    assert.ok(Math.abs(WGS84_A_KM*(1+1.7*Math.exp(-zoom*.38))-distance)<1e-8);
+  }
+  assert.equal(globeOverviewDistance(3),globeOverviewDistance(1));
+  assert.ok(globeOverviewDistance(.8)>globeOverviewDistance(1));
+});
+
+test("overview fitting is finite and bounded even for hidden or malformed hosts", () => {
+  for (const aspect of [0,-1,NaN,Infinity,.01]) for (const fov of [0,NaN,Infinity,180]) {
+    const distance=globeOverviewDistance(aspect,fov);
+    assert.ok(Number.isFinite(distance)&&distance>WGS84_A_KM+450&&distance<=WGS84_A_KM+40000);
+  }
+});
 
 test("depth precision resolves cloud/ground separation at every supported zoom", () => {
   for (const height of [0.005, 0.02, 4, 6, 12, 90, 400, 2600, 16000, 40000]) {

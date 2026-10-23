@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { globeViewportHeight } from "./radar-globe-navigation.ts";
 import test from "node:test";
 import { globeDragMode, globePanPosition, globePanDrag, globeLookDrag, nextGlobeFrame } from "./radar-globe-navigation.ts";
 import { GlobeCloudCache, movingCloudSize } from "./radar-globe-cloud-cache.ts";
@@ -56,6 +57,14 @@ test("cloud cache invalidates on camera/weather/settings changes and expires whi
   cache.invalidate(); assert.equal(cache.shouldRefresh("viewA-weather1", 100), true);
   assert.equal(cache.refreshes, 1); assert.equal(cache.hits, 1);
 });
+test("embedded viewport accounts for site zoom and wrapped toolbars without overflowing",()=>{
+  for(const [height,top,scale] of [[1292,177.5,1.25],[712,218,1.25],[844,160,1]]) {
+    assert.ok(Math.abs(globeViewportHeight(height,top,scale)*scale+top-height)<1e-8);
+  }
+  assert.equal(globeViewportHeight(200,100,1.25),240);
+  assert.equal(globeViewportHeight(844,160,NaN),684);
+});
+
 test("motion uses the same allocation with a smaller cloud viewport, never coarsens ground or Low", () => {
   assert.deepEqual(movingCloudSize(1000, 500, false, false), { width: 1000, height: 500 });
   assert.deepEqual(movingCloudSize(1000, 500, true, false), { width: 720, height: 360 });

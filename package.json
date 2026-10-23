@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:clouds": "node --test src/lib/radar-cloud-math.test.mjs src/lib/radar-cloud-noise.test.mjs",
+    "test:globe-integration": "node --test src/lib/radar-globe-integration.test.mjs",
     "test:globe": "node --test src/lib/radar-globe-geodesy.test.mjs src/lib/radar-globe-aurora.test.mjs src/lib/radar-globe-camera.test.mjs src/lib/radar-globe-quality.test.mjs src/lib/radar-globe-surface.test.mjs src/lib/radar-globe-navigation.test.mjs src/lib/radar-globe-gpu-timer.test.mjs src/lib/radar-globe-elevation.test.mjs src/lib/radar-aurora-field.test.mjs src/lib/radar-aurora-magnetic.test.mjs src/lib/radar-aurora-geometry.test.mjs src/lib/radar-aurora-photo.test.mjs",
     "migrate:pilot-state": "node --env-file=.env.local scripts/migrate-pilot-state-to-supabase.mjs"
   },

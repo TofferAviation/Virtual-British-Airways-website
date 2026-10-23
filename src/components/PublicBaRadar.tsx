@@ -8,7 +8,8 @@ import { RADAR_WIND_LAYERS, type RadarAuroraData, type RadarCloudData, type Rada
 import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 import type { AuroraQuality, AuroraSettings } from "@/components/BaRadarAuroraLayer";
 import { AuroraPhotoControls } from "@/components/AuroraPhotoControls";
-import { DEFAULT_AURORA_MOTION_SPEED } from "@/lib/radar-aurora-motion";
+import { createGlobeAuroraSettings, createGlobeCloudSettings } from "@/lib/radar-globe-settings";
+import { globeViewportHeight } from "@/lib/radar-globe-navigation";
 import { AuroraKpControls } from "@/components/AuroraKpControls";
 import type { CloudDebugMode, CloudQuality, CloudSettings } from "@/components/BaRadarCloudLayer";
 
@@ -77,12 +78,6 @@ export type RadarLayers = {
   seasonal: boolean;
 };
 
-const initialAuroraSettings: AuroraSettings = { activity: 1, animationSpeed: DEFAULT_AURORA_MOTION_SPEED, brightness: 1, quality: "auto", enhancedPresentation: false };
-// The globe is the home for the atmospheric view.  The source remains the
-// latest available GFS analysis (not a satellite observation), while the
-// modest relief makes the model's measured cloud columns readable in 3D.
-const initialCloudSettings: CloudSettings = { realWorld: true, opacity: 0.65, quality: "auto", low: true, middle: true, high: true, selfShadows: true, enhancedPresentation: false, debugMode: "lit" };
-
 function bytesFromBase64(value: string) {
   const binary = window.atob(value);
   const bytes = new Uint8Array(binary.length);
@@ -142,8 +137,6 @@ function CloudControls({ settings, data, error, onChange }: { settings: CloudSet
   return <div className="ba-radar-cloud-controls" aria-label="Forecast cloud-volume controls">
     <label className="ba-radar-cloud-real-world"><span>Volumetric cloud field</span><input type="checkbox" checked={settings.realWorld} onChange={(event) => onChange({ ...settings, realWorld: event.target.checked })} /><small>GFS coverage and altitude · procedural 3D density</small></label>
     <label><span>Cloud opacity</span><output>{Math.round(settings.opacity * 100)}%</output><input type="range" min="0.2" max="1" step="0.05" value={settings.opacity} onChange={changeOpacity} /></label>
-    <label className="ba-radar-cloud-quality"><span>Globe quality</span><select value={settings.quality} onChange={(event) => onChange({ ...settings, quality: event.target.value as CloudQuality })}><option value="auto">Auto · adaptive</option><option value="low">Low · 30 fps cap</option><option value="medium">Balanced · 45 fps cap</option><option value="high">High · 60 fps cap</option><option value="ultra">Ultra · 60 fps cap</option></select></label>
-    <p className="ba-radar-layer-note">Auto adapts cloud resolution, lighting and terrain LOD to rendering load. Ground stays sharper than clouds; imagery downloads and memory are capped. Frame rates are targets, not guarantees.</p>
     <div className="ba-radar-cloud-toggles"><label><input type="checkbox" checked={settings.low} onChange={(event) => onChange({ ...settings, low: event.target.checked })} />Low</label><label><input type="checkbox" checked={settings.middle} onChange={(event) => onChange({ ...settings, middle: event.target.checked })} />Middle</label><label><input type="checkbox" checked={settings.high} onChange={(event) => onChange({ ...settings, high: event.target.checked })} />High</label><label><input type="checkbox" checked={settings.selfShadows} onChange={(event) => onChange({ ...settings, selfShadows: event.target.checked })} />Cloud shadows</label></div>
     <p className={error ? "ba-radar-cloud-status error" : "ba-radar-cloud-status"}>{error ?? (data ? `${data.stale ? "Last good" : "NOAA GFS"} · ${data.displayResolutionDeg}° · valid ${validTime} UTC · updated ${refreshed} UTC` : "Loading the latest NOAA GFS cloud analysis…")}</p>
     {developerMode && data ? <details className="ba-radar-cloud-debug"><summary>Developer cloud data</summary><p>{data.width} × {data.height} GFS grid · cycle {new Date(data.cycleAt).toISOString()} · fields {data.fields.length}</p><p>{data.layers.map((layer) => `${layer.label}: ${layer.basePressureHpa}–${layer.topPressureHpa} hPa`).join(" · ")}</p><p>Heights are pressure-layer geopotential heights from GFS, used as an MSL approximation. Individual cloud forms are inferred; height is never visually exaggerated.</p><label className="ba-radar-cloud-quality"><span>Debug render</span><select value={settings.debugMode} onChange={(event) => onChange({ ...settings, debugMode: event.target.value as CloudDebugMode })}><option value="lit">Lit volume</option><option value="coverage">GFS coverage</option><option value="density">Column density</option><option value="height">Column height</option><option value="lighting">Solar illumination</option><option value="mesh">Mesh edges</option></select></label></details> : null}
@@ -397,12 +390,13 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [filter, setFilter] = useState<FlightFilter>("all");
   const [viewMode, setViewMode] = useState<RadarViewMode>("map");
   const globeCameraRef = useRef<GlobeCamera | null>(null);
+  const stageRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
   const [liveCheckedAt, setLiveCheckedAt] = useState<Date | null>(null);
   const [liveError, setLiveError] = useState("");
   const [layers, setLayers] = useState<RadarLayers>({ vatsim: true, precipitation: false, winds: false, lightning: false, advisories: false, seasonal: true });
-  const [auroraSettings, setAuroraSettings] = useState<AuroraSettings>(initialAuroraSettings);
+  const [auroraSettings, setAuroraSettings] = useState<AuroraSettings>(createGlobeAuroraSettings);
   const [globeVatsim, setGlobeVatsim] = useState(false);
   const [globeDayNight, setGlobeDayNight] = useState(true);
   // Observed satellite imagery stays separate from the model. The GFS volume
@@ -412,7 +406,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   // The operational globe deliberately uses one coherent cloud system:
   // forecast data for placement and a 3D density field for presentation.
   const [globeClouds, setGlobeClouds] = useState(true);
-  const [cloudSettings, setCloudSettings] = useState<CloudSettings>(initialCloudSettings);
+  const [cloudSettings, setCloudSettings] = useState<CloudSettings>(createGlobeCloudSettings);
   const [windLayer, setWindLayer] = useState<RadarWindLayerId>("surface");
   const [vatsim, setVatsim] = useState<VatsimRadarData | null>(null);
   const [vatsimCheckedAt, setVatsimCheckedAt] = useState<Date | null>(null);
@@ -441,6 +435,25 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [replayLoadingId, setReplayLoadingId] = useState("");
   const [onboardPulse, setOnboardPulse] = useState<PrivateOperationPulse | null>(null);
+
+  useEffect(() => {
+    if (viewMode !== "globe" || !stageRef.current) return;
+    const stage = stageRef.current;
+    const fit = () => {
+      const rect = stage.getBoundingClientRect();
+      if (!stage.clientWidth) return;
+      stage.style.setProperty("--ba-radar-stage-height", `${globeViewportHeight(window.innerHeight, rect.top, rect.width / stage.clientWidth)}px`);
+    };
+    // A wrapped toolbar, browser resizing or the site's CSS zoom can change
+    // the available space. Resizing must never reset the pilot's orbit.
+    const observer = new ResizeObserver(fit);
+    if (stage.previousElementSibling) observer.observe(stage.previousElementSibling);
+    const header = document.querySelector(".site-header");
+    if (header) observer.observe(header);
+    window.addEventListener("resize", fit);
+    fit();
+    return () => { observer.disconnect(); window.removeEventListener("resize", fit); stage.style.removeProperty("--ba-radar-stage-height"); };
+  }, [viewMode]);
 
   useEffect(() => {
     let mounted = true;
@@ -665,9 +678,21 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const activeLayerCount = viewMode === "map"
     ? layerLabels.filter((layer) => layers[layer.key]).length
     : [globeVatsim, globeDayNight, globeClouds, layers.seasonal].filter(Boolean).length;
-  const hasExternalMapData = layers.vatsim || needsWeather || layers.winds || layers.lightning;
+  const hasExternalMapData = viewMode === "globe" || layers.vatsim || needsWeather || layers.winds || layers.lightning;
   const weatherStationKey = selected?.weatherStations.map((station) => station.icao).join(",") ?? "";
   const replayForMap = replay ? { id: replay.id, points: replay.snapshots, activeIndex: replayIndex } : null;
+  // Both desktop and phone controls operate on the same live-map state.
+  // Quality remains accessible even when the costly cloud layer is disabled.
+  const globeControls = <>
+    <label className="ba-radar-cloud-quality"><span>Globe quality</span><select aria-label="Globe quality" value={cloudSettings.quality} onChange={event => setCloudSettings(current => ({...current, quality: event.target.value as CloudQuality}))}><option value="auto">Auto · adaptive</option><option value="low">Low · 30 fps cap</option><option value="medium">Balanced · 45 fps cap</option><option value="high">High · 60 fps cap</option><option value="ultra">Ultra · 60 fps cap</option></select></label>
+    <button type="button" className={globeVatsim ? "active" : ""} onClick={() => setGlobeVatsim(current => !current)} aria-pressed={globeVatsim}>VATSIM ATC</button>
+    <button type="button" className={globeDayNight ? "active" : ""} onClick={() => setGlobeDayNight(current => !current)} aria-pressed={globeDayNight}>Real-time sun</button>
+    <button type="button" className={globeClouds ? "active" : ""} onClick={() => setGlobeClouds(current => !current)} aria-pressed={globeClouds}>Volumetric clouds</button>
+    {globeClouds ? <details className="ba-radar-globe-settings"><summary>Cloud settings</summary><CloudControls settings={cloudSettings} data={cloudData} error={cloudError} onChange={setCloudSettings}/></details> : null}
+    <button type="button" className={layers.seasonal ? "active" : ""} onClick={() => toggleLayer("seasonal")} aria-pressed={layers.seasonal}>NOAA aurora forecast</button>
+    {layers.seasonal ? <details className="ba-radar-globe-settings"><summary>Aurora settings{auroraSettings.kpOverrideEnabled ? " · SIMULATION" : ""}</summary><AuroraControls data={aurora} settings={auroraSettings} onChange={setAuroraSettings}/></details> : null}
+    <p className="ba-radar-layer-note">Auto adapts cloud resolution, lighting and terrain LOD within memory budgets. FPS caps are targets, not guarantees. GFS clouds are procedural forecast visualisation, not satellite observation.</p>
+  </>;
 
   useEffect(() => {
     const watching = new Set(watchedFlights.map((flight) => flight.id));
@@ -743,13 +768,13 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     setReplayPlaying((current) => !current || replayIndex >= replay.snapshots.length - 1);
   };
 
-  return <div className="ba-radar ba-radar-tracker">
+  return <div className={`ba-radar ba-radar-tracker${viewMode === "globe" ? " ba-radar-tracker--globe" : ""}`}>
     <header className="ba-radar-toolbar">
       <div className="ba-radar-brand"><Image className="ba-radar-brand-mark" src="/branding/ba-radar-icon.png" width={40} height={40} alt="BA-Radar" priority /><div><strong>BA-Radar</strong><small>LIVE VIRTUAL FLIGHT TRACKER</small></div></div>
       <div className="ba-radar-toolbar-status"><i /><span>{flights.length} active</span><b>{airborne} airborne</b>{layers.vatsim ? <span>{vatsim?.onlineCount ?? 0} VATSIM ATC</span> : null}<em>{liveCheckedAt ? `Updated ${liveCheckedAt.toLocaleTimeString("en-GB")}` : "Connecting"}</em><RadarSourceHealth liveCheckedAt={liveCheckedAt} vatsimCheckedAt={vatsimCheckedAt} weatherCheckedAt={weatherCheckedAt} windCheckedAt={windCheckedAt} layers={layers} liveError={liveError} vatsimError={vatsimError} weatherError={weatherError} windError={windError} /></div>
       <label className="ba-radar-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search flights, routes or aircraft" aria-label="Search live flights" /></label>
     </header>
-    <section className="ba-radar-stage" aria-label="BA-Radar live simulator map">
+    <section ref={stageRef} className="ba-radar-stage" aria-label="BA-Radar live simulator map">
       <aside className="ba-radar-sidebar">
         <div className="ba-radar-selection-head"><span className="ba-radar-kicker">{replay ? "Private replay" : controller ? "Selected VATSIM position" : selected ? "Selected live flight" : "Live flights"}</span>{selected || controller || replay ? <button type="button" onClick={clearSelection} aria-label="Clear map selection">Clear <b aria-hidden="true">×</b></button> : null}</div>
         {replay ? <ReplayDetail replay={replay} activeIndex={replayIndex} playing={replayPlaying} onChangeIndex={(index) => { setReplayIndex(index); setReplayPlaying(false); }} onTogglePlayback={toggleReplayPlayback} /> : controller ? <div className="ba-radar-selected-flight ba-radar-controller-detail"><div className="ba-radar-selected-title"><strong>{controller.callsign}</strong><span className="ba-radar-connection connected">{controller.kind === "atis" ? "ATIS" : "VATSIM ATC"}</span></div><p className="ba-radar-route">{controller.frequency}</p><p className="ba-radar-aircraft-name">{controller.facilityName}<br />{controller.facility} position</p><div className="ba-radar-selected-data"><div><span>Coverage</span><strong>{controller.visualRangeNm === null ? "Not published" : `${controller.visualRangeNm} NM`}</strong></div><div><span>Online</span><strong>{controllerAge(controller)}</strong></div></div>{controller.atis.length ? <div className="ba-radar-controller-atis"><span>Controller information</span><p>{controller.atis.slice(0, 3).join(" · ")}</p></div> : null}<p className="ba-radar-selected-foot">Live VATSIM network data. Verify active frequencies in your pilot client before use.</p></div> : selected ? <FlightTrackerDetails flight={selected} weatherReports={flightWeather.stationKey === weatherStationKey ? flightWeather.reports : []} layers={layers} vatsimOnline={vatsim?.onlineCount ?? null} following={watchedFlightIds.includes(selected.id)} onToggleFollow={() => toggleFlightWatch(selected.id)} /> : <div className="ba-radar-zero-state"><strong>No active flight selected</strong><span>Choose a BAV aircraft or VATSIM controller from the map.</span></div>}
@@ -764,7 +789,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       </aside>
       <div className="ba-radar-map-wrap">
         <div className={`ba-radar-map ${viewMode === "globe" ? "ba-radar-map--globe" : ""}`}>
-          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={globeVatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} auroraSettings={auroraSettings} cloudsEnabled={globeClouds} cloudData={cloudData} cloudSettings={cloudSettings} dayNightEnabled={globeDayNight} initialCamera={globeCameraRef.current} onCameraChange={(camera) => { globeCameraRef.current = camera; }} />}
+          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe compactControls flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={globeVatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} auroraSettings={auroraSettings} cloudsEnabled={globeClouds} cloudData={cloudData} cloudSettings={cloudSettings} dayNightEnabled={globeDayNight} initialCamera={globeCameraRef.current} onCameraChange={(camera) => { globeCameraRef.current = camera; }} />}
           <div className="ba-radar-view-toggle" role="group" aria-label="Radar view">
             <button type="button" className={viewMode === "map" ? "active" : ""} onClick={() => setViewMode("map")} aria-pressed={viewMode === "map"}>2D map</button>
             <button type="button" className={viewMode === "globe" ? "active" : ""} onClick={() => setViewMode("globe")} aria-pressed={viewMode === "globe"}>3D globe</button>
@@ -773,14 +798,14 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
             <strong>{viewMode === "map" ? "Map layers" : "3D globe"}</strong>
             {viewMode === "map" ? <>{layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
               {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
-              {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}</> : <><button type="button" className={globeVatsim ? "active" : ""} onClick={() => setGlobeVatsim((current) => !current)} aria-pressed={globeVatsim}>VATSIM ATC</button><button type="button" className={globeDayNight ? "active" : ""} onClick={() => setGlobeDayNight((current) => !current)} aria-pressed={globeDayNight}>Real-time sun</button><button type="button" className={globeClouds ? "active" : ""} onClick={() => setGlobeClouds((current) => !current)} aria-pressed={globeClouds}>Volumetric clouds</button>{globeClouds ? <CloudControls settings={cloudSettings} data={cloudData} error={cloudError} onChange={setCloudSettings} /> : null}<button type="button" className={layers.seasonal ? "active" : ""} onClick={() => toggleLayer("seasonal")} aria-pressed={layers.seasonal}>NOAA aurora forecast</button>{layers.seasonal ? <AuroraControls data={aurora} settings={auroraSettings} onChange={setAuroraSettings} /> : null}<p className="ba-radar-layer-note">GFS supplies weather coverage and cloud altitude; the globe raymarches that data through a procedural 3D volume. It is a forecast visualisation, not satellite observation.</p></>}
+              {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}</> : globeControls}
           </div>
           <details className="ba-radar-mobile-layer-menu">
             <summary aria-label={`Map layers, ${activeLayerCount} active`}><span>Layers</span><b>{activeLayerCount} active</b><i aria-hidden="true">⌄</i></summary>
             <div className="ba-radar-mobile-layer-list" role="group" aria-label="BA-Radar map layers">
               {viewMode === "map" ? <>{layerLabels.map((layer) => <button key={layer.key} type="button" className={layers[layer.key] ? "active" : ""} onClick={() => toggleLayer(layer.key)} aria-pressed={layers[layer.key]} title={layer.detail}>{layer.label}</button>)}
                 {layers.winds ? <label className="ba-radar-layer-select"><span>Wind altitude</span><select value={windLayer} onChange={(event) => setWindLayer(event.target.value as RadarWindLayerId)}>{RADAR_WIND_LAYERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><small>{windError || (windRendererStatus === "unsupported" ? "This browser cannot run the GPU wind view. Update its graphics driver or use another browser." : windGrid ? `GFS analysis · ${new Date(windGrid.validAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC` : "Loading the latest GFS wind field…")}</small></label> : null}
-                {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}</> : <><button type="button" className={globeVatsim ? "active" : ""} onClick={() => setGlobeVatsim((current) => !current)} aria-pressed={globeVatsim}>VATSIM ATC</button><button type="button" className={globeDayNight ? "active" : ""} onClick={() => setGlobeDayNight((current) => !current)} aria-pressed={globeDayNight}>Real-time sun</button><button type="button" className={globeClouds ? "active" : ""} onClick={() => setGlobeClouds((current) => !current)} aria-pressed={globeClouds}>Volumetric clouds</button>{globeClouds ? <CloudControls settings={cloudSettings} data={cloudData} error={cloudError} onChange={setCloudSettings} /> : null}<button type="button" className={layers.seasonal ? "active" : ""} onClick={() => toggleLayer("seasonal")} aria-pressed={layers.seasonal}>NOAA aurora forecast</button>{layers.seasonal ? <AuroraControls data={aurora} settings={auroraSettings} onChange={setAuroraSettings} /> : null}<p className="ba-radar-layer-note">GFS supplies weather coverage and cloud altitude; the globe raymarches that data through a procedural 3D volume. It is a forecast visualisation, not satellite observation.</p></>}
+                {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}</> : globeControls}
             </div>
           </details>
           <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{selected?.plannedRoute ? <span><i className="planned-route" /> Planned route</span> : null}{selected?.trackSnapshots.length ? <span><i className="recorded-track" /> {selected.trackSnapshots[0].onGround ? "Gate-to-gate track" : "Recorded track"}</span> : null}{replay ? <span><i className="replay-track" /> Private replay</span> : null}{(viewMode === "map" ? layers.vatsim : globeVatsim) ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
