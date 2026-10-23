@@ -21,6 +21,8 @@ import { GlobeSurface } from "./surface";
 import { buildAuroraCurtains } from "./aurora";
 import { AdaptiveGlobeQuality, GLOBE_PROFILES, globeRenderSize, type GlobeQuality } from "@/lib/radar-globe-quality";
 import { GlobeGpuTimer } from "./gpu-timer";
+import { globeDragMode, globeLookDrag, globePanDrag, globePanPosition, nextGlobeFrame, type GlobeDragMode } from "@/lib/radar-globe-navigation";
+import { GlobeCloudCache, movingCloudSize } from "@/lib/radar-globe-cloud-cache";
 import {
   surfaceVertex,
   surfaceFragment,
@@ -63,6 +65,9 @@ export type GlobeSceneState = {
   onCameraChange: (camera: GlobeCamera) => void;
   /** Used exclusively by the local visual regression page. */
   testDate?: string;
+  /** Local QA only: compare moving/full-resolution/uncached workloads. */
+  testCloudCache?: boolean;
+  testCameraMotion?: boolean;
   /** Explicitly labelled, development-only density calibration. Never a live fallback. */
   testCloudProfile?: { coverage: number; baseKm: number; topKm: number };
   testView?: {
@@ -71,6 +76,7 @@ export type GlobeSceneState = {
     distanceKm: number;
     pitch?: number;
     fov?: number;
+    bearing?: number;
   };
 };
 
@@ -152,6 +158,7 @@ export function createGlobeScene(
     scene = new THREE.Scene(),
     earth = new THREE.Group();
   scene.add(earth);
+  canvas.style.cursor = "grab";
   const initial = read().initialCamera,
     testView = read().testView;
   const camera = new THREE.PerspectiveCamera(testView?.fov ?? 35, 1, 0.5, 120000);
@@ -165,19 +172,24 @@ export function createGlobeScene(
   camera.lookAt(0, 0, 0);
   let distance = camera.position.z,
     targetDistance = distance;
-  let pitch = THREE.MathUtils.clamp(testView?.pitch ?? initial?.pitch ?? 0, 0, 88);
+  let pitch = THREE.MathUtils.clamp(testView?.pitch ?? initial?.pitch ?? 0, 0, 175);
+  let bearing = testView?.bearing ?? initial?.bearing ?? 0;
   let longitude = testView?.longitude ?? initial?.center[0] ?? -25,
     latitude = testView?.latitude ?? initial?.center[1] ?? 35;
-  // For YXZ, rotations are applied X then Y. Use quaternion explicitly so the
-  // chosen geographic centre is always in front of the camera, even at poles.
+  // A stable east/north/up frame keeps heading meaningful when the camera
+  // pans across longitudes or poles. The previous shortest-arc rotation did
+  // not preserve north, and stored bearing was never applied to the camera.
   let surfaceRadius = WGS84_A_KM;
   const orbit = () => {
     const target = new THREE.Vector3(
       ...geodeticToWorld(latitude, longitude),
     );
     surfaceRadius = target.length();
-    target.normalize();
-    earth.quaternion.setFromUnitVectors(target, new THREE.Vector3(0, 0, 1));
+    const up = target.normalize();
+    const lambda = THREE.MathUtils.degToRad(longitude);
+    const east = new THREE.Vector3(Math.cos(lambda), 0, -Math.sin(lambda));
+    const north = new THREE.Vector3().crossVectors(up, east).normalize();
+    earth.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, north, up)).invert();
     earth.updateMatrixWorld(true);
   };
   orbit();
@@ -207,6 +219,7 @@ export function createGlobeScene(
     uAirSamples: { value: profile.airSamples as number },
     uShadowSamples: { value: profile.shadowSamples as number },
     uGroundSize: { value: new THREE.Vector2(1, 1) },
+    uShadowRegion: { value: new THREE.Vector4(1, 1, 1, 1) },
   };
   const testProfile = process.env.NODE_ENV !== "production" ? read().testCloudProfile : undefined;
   const testCloudTexture = testProfile ? new THREE.DataTexture(
@@ -241,6 +254,7 @@ export function createGlobeScene(
   const cloudMaterial = material(volumeVertex, cloudFragment, {
     uSteps: { value: 48 },
     uLightSamples: { value: 6 },
+    uLightStepKm: { value: 0.16 },
   });
   cloudMaterial.transparent = true;
   cloudMaterial.depthWrite = false;
@@ -258,8 +272,9 @@ export function createGlobeScene(
   earth.add(shadowMesh);
   const cloudTarget = new THREE.WebGLRenderTarget(1, 1, { type: renderer.extensions.has("EXT_color_buffer_float") ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: false });
   const shadowTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+  const cloudCache = new GlobeCloudCache();
   const compositeScene = new THREE.Scene(), compositeCamera = new THREE.Camera();
-  const compositeMaterial = new THREE.ShaderMaterial({ vertexShader: compositeVertex, fragmentShader: cloudCompositeFragment, glslVersion: THREE.GLSL3, uniforms: { uCloudImage: { value: cloudTarget.texture } }, transparent: true, depthWrite: false, depthTest: false });
+  const compositeMaterial = new THREE.ShaderMaterial({ vertexShader: compositeVertex, fragmentShader: cloudCompositeFragment, glslVersion: THREE.GLSL3, uniforms: { uCloudImage: { value: cloudTarget.texture }, uCloudRegion: { value: new THREE.Vector4(1, 1, 1, 1) } }, transparent: true, depthWrite: false, depthTest: false });
   const compositeQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compositeMaterial);
   compositeQuad.frustumCulled = false;
   compositeScene.add(compositeQuad);
@@ -416,6 +431,7 @@ export function createGlobeScene(
     lastAurora: RadarAuroraData | null = null,
     lastQuality = "";
   const weatherTextures: THREE.Texture[] = [];
+  let weatherRevision = 0;
   const sync = () => {
     const state = read();
     if (
@@ -436,6 +452,7 @@ export function createGlobeScene(
       state.cloudData?.encoding === "rgba8-base64"
     ) {
       lastData = state.cloudData;
+      weatherRevision++;
       weatherTextures.splice(0).forEach((texture) => texture.dispose());
       for (const layer of state.cloudData.layers) {
         const texture = decodeTexture(state.cloudData, layer.volume);
@@ -493,6 +510,7 @@ export function createGlobeScene(
           state.cloudSettings.debugMode === "mesh";
     cloudMaterial.uniforms.uSteps.value = profile.steps;
     cloudMaterial.uniforms.uLightSamples.value = profile.lightSamples;
+    cloudMaterial.uniforms.uLightStepKm.value = { low: 0.32, medium: 0.24, high: 0.16, ultra: 0.10 }[effectiveQuality];
     shared.uAirSamples.value = profile.airSamples;
     shared.uShadowSamples.value = profile.shadowSamples;
     auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness;
@@ -503,47 +521,70 @@ export function createGlobeScene(
     read().onCameraChange({
       center: [longitude, latitude],
       zoom: -Math.log((targetDistance / WGS84_A_KM - 1) / 1.7) / 0.38,
-      bearing: 0,
+      bearing,
       pitch,
     });
   let down = false,
-    tilting = false,
+    dragMode: GlobeDragMode = null,
+    pointerId = -1,
+    lastMotionAt = -10000,
     moved = 0,
     previousX = 0,
     previousY = 0;
   const pointer = new THREE.Vector2(),
     raycaster = new THREE.Raycaster();
+  const keys = new Set<string>();
+  const translate = (eastKm: number, northKm: number) => {
+    ({ latitude, longitude } = globePanPosition(latitude, longitude, eastKm, northKm));
+    lastMotionAt = performance.now();
+    orbit();
+  };
+  const resetView = () => { bearing = 0; pitch = 0; lastMotionAt = performance.now(); remember(); };
   const onDown = (event: PointerEvent) => {
+    if (down) return;
+    dragMode = globeDragMode(event.button, event.shiftKey);
+    if (!dragMode) return;
+    event.preventDefault(); // particularly suppress middle-button autoscroll
+    canvas.focus({ preventScroll: true });
     down = true;
-    tilting = event.shiftKey;
+    pointerId = event.pointerId;
+    canvas.style.cursor = dragMode === "look" ? "crosshair" : "grabbing";
     moved = 0;
     previousX = event.clientX;
     previousY = event.clientY;
     canvas.setPointerCapture(event.pointerId);
   };
   const onMove = (event: PointerEvent) => {
-    if (!down) return;
+    if (!down || event.pointerId !== pointerId) return;
     const dx = event.clientX - previousX,
       dy = event.clientY - previousY;
     moved += Math.abs(dx) + Math.abs(dy);
     const sensitivity =
       0.16 * Math.min(1, (distance - WGS84_A_KM) / 3500);
-    if (tilting) pitch = THREE.MathUtils.clamp(pitch + dy * 0.2, 0, 88);
-    else {
+    if (dragMode === "look") ({ bearing, pitch } = globeLookDrag(bearing, pitch, dx, dy));
+    else if (dragMode === "pan") {
+      const delta = globePanDrag(dx, dy, distance - WGS84_A_KM, camera.fov, host.clientHeight, bearing, pitch);
+      translate(delta.eastKm, delta.northKm);
+    } else {
       longitude = wrapLongitude(longitude - dx * sensitivity);
       latitude = THREE.MathUtils.clamp(latitude + dy * sensitivity, -90, 90);
     }
     previousX = event.clientX;
     previousY = event.clientY;
-    orbit();
+    lastMotionAt = performance.now();
+    if (dragMode === "orbit") orbit();
   };
   const onUp = (event: PointerEvent) => {
-    if (!down) return;
+    if (!down || event.pointerId !== pointerId) return;
+    const maySelect = dragMode === "orbit" && event.button === 0 && event.type !== "pointercancel";
     down = false;
+    dragMode = null;
+    pointerId = -1;
+    canvas.style.cursor = "grab";
     if (canvas.hasPointerCapture(event.pointerId))
       canvas.releasePointerCapture(event.pointerId);
     remember();
-    if (moved > 5) return;
+    if (!maySelect || moved > 5) return;
     const rect = canvas.getBoundingClientRect();
     pointer.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -578,23 +619,50 @@ export function createGlobeScene(
       host.clientHeight,
     );
     remember();
+    lastMotionAt = performance.now();
   };
   const onKey = (event: KeyboardEvent) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (["w", "a", "s", "d", "q", "e", "shift"].includes(key)) {
+      keys.add(key); event.preventDefault(); return;
+    }
+    if (event.key === "Home") { event.preventDefault(); resetView(); return; }
+    if (event.shiftKey && event.key.startsWith("Arrow")) {
+      ({ bearing, pitch } = globeLookDrag(bearing, pitch, event.key === "ArrowLeft" ? -25 : event.key === "ArrowRight" ? 25 : 0, event.key === "ArrowUp" ? -25 : event.key === "ArrowDown" ? 25 : 0));
+      lastMotionAt = performance.now(); event.preventDefault(); remember(); return;
+    }
     if (event.key === "ArrowLeft") longitude -= 5;
     else if (event.key === "ArrowRight") longitude += 5;
     else if (event.key === "ArrowUp") latitude = Math.min(90, latitude + 5);
     else if (event.key === "ArrowDown") latitude = Math.max(-90, latitude - 5);
     else return;
     event.preventDefault();
+    lastMotionAt = performance.now();
     orbit();
     remember();
   };
+  const onKeyUp = (event: KeyboardEvent) => { keys.delete(event.key.toLowerCase()); remember(); };
+  const stopInput = () => {
+    keys.clear(); down = false; dragMode = null;
+    canvas.style.cursor = "grab";
+    if (pointerId >= 0 && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+    pointerId = -1;
+  };
+  const onAux = (event: MouseEvent) => { if (event.button === 1) event.preventDefault(); };
+  const onContext = (event: Event) => event.preventDefault();
   canvas.addEventListener("pointerdown", onDown);
   canvas.addEventListener("pointermove", onMove);
   canvas.addEventListener("pointerup", onUp);
   canvas.addEventListener("pointercancel", onUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("keydown", onKey);
+  canvas.addEventListener("keyup", onKeyUp);
+  canvas.addEventListener("blur", stopInput);
+  canvas.addEventListener("auxclick", onAux);
+  canvas.addEventListener("contextmenu", onContext);
+  canvas.addEventListener("globe-reset-view", resetView);
+  window.addEventListener("blur", stopInput);
   const resize = () => {
     camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
     camera.updateProjectionMatrix();
@@ -603,6 +671,7 @@ export function createGlobeScene(
     renderer.setSize(host.clientWidth, host.clientHeight, false);
     cloudTarget.setSize(size.cloudWidth, size.cloudHeight);
     shadowTarget.setSize(Math.max(1, Math.floor(size.cloudWidth / 2)), Math.max(1, Math.floor(size.cloudHeight / 2)));
+    cloudCache.invalidate();
     shared.uGroundSize.value.set(size.groundWidth, size.groundHeight);
     shared.uPixelAngle.value =
       (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) /
@@ -614,12 +683,14 @@ export function createGlobeScene(
   const started = performance.now();
   adaptive.reset(started);
   const localFrustum = new THREE.Frustum(), frustumMatrix = new THREE.Matrix4();
-  let visible = true, contextLost = false, lastDraw = 0, lastDiagnostics = 0;
+  let visible = true, contextLost = false, lastDraw = 0, nextDrawAt = 0, lastDiagnostics = 0;
   let measuredFrames = 0, measuredSince = started, measuredFps = 0, renderCpuMs = 0;
+  let lastVolumeGpuMs: number | null = null, fullVolumeGpuMs: number | null = null, movingVolumeGpuMs: number | null = null;
+  let volumePasses = 0, passesPerSecond = 0;
   const frameCosts: number[] = [];
   const observer = new IntersectionObserver(entries => { visible = entries[0]?.isIntersecting ?? true; });
   observer.observe(host);
-  const onVisibility = () => { previousFrame = performance.now(); lastDraw = 0; adaptive.reset(performance.now()); measuredFrames = 0; measuredSince = performance.now(); };
+  const onVisibility = () => { stopInput(); previousFrame = performance.now(); lastDraw = 0; nextDrawAt = 0; cloudCache.invalidate(); adaptive.reset(performance.now()); measuredFrames = 0; measuredSince = performance.now(); };
   const onLost = (event: Event) => { event.preventDefault(); contextLost = true; gpuTimer.dispose(); host.dataset.globeStatus = "Graphics context lost — waiting for recovery"; };
   const onRestored = () => { contextLost = false; delete host.dataset.globeStatus; onVisibility(); resize(); };
   document.addEventListener("visibilitychange", onVisibility);
@@ -633,36 +704,58 @@ export function createGlobeScene(
   const render = (now: number) => {
     if (disposed) return;
     frame = requestAnimationFrame(render);
-    if (document.hidden || !visible || contextLost || !host.clientWidth || !host.clientHeight) { previousFrame = now; lastDraw = 0; return; }
+    if (document.hidden || !visible || contextLost || !host.clientWidth || !host.clientHeight) { previousFrame = now; lastDraw = 0; nextDrawAt = 0; return; }
     // Limit battery/GPU use even on a fast display. Animated effects continue
     // at real elapsed time; there is no 144/240 Hz busy-render loop.
     const interval = 1000 / profile.fps;
-    if (lastDraw && now - lastDraw < interval - 0.1) return;
+    const deadline = nextGlobeFrame(now, nextDrawAt, profile.fps);
+    if (deadline === null) return;
+    nextDrawAt = deadline;
     const elapsed = lastDraw ? now - lastDraw : interval;
-    // Do not carry missed-frame credit: otherwise repeated rounding near a
-    // deadline can exceed the cap, and a stall triggers a catch-up burst.
     lastDraw = now;
     const cpuStart = performance.now();
-    const gpuMs = gpuTimer.poll();
+    const gpuResult = gpuTimer.poll(), gpuMs = gpuResult?.ms ?? null;
+    if (gpuResult?.tag.startsWith("volume")) {
+      lastVolumeGpuMs = gpuResult.ms;
+      if (gpuResult.tag === "volume-moving") movingVolumeGpuMs = gpuResult.ms;
+      else fullVolumeGpuMs = gpuResult.ms;
+    }
     const requested = read().cloudSettings.quality;
     if (lastRequestedQuality !== requested) { adaptive.reset(now); lastRequestedQuality = requested; }
-    const nextQuality = requested === "auto" ? adaptive.sample(Math.max(gpuMs ?? 0, renderCpuMs, elapsed - interval), now, now - started > 4000) : requested;
+    // Cheap cache hits are not evidence that a weak GPU can march a denser
+    // volume. Auto learns from complete refresh frames, not just reused ones.
+    const nextQuality = requested === "auto" ? adaptive.sample(Math.max(lastVolumeGpuMs ?? gpuMs ?? 0, renderCpuMs, elapsed - interval), now, now - started > 4000) : requested;
     if (nextQuality !== effectiveQuality) {
       effectiveQuality = nextQuality;
       profile = GLOBE_PROFILES[effectiveQuality];
       surface.setQuality(effectiveQuality);
       resize(); lastLodUpdate = 0;
       frameCosts.length = 0;
+      lastVolumeGpuMs = fullVolumeGpuMs = movingVolumeGpuMs = null;
     }
     const deltaSeconds = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
+    const testingMotion = process.env.NODE_ENV !== "production" && Boolean(read().testCameraMotion);
+    const speed = Math.max(0.25, (distance - WGS84_A_KM) * 0.35) * deltaSeconds * (keys.has("shift") ? 4 : 1);
+    const sideways = Number(keys.has("d")) - Number(keys.has("a"));
+    const forward = Number(keys.has("w")) - Number(keys.has("s"));
+    if (sideways || forward || testingMotion) {
+      const yaw = THREE.MathUtils.degToRad(bearing);
+      const normalizer = Math.max(1, Math.hypot(sideways, forward));
+      translate((sideways * Math.cos(yaw) + forward * Math.sin(yaw)) * speed / normalizer + (testingMotion ? deltaSeconds * 0.8 : 0), (-sideways * Math.sin(yaw) + forward * Math.cos(yaw)) * speed / normalizer);
+    }
+    if (keys.has("q") || keys.has("e")) {
+      targetDistance = THREE.MathUtils.clamp(targetDistance + (Number(keys.has("e")) - Number(keys.has("q"))) * speed, WGS84_A_KM + 4, WGS84_A_KM + 40000);
+      lastMotionAt = now;
+    }
     distance = globeZoomStep(distance, targetDistance, deltaSeconds);
     const height = distance - WGS84_A_KM,
-      tilt = THREE.MathUtils.degToRad(pitch);
+      tilt = THREE.MathUtils.degToRad(pitch), yaw = THREE.MathUtils.degToRad(bearing);
     // Height means actual altitude above the selected WGS84 surface, even at
     // the poles. Tilting changes the view direction, never the camera altitude.
     camera.position.set(0, 0, surfaceRadius + height);
-    camera.lookAt(0, Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
+    camera.up.set(Math.sin(yaw) * Math.cos(tilt), Math.cos(yaw) * Math.cos(tilt), Math.sin(tilt));
+    camera.lookAt(Math.sin(yaw) * Math.sin(tilt) * 1000, Math.cos(yaw) * Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
     sync();
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
@@ -687,25 +780,42 @@ export function createGlobeScene(
       surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled);
       lastLodUpdate = now;
     }
+    const moving = (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
+    const cloudSize = movingCloudSize(cloudTarget.width, cloudTarget.height, moving, effectiveQuality === "low");
+    const shadowWidth = Math.max(1, Math.floor(cloudSize.width / 2)), shadowHeight = Math.max(1, Math.floor(cloudSize.height / 2));
+    cloudTarget.viewport.set(0, 0, cloudSize.width, cloudSize.height);
+    cloudTarget.scissor.copy(cloudTarget.viewport); cloudTarget.scissorTest = true;
+    shadowTarget.viewport.set(0, 0, shadowWidth, shadowHeight);
+    shadowTarget.scissor.copy(shadowTarget.viewport); shadowTarget.scissorTest = true;
+    compositeMaterial.uniforms.uCloudRegion.value.set(cloudSize.width / cloudTarget.width, cloudSize.height / cloudTarget.height, 1 / cloudTarget.width, 1 / cloudTarget.height);
+    shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
+    shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
+    const settings = read().cloudSettings;
+    const signature = [distance.toFixed(5), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
+    const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();
-    gpuTimer.begin();
-    // Four small passes: cheap cached-resolution ground shadows, crisp terrain,
-    // independent cloud volume, then the high-altitude aurora over the result.
-    renderer.setRenderTarget(shadowTarget);
-    renderer.setClearColor(0xffffff, 1);
-    renderer.clear();
-    if (cloudMesh.visible && shared.uShadows.value) { camera.layers.set(3); renderer.render(scene, camera); }
+    gpuTimer.begin(refreshClouds && cloudMesh.visible ? (moving ? "volume-moving" : "volume-full") : "reuse");
+    if (refreshClouds) {
+      renderer.setRenderTarget(shadowTarget);
+      renderer.setClearColor(0xffffff, 1);
+      renderer.clear();
+      if (cloudMesh.visible && shared.uShadows.value) { camera.layers.set(3); renderer.render(scene, camera); }
+      if (cloudMesh.visible) {
+        renderer.setRenderTarget(cloudTarget);
+        renderer.setClearColor(0x000000, 0);
+        camera.layers.set(1);
+        renderer.render(scene, camera);
+        volumePasses++;
+      }
+      cloudCache.commit(signature, now);
+    }
     for (const tile of surface.tiles.values()) (tile.mesh.material as THREE.ShaderMaterial).uniforms.uGroundShadow.value = shadowTarget.texture;
     renderer.setRenderTarget(null);
     renderer.setClearColor(0x01040a, 1);
     camera.layers.set(0);
     renderer.render(scene, camera);
     if (cloudMesh.visible) {
-      renderer.setRenderTarget(cloudTarget);
-      renderer.setClearColor(0x000000, 0);
-      camera.layers.set(1);
-      renderer.render(scene, camera);
-      renderer.setRenderTarget(null);
       renderer.autoClear = false;
       renderer.render(compositeScene, compositeCamera);
       renderer.autoClear = true;
@@ -720,7 +830,7 @@ export function createGlobeScene(
     renderCpuMs = performance.now() - cpuStart;
     measuredFrames++;
     if (gpuMs !== null) { frameCosts.push(gpuMs); if (frameCosts.length > 120) frameCosts.shift(); }
-    if (now - measuredSince >= 1000) { measuredFps = measuredFrames * 1000 / (now - measuredSince); measuredSince = now; measuredFrames = 0; }
+    if (now - measuredSince >= 1000) { measuredFps = measuredFrames * 1000 / (now - measuredSince); passesPerSecond = volumePasses * 1000 / (now - measuredSince); measuredSince = now; measuredFrames = 0; volumePasses = 0; }
     if (now - lastDiagnostics > 1000) {
       lastDiagnostics = now;
       const costs = [...frameCosts].sort((a, b) => a - b);
@@ -734,6 +844,12 @@ export function createGlobeScene(
         cpuMs: Math.round(renderCpuMs * 10) / 10,
         ground: shared.uGroundSize.value.toArray(),
         cloud: [cloudTarget.width, cloudTarget.height],
+        cloudViewport: [cloudSize.width, cloudSize.height],
+        cloudRefreshesPerSecond: Math.round(passesPerSecond * 10) / 10,
+        cloudCacheHits: cloudCache.hits,
+        refreshFrameGpuMs: fullVolumeGpuMs === null ? null : Math.round(fullVolumeGpuMs * 10) / 10,
+        movingFrameGpuMs: movingVolumeGpuMs === null ? null : Math.round(movingVolumeGpuMs * 10) / 10,
+        moving,
         terrain: surface.stats,
         tiles: surface.tiles.size,
         drawCalls: renderer.info.render.calls,
@@ -745,7 +861,8 @@ export function createGlobeScene(
         cameraKm: Math.round(camera.position.length()),
         altitudeKm: Math.round(height * 10) / 10,
         pitch: Math.round(pitch),
-        focus: [Math.round(longitude), Math.round(latitude)],
+        bearing: Math.round(bearing * 10) / 10,
+        focus: [Number(longitude.toFixed(5)), Number(latitude.toFixed(5))],
         clippingKm: [Math.round(camera.near), Math.round(camera.far)],
       });
     }
@@ -767,6 +884,12 @@ export function createGlobeScene(
     canvas.removeEventListener("pointercancel", onUp);
     canvas.removeEventListener("wheel", onWheel);
     canvas.removeEventListener("keydown", onKey);
+    canvas.removeEventListener("keyup", onKeyUp);
+    canvas.removeEventListener("blur", stopInput);
+    canvas.removeEventListener("auxclick", onAux);
+    canvas.removeEventListener("contextmenu", onContext);
+    canvas.removeEventListener("globe-reset-view", resetView);
+    window.removeEventListener("blur", stopInput);
     surface.dispose();
     clearGroup(curtains);
     clearGroup(routes);

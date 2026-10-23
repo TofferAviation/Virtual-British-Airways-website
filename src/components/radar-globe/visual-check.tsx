@@ -80,6 +80,8 @@ export function GlobeVisualCheck() {
     [aurora, setAurora] = useState<RadarAuroraData | null>(null),
     [clouds, setClouds] = useState(true),
     [quality, setQuality] = useState<GlobeQualityRequest>("auto"),
+    [cache, setCache] = useState(true),
+    [motion, setMotion] = useState(false),
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
   useEffect(() => {
@@ -136,7 +138,7 @@ export function GlobeVisualCheck() {
         font: "13px Arial",
       }}
     >
-      <div style={{ position: "absolute", inset: "78px 0 48px" }}>
+      <div style={{ position: "absolute", inset: "88px 0 80px" }}>
         <BaRadarThreeGlobe
           key={`${view}-${revision}`}
           flights={[]}
@@ -171,6 +173,8 @@ export function GlobeVisualCheck() {
           initialCamera={null}
           onCameraChange={() => {}}
           testDate={selected.date}
+          testCloudCache={cache}
+          testCameraMotion={motion}
           testView={selected}
           testCloudProfile={view === "cumulus" ? { coverage: 0.58, baseKm: 1.2, topKm: 5 } : undefined}
         />
@@ -195,6 +199,8 @@ export function GlobeVisualCheck() {
           Clouds {clouds ? "on" : "off"}
         </button>
         <label style={{fontSize: 12}}>Globe quality {" "}<select aria-label="Globe quality" value={quality} onChange={e => setQuality(e.target.value as GlobeQualityRequest)}>{["auto", "low", "medium", "high", "ultra"].map(q => <option key={q} value={q}>{q}</option>)}</select></label>
+        <label style={{fontSize: 12}}><input type="checkbox" checked={cache} onChange={e => setCache(e.target.checked)} />Cloud cache</label>
+        <label style={{fontSize: 12}}><input type="checkbox" checked={motion} onChange={e => setMotion(e.target.checked)} />Motion test</label>
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
           {view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS forecast: ${data?.validAt ?? "loading"} · NOAA: ${aurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
         </span>

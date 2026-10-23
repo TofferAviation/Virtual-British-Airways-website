@@ -59,11 +59,14 @@ vec4 cloudNoise(sampler3D field,vec3 coordinates,float scale,vec3 p){
   return textureLod(field,coordinates,lod);
 }
 vec4 weatherAt(sampler2D field,vec2 uv){return textureLod(field,uv,0.0);}
-float layerCloud(vec4 w,vec3 p,float h,float kind){
+float layerCloud(vec4 w,vec3 p,float h,float kind,bool fineDetail){
   if(w.a<0.5||w.r<0.025)return 0.0;
   float base=w.g*25.5,top=w.b*25.5;
   if(top<base+0.12||h<base||h>top)return 0.0;
   float t=clamp((h-base)/(top-base),0.0,1.0);
+  float profile=smoothstep(0.0,0.04,t)*(1.0-smoothstep(0.76,1.0,t));
+  if(kind>0.5)profile=smoothstep(0.0,0.045,t)*(1.0-smoothstep(0.40,0.90,t));
+  if(profile<=0.0)return 0.0;
   vec3 normal=ellipsoidNormal(p),foot=p-normal*h;
   vec4 regional=cloudNoise(uBaseNoise,foot/360.0+kind*0.31,360.0,p);
   float organisation=cloudNoise(uBaseNoise,foot/90.0+kind*0.71,90.0,p).r;
@@ -74,6 +77,13 @@ float layerCloud(vec4 w,vec3 p,float h,float kind){
   float bank=smoothstep(1.0-w.r-0.18,1.0-w.r+0.18,groupSignal);
   float cover=clamp(w.r*w.r+(bank-0.5)*0.85+(regional.r-0.5)*0.5,0.0,1.0);
   float growth=smoothstep(0.30,0.70,regional.r);
+  float threshold=mix(0.81,0.30,cover);
+  // Cirrus does not use cumulus mass/erosion at all. Do not pay for three
+  // volume lookups only to overwrite their result with the fibre model.
+  if(kind>1.5){
+    float fibres=cloudNoise(uBaseNoise,(foot+normal*h*8.0)/vec3(240.0,50.0,75.0),50.0,p).r;
+    return smoothstep(threshold+0.015,threshold+0.18,fibres-(1.0-profile)*0.3)*0.003*smoothstep(0.0,0.03,t)*sqrt(cover);
+  }
   // The mass field is genuinely 3D, not a height map extruded into columns.
   // Regional organisation, kilometre-scale lobes and sub-km erosion are
   // separate signals, so every weather cell does not become identical beads.
@@ -83,28 +93,35 @@ float layerCloud(vec4 w,vec3 p,float h,float kind){
   vec3 volume=p+normal*(h-base)*mix(0.0,0.9,min(1.0,kind))+vec3(regional.g,regional.b,regional.a)*2.8;
   vec4 mass=cloudNoise(uBaseNoise,volume/scale+kind*0.47,scale,p);
   float shape=dot(mass,vec4(0.25,0.40,0.25,0.10))+0.15-t*t*mix(0.42,0.26,growth);
-  float profile=smoothstep(0.0,0.04,t)*(1.0-smoothstep(0.76,1.0,t));
-  if(kind>0.5)profile=smoothstep(0.0,0.045,t)*(1.0-smoothstep(0.40,0.90,t));
-  vec4 erosion=cloudNoise(uDetailNoise,volume/1.2+kind*0.19,1.2,p);
-  float erosionFbm=dot(erosion.gba,vec3(0.625,0.25,0.125));
-  float wisps=cloudNoise(uDetailNoise,volume/0.28+kind*0.27,0.28,p).b;
-  float threshold=mix(0.81,0.30,cover);
-  float edgeErosion=(1.0-erosionFbm)*0.15+(1.0-wisps)*0.035;
-  float body=pow(smoothstep(threshold,threshold+0.06,shape-edgeErosion),1.25)*profile*(0.35+0.65*t);
-  if(kind>1.5){
-    float fibres=cloudNoise(uBaseNoise,(foot+normal*h*8.0)/vec3(240.0,50.0,75.0),50.0,p).r;
-    body=smoothstep(threshold+0.015,threshold+0.18,fibres-(1.0-profile)*0.3)*0.003;
+  // Erosion only subtracts (0..0.185). These two tests are exact bounds:
+  // empty mass and saturated interior cannot be changed by fine erosion.
+  float margin=shape-threshold;
+  if(margin<=0.0)return 0.0;
+  float edgeErosion=0.0;
+  if(margin<0.245){
+    edgeErosion=0.105; // filtered erosion for distant secondary light probes
+    if(fineDetail){
+      vec4 erosion=cloudNoise(uDetailNoise,volume/1.2+kind*0.19,1.2,p);
+      float erosionFbm=dot(erosion.gba,vec3(0.625,0.25,0.125));
+      float wisps=cloudNoise(uDetailNoise,volume/0.28+kind*0.27,0.28,p).b;
+      edgeErosion=(1.0-erosionFbm)*0.15+(1.0-wisps)*0.035;
+    }
   }
+  float body=pow(smoothstep(threshold,threshold+0.06,shape-edgeErosion),1.25)*profile*(0.35+0.65*t);
   return body*smoothstep(0.0,0.03,t)*sqrt(cover);
 }
-float densityAt(vec3 p){
+float densityAtDetail(vec3 p,bool fineDetail){
   if(uClouds<0.5)return 0.0;
-  vec2 uv=geographicUV(p);float h=altitudeKm(p);
-  float low=uLayers.x>0.5?layerCloud(weatherAt(uLowWeather,uv),p,h,0.0):0.0;
-  float middle=uLayers.y>0.5?layerCloud(weatherAt(uMiddleWeather,uv),p,h,1.0):0.0;
-  float high=uLayers.z>0.5?layerCloud(weatherAt(uHighWeather,uv),p,h,2.0):0.0;
+  float h=altitudeKm(p);
+  if(h<0.0||h>18.0)return 0.0;
+  vec2 uv=geographicUV(p);
+  float low=uLayers.x>0.5?layerCloud(weatherAt(uLowWeather,uv),p,h,0.0,fineDetail):0.0;
+  float middle=uLayers.y>0.5?layerCloud(weatherAt(uMiddleWeather,uv),p,h,1.0,fineDetail):0.0;
+  float high=uLayers.z>0.5?layerCloud(weatherAt(uHighWeather,uv),p,h,2.0,fineDetail):0.0;
   return max(low,max(middle,high));
 }
+float densityAt(vec3 p){return densityAtDetail(p,true);}
+float lightDensityAt(vec3 p){return densityAtDetail(p,false);}
 float shadowTransmittance(vec3 p){
   if(uShadows<0.5||uClouds<0.5)return 1.0;
   if(dot(ellipsoidNormal(p),uSun)<0.035)return 1.0;
@@ -125,7 +142,7 @@ export const surfaceFragment = `
 precision highp float;
 in vec3 vPosition;in vec3 vNormal;in vec2 vUv;
 uniform sampler2D uSurface;uniform sampler2D uNight;
-uniform sampler2D uGroundShadow;uniform vec2 uGroundSize;uniform vec4 uNightTransform;
+uniform sampler2D uGroundShadow;uniform vec2 uGroundSize;uniform vec4 uNightTransform;uniform vec4 uShadowRegion;
 out vec4 fragColor;
 ${geoGLSL}
 ${densityGLSL}
@@ -134,7 +151,8 @@ void main(){
   float solar=sunElevation(vPosition);
   float day=smoothstep(-0.08,0.10,solar);
   float light=max(0.0,solar);
-  float shadow=texture(uGroundShadow,gl_FragCoord.xy/uGroundSize).r;
+  vec2 shadowUV=clamp(gl_FragCoord.xy/uGroundSize*uShadowRegion.xy,uShadowRegion.zw*0.5,uShadowRegion.xy-uShadowRegion.zw*0.5);
+  float shadow=texture(uGroundShadow,shadowUV).r;
   vec3 diffuse=colour*(0.025+day*(0.24+1.50*sqrt(light))*mix(0.42,1.0,shadow));
   vec3 night=texture(uNight,vUv*uNightTransform.xy+uNightTransform.zw).rgb;
   float nightMask=1.0-smoothstep(-0.18,0.02,solar);
@@ -159,6 +177,7 @@ precision highp float;
 in vec3 vPosition;out vec4 fragColor;
 uniform float uSteps;
 uniform float uLightSamples;
+uniform float uLightStepKm;
 ${geoGLSL}
 ${densityGLSL}
 float phaseHG(float mu,float g){return (1.0-g*g)/pow(max(0.01,1.0+g*g-2.0*g*mu),1.5);}
@@ -178,6 +197,7 @@ void main(){
   float steps=clamp(ceil((end-start)/stepKm),uSteps,min(384.0,uSteps*8.0));
   float dt=(end-start)/steps;
   float transmittance=1.0,meanDistance=0.0,travel=start,previousDensity=0.0;
+  float tau=0.0,lastLightAt=-1000.0,lastLightDensity=0.0;
   vec3 radiance=vec3(0.0);
   float phase=mix(phaseHG(dot(rd,uSun),0.65),phaseHG(dot(rd,uSun),-0.20),0.35);
   // Deterministic midpoint integration: no screen-space pattern that swims
@@ -195,22 +215,31 @@ void main(){
       sampleStep=min(fineStep,end-travel);
       p=uCamera+rd*(travel+sampleStep*0.5);density=densityAt(p);
     }
+    // Fade the distant flight-view LOD before its hard march limit. Otherwise
+    // a high layer intersecting that limit can end in a rectangular wall.
+    if(flightView)density*=1.0-smoothstep(230.0,300.0,travel);
     travel+=sampleStep;previousDensity=density;
-    if(density<0.003)continue;
+    // Cirrus peaks below 0.003: the old dense-cloud cutoff discarded the
+    // entire high layer. Thin cloud is integrated without costly light rays.
+    if(density<0.00025){lastLightAt=-1000.0;continue;}
     float solar=sunElevation(p),day=smoothstep(-0.10,0.05,solar);
-    float tau=0.0;
-    if(uShadows>0.5){
-      if(uLightSamples<3.5)tau=densityAt(p+uSun*0.08)*0.19+densityAt(p+uSun*0.60)*0.84+densityAt(p+uSun*2.4)*3.8;
-      else if(uLightSamples<4.5)tau=densityAt(p+uSun*0.05)*0.13+densityAt(p+uSun*0.25)*0.40+densityAt(p+uSun*1.0)*1.22+densityAt(p+uSun*3.0)*3.08;
-      else tau=densityAt(p+uSun*0.035)*0.07+densityAt(p+uSun*0.13)*0.12+densityAt(p+uSun*0.33)*0.28+densityAt(p+uSun*0.75)*0.56+densityAt(p+uSun*1.6)*1.14+densityAt(p+uSun*3.5)*2.66;
+    // Reuse secondary illumination across a short smooth part of this ray.
+    // A density edge or gap forces a new query; never reuse across frames.
+    if(density<0.003){tau=0.0;lastLightAt=-1000.0;}
+    else if(uShadows>0.5&&(travel-lastLightAt>=uLightStepKm||abs(density-lastLightDensity)>max(0.015,lastLightDensity*0.3))){
+      if(uLightSamples<3.5)tau=densityAt(p+uSun*0.08)*0.19+lightDensityAt(p+uSun*0.60)*0.84+lightDensityAt(p+uSun*2.4)*3.8;
+      else if(uLightSamples<4.5)tau=densityAt(p+uSun*0.05)*0.13+densityAt(p+uSun*0.25)*0.40+lightDensityAt(p+uSun*1.0)*1.22+lightDensityAt(p+uSun*3.0)*3.08;
+      else tau=densityAt(p+uSun*0.035)*0.07+densityAt(p+uSun*0.13)*0.12+densityAt(p+uSun*0.33)*0.28+lightDensityAt(p+uSun*0.75)*0.56+lightDensityAt(p+uSun*1.6)*1.14+lightDensityAt(p+uSun*3.5)*2.66;
       tau*=CLOUD_EXTINCTION;
+      lastLightAt=travel;lastLightDensity=density;
     }
     // Optical-depth lighting, not a solid-surface normal. Successively softer
     // scattering terms retain light in the body and blue light underneath.
     float scattering=exp(-tau)+0.16*exp(-tau*0.25)+0.035*exp(-tau*0.06);
     float powder=mix(1.0,1.0-exp(-tau*2.0),0.35);
     float heightLight=clamp(altitudeKm(p)/12.0,0.0,1.0);
-    vec3 illumination=vec3(0.009,0.015,0.03)+day*(vec3(0.08,0.14,0.25)*(0.45+heightLight*0.55)+vec3(1.15,1.11,1.04)*scattering*phase*powder);
+    float ambientOcclusion=mix(0.78,1.0,exp(-density*4.0));
+    vec3 illumination=vec3(0.009,0.015,0.03)+day*(vec3(0.08,0.14,0.25)*(0.45+heightLight*0.55)*ambientOcclusion+vec3(1.15,1.11,1.04)*scattering*phase*powder);
     float sunset=(1.0-smoothstep(0.0,0.16,abs(solar)))*day;
     illumination=mix(illumination,illumination*vec3(1.1,0.69,0.42),sunset*0.45);
     float alpha=1.0-exp(-density*sampleStep*CLOUD_EXTINCTION*uCloudOpacity);
@@ -257,11 +286,13 @@ export const cloudCompositeFragment = `
 precision highp float;
 #define gl_FragColor fragColor
 uniform sampler2D uCloudImage;
+uniform vec4 uCloudRegion;
 in vec2 vUv;out vec4 fragColor;
 void main(){
   // Cloud RT stores premultiplied linear radiance. Interpolating that, rather
   // than straight colour against black, avoids dark fringes on cloud edges.
-  vec4 cloud=texture(uCloudImage,vUv);
+  vec2 uv=clamp(vUv*uCloudRegion.xy,uCloudRegion.zw*0.5,uCloudRegion.xy-uCloudRegion.zw*0.5);
+  vec4 cloud=texture(uCloudImage,uv);
   if(cloud.a<0.001)discard;
   fragColor=vec4(cloud.rgb/max(0.001,cloud.a),cloud.a);
   #include <tonemapping_fragment>

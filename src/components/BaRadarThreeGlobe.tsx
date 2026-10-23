@@ -48,10 +48,16 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
       <div className="ba-radar-globe-caption">
         <strong>Earth · WGS84</strong>
         <span>
-          {error ?? "Drag to orbit · scroll to zoom · Shift-drag to tilt"}
+          {error ?? "Left-drag: orbit · Middle-drag: pan · Right / Shift+middle: look · Wheel: zoom"}
         </span>
+        <span>WASD: move · Q/E: down/up · Shift: faster · Home: reset view</span>
         <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA GFS / SWPC</span>
         <span aria-live="off">{error ? "3D unavailable" : performanceLabel}</span>
+        <button type="button" style={{ pointerEvents: "auto", justifySelf: "start", font: "10px Arial", padding: "4px 7px", color: "#d7ebff", background: "#12344b", border: "1px solid #4982a6", borderRadius: 3 }} onClick={() => {
+          const canvas = container.current?.querySelector("canvas");
+          canvas?.dispatchEvent(new Event("globe-reset-view"));
+          canvas?.focus({ preventScroll: true });
+        }}>Reset view</button>
       </div>
     </div>
   );

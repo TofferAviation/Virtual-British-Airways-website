@@ -5,8 +5,8 @@ export type GlobeCapabilities = { mobile?: boolean; memoryGb?: number; cores?: n
 /** Independent terrain/cloud budgets: reducing cloud cost never halves ground tiles. */
 export const GLOBE_PROFILES = {
   low:    { pixelRatio: 1,    groundPixels: 2_100_000, cloudScale: 0.5,  cloudPixels: 420_000,   fps: 30, steps: 20, lightSamples: 3, shadowSamples: 8,  airSamples: 6,  maxLevel: 8,  tilePixels: 680, cacheMb: 48,  maxTiles: 72,  requests: 2, anisotropy: 4 },
-  medium: { pixelRatio: 1.25, groundPixels: 3_200_000, cloudScale: 0.67, cloudPixels: 850_000,   fps: 30, steps: 32, lightSamples: 4, shadowSamples: 12, airSamples: 8,  maxLevel: 9,  tilePixels: 560, cacheMb: 80,  maxTiles: 112, requests: 3, anisotropy: 8 },
-  high:   { pixelRatio: 1.5,  groundPixels: 5_000_000, cloudScale: 0.85, cloudPixels: 1_500_000, fps: 45, steps: 48, lightSamples: 6, shadowSamples: 16, airSamples: 12, maxLevel: 10, tilePixels: 440, cacheMb: 128, maxTiles: 168, requests: 4, anisotropy: 8 },
+  medium: { pixelRatio: 1.25, groundPixels: 3_200_000, cloudScale: 0.67, cloudPixels: 850_000,   fps: 45, steps: 32, lightSamples: 4, shadowSamples: 12, airSamples: 8,  maxLevel: 9,  tilePixels: 560, cacheMb: 80,  maxTiles: 112, requests: 3, anisotropy: 8 },
+  high:   { pixelRatio: 1.5,  groundPixels: 5_000_000, cloudScale: 0.85, cloudPixels: 1_500_000, fps: 60, steps: 48, lightSamples: 6, shadowSamples: 16, airSamples: 12, maxLevel: 10, tilePixels: 440, cacheMb: 128, maxTiles: 168, requests: 4, anisotropy: 8 },
   ultra:  { pixelRatio: 2,    groundPixels: 8_000_000, cloudScale: 1,    cloudPixels: 2_500_000, fps: 60, steps: 64, lightSamples: 6, shadowSamples: 16, airSamples: 12, maxLevel: 10, tilePixels: 360, cacheMb: 192, maxTiles: 224, requests: 6, anisotropy: 16 },
 } as const;
 export type GlobeProfile = (typeof GLOBE_PROFILES)[GlobeQuality];
