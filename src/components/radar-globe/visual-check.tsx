@@ -34,6 +34,13 @@ const views = {
     distanceKm: 9000,
     date: "2026-03-20T14:00:00Z",
   },
+  close: {
+    latitude: 42,
+    longitude: -20,
+    distanceKm: 6778,
+    pitch: 55,
+    date: "2026-03-20T18:00:00Z",
+  },
   limb: {
     latitude: 10,
     longitude: 90,
@@ -43,6 +50,7 @@ const views = {
 };
 export function GlobeVisualCheck() {
   const [view, setView] = useState<keyof typeof views>("day"),
+    [revision, setRevision] = useState(0),
     [data, setData] = useState<RadarCloudData | null>(null),
     [aurora, setAurora] = useState<RadarAuroraData | null>(null),
     [clouds, setClouds] = useState(true),
@@ -104,7 +112,7 @@ export function GlobeVisualCheck() {
     >
       <div style={{ position: "absolute", inset: "52px 0 64px" }}>
         <BaRadarThreeGlobe
-          key={view}
+          key={`${view}-${revision}`}
           flights={[]}
           selectedId=""
           onSelect={() => {}}
@@ -147,7 +155,10 @@ export function GlobeVisualCheck() {
         {Object.keys(views).map((name) => (
           <button
             key={name}
-            onClick={() => setView(name as keyof typeof views)}
+            onClick={() => {
+              setView(name as keyof typeof views);
+              setRevision((value) => value + 1);
+            }}
           >
             {name}
           </button>

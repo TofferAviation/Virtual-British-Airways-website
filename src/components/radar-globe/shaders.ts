@@ -27,7 +27,15 @@ uniform float uClouds;
 uniform float uCloudOpacity;
 uniform float uShadows;
 uniform float uDebug;
-vec4 weatherAt(sampler2D field,vec2 uv){return texture(field,uv);}
+uniform float uPixelAngle;
+float cloudNoise(sampler3D field,vec3 coordinates,float scale,vec3 p){
+  // Explicit footprint filtering also works inside divergent raymarch loops.
+  // Subpixel erosion must not turn into sparkling white grains when orbiting.
+  float footprint=max(0.05,length(p-uCamera)*uPixelAngle);
+  float lod=max(0.0,log2(48.0*footprint/scale));
+  return textureLod(field,coordinates,lod).r;
+}
+vec4 weatherAt(sampler2D field,vec2 uv){return textureLod(field,uv,0.0);}
 float layerCloud(vec4 w,vec3 p,float h,float kind){
   if(w.a<0.5||w.r<0.025)return 0.0;
   float base=w.g*25.5,top=w.b*25.5;
@@ -36,17 +44,26 @@ float layerCloud(vec4 w,vec3 p,float h,float kind){
   // Cartesian sampling is continuous across poles and the antimeridian.
   // Microstructure is inferred. The numerical weather model supplies cover
   // and pressure-layer heights, not observed individual cumulus geometry.
-  vec3 flow=p;
-  float broad=texture(uBaseNoise,flow/920.0+kind*0.17).r;
-  float billow=texture(uBaseNoise,flow/165.0+vec3(0.31,0.21,kind)).r;
-  float detail=texture(uDetailNoise,flow/85.0).r;
-  float shape=broad*0.34+billow*0.66;
+  vec3 flow=p-ellipsoidNormal(p)*h;
+  float broad=cloudNoise(uBaseNoise,flow/920.0+kind*0.17,920.0,p);
+  float billow=cloudNoise(uBaseNoise,flow/110.0+vec3(0.31,0.21,kind),110.0,p);
+  float puffs=cloudNoise(uDetailNoise,flow/50.0+kind*0.23,50.0,p);
+  float detail=cloudNoise(uDetailNoise,p/20.0,20.0,p);
+  float fine=cloudNoise(uDetailNoise,p/2.4+kind*0.31,2.4,p);
+  float shape=broad*0.20+billow*0.52+puffs*0.28;
   float cover=smoothstep(0.025,0.98,w.r);
-  float threshold=mix(0.66,0.18,cover);
-  float body=smoothstep(threshold,threshold+0.16,shape-detail*0.12);
-  float topProfile=mix(0.38,1.0,smoothstep(0.22,0.72,shape));
-  float vertical=smoothstep(0.0,0.08,t)*(1.0-smoothstep(topProfile*0.67,topProfile,t));
-  if(kind>1.5){body=smoothstep(threshold-0.08,threshold+0.08,shape-detail*0.08);vertical=smoothstep(0.0,0.15,t)*(1.0-smoothstep(0.55,1.0,t));body*=0.34;}
+  float threshold=mix(0.60,0.22,cover);
+  // Convex height erosion rounds the cloud tops while a short bottom ramp
+  // keeps a flattened condensation base. Kilometre-scale cells supply the
+  // billows; smaller cellular erosion breaks up the silhouette.
+  float cloudTop=0.22+0.78*smoothstep(threshold,threshold+0.32,shape)-detail*0.07-fine*0.04;
+  float body=smoothstep(threshold,threshold+0.10,shape-detail*0.06-fine*0.02);
+  float vertical=smoothstep(0.0,0.07,t)*(1.0-smoothstep(cloudTop-0.16,cloudTop,t));
+  if(kind>1.5){
+    float fibres=cloudNoise(uDetailNoise,flow/vec3(185.0,26.0,38.0),26.0,p);
+    body=smoothstep(threshold+0.08,threshold+0.23,shape*0.45+fibres*0.55);
+    vertical=smoothstep(0.0,0.15,t)*(1.0-smoothstep(0.55,1.0,t));body*=0.09;
+  }
   return body*vertical*sqrt(cover);
 }
 float densityAt(vec3 p){
@@ -112,21 +129,36 @@ void main(){
   float start=max(0.0,outer.x),end=outer.y;
   vec2 ground=intersectEllipsoid(uCamera,rd,RADII);
   if(ground.x>0.0)end=min(end,ground.x);
-  float dt=(end-start)/uSteps;
+  // A fixed orbital step leaves only 3-4 samples through a low cloud. At
+  // close zoom that produces contour rings rather than a continuous volume.
+  float footprint=length(vPosition-uCamera)*uPixelAngle;
+  float stepKm=clamp(footprint*0.45,0.08,0.75);
+  float steps=clamp(ceil((end-start)/stepKm),uSteps,min(384.0,uSteps*8.0));
+  float dt=(end-start)/steps;
   float transmittance=1.0;vec3 radiance=vec3(0.0);
-  // Stable spatial jitter prevents bands without flickering every frame.
-  float jitter=fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))*52.9829189);
-  for(int i=0;i<72;i++){
-    if(float(i)>=uSteps)break;
-    vec3 p=uCamera+rd*(start+(float(i)+0.25+jitter*0.5)*dt);
+  float billowLight=1.0;bool normalEstimated=false;
+  // Deterministic midpoint integration: no screen-space pattern that swims
+  // across geographic clouds while the pilot orbits or zooms.
+  for(int i=0;i<384;i++){
+    if(float(i)>=steps)break;
+    vec3 p=uCamera+rd*(start+(float(i)+0.5)*dt);
     float density=densityAt(p);
     if(density<0.005)continue;
+    // A density-gradient lighting approximation makes the rounded exterior
+    // readable. Estimate once per ray, then retain full volumetric extinction
+    // and solar shadow sampling through the rest of the cloud column.
+    if(!normalEstimated&&density>0.025){
+      float e=max(0.1,length(p-uCamera)*uPixelAngle*0.6);
+      vec3 gradient=vec3(densityAt(p+vec3(e,0.0,0.0)),densityAt(p+vec3(0.0,e,0.0)),densityAt(p+vec3(0.0,0.0,e)))-vec3(density);
+      vec3 normal=length(gradient)>0.0001?normalize(-gradient):ellipsoidNormal(p);
+      billowLight=0.40+0.60*max(0.0,dot(normal,uSun));normalEstimated=true;
+    }
     float solar=sunElevation(p),day=smoothstep(-0.10,0.05,solar);
     float selfShadow=1.0;
-    if(uShadows>0.5){float tau=densityAt(p+uSun*0.6)*0.6+densityAt(p+uSun*2.0)*1.4+densityAt(p+uSun*5.0)*3.0;selfShadow=exp(-tau*0.7);}
+    if(uShadows>0.5){float tau=densityAt(p+uSun*0.35)*0.7+densityAt(p+uSun*1.25)*1.1+densityAt(p+uSun*3.0)*2.4+densityAt(p+uSun*6.5)*4.6+densityAt(p+uSun*13.0)*8.4;selfShadow=exp(-tau*0.7);}
     float forward=pow(max(0.0,dot(rd,uSun)),8.0);
     float heightLight=clamp(altitudeKm(p)/12.0,0.0,1.0);
-    vec3 illumination=vec3(0.015,0.025,0.045)+day*(vec3(0.26,0.32,0.41)*(0.65+heightLight*0.35)+vec3(1.08,1.04,0.98)*selfShadow*(0.70+forward*0.65));
+    vec3 illumination=vec3(0.015,0.025,0.045)+day*(vec3(0.17,0.22,0.30)*(0.65+heightLight*0.35)+vec3(1.08,1.04,0.98)*selfShadow*billowLight*(0.70+forward*0.65));
     float sunset=(1.0-smoothstep(0.0,0.16,abs(solar)))*day;
     illumination=mix(illumination,illumination*vec3(1.1,0.69,0.42),sunset*0.45);
     float alpha=1.0-exp(-density*dt*0.78*uCloudOpacity);

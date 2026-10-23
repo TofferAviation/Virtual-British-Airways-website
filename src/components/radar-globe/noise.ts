@@ -73,7 +73,9 @@ export function cloudNoiseTexture(detail = false) {
   const texture = new THREE.Data3DTexture(data, size, size, size);
   texture.format = THREE.RedFormat;
   texture.type = THREE.UnsignedByteType;
-  texture.minFilter = texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.wrapS = texture.wrapT = texture.wrapR = THREE.RepeatWrapping;
   texture.unpackAlignment = 1;
   texture.needsUpdate = true;

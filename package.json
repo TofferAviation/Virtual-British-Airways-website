@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:clouds": "node --test src/lib/radar-cloud-math.test.mjs",
-    "test:globe": "node --test src/lib/radar-globe-geodesy.test.mjs src/lib/radar-globe-aurora.test.mjs",
+    "test:globe": "node --test src/lib/radar-globe-geodesy.test.mjs src/lib/radar-globe-aurora.test.mjs src/lib/radar-globe-camera.test.mjs",
     "migrate:pilot-state": "node --env-file=.env.local scripts/migrate-pilot-state-to-supabase.mjs"
   },
   "dependencies": {

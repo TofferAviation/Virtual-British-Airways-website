@@ -113,3 +113,34 @@ export function geographicTileBounds(
     south: 90 - (row + 1) * span,
   };
 }
+
+/** Keep a useful depth interval without clipping a surface-level camera. */
+export function globeClipRange(distanceKm: number) {
+  const height = Math.max(0, distanceKm - WGS84_A_KM);
+  return {
+    near: Math.max(0.5, height * 0.25),
+    far: distanceKm + WGS84_A_KM + 500,
+  };
+}
+
+/** Wheel modes are pixels, lines or pages; clamp spikes before exponentiation. */
+export function globeZoomTarget(
+  distanceKm: number,
+  delta: number,
+  mode: number,
+  viewportHeight: number,
+) {
+  const pixels = Math.max(
+    -160,
+    Math.min(160, delta * (mode === 1 ? 16 : mode === 2 ? viewportHeight : 1)),
+  );
+  return (
+    WGS84_A_KM +
+    Math.max(90, Math.min(40000, (distanceKm - WGS84_A_KM) * Math.exp(pixels * 0.0012)))
+  );
+}
+
+/** Exponential damping is independent of display refresh rate. */
+export function globeZoomStep(current: number, target: number, seconds: number) {
+  return current + (target - current) * (1 - Math.exp(-Math.max(0, seconds) * 14));
+}

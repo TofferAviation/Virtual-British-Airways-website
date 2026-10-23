@@ -31,6 +31,10 @@ base/top**: their heights approximate MSL and do not incorporate a local
 geoid/terrain clearance correction. Individual billows, opacity and vertical
 profiles are inferred. The cloud shader integrates extinction and a lighting
 approximation; ground shadows sample the same field along the Sun direction.
+Ray integration uses bounded, deterministic midpoint samples, not animated
+screen-space jitter. Mipmapped 3D noise is explicitly filtered to the pixel
+footprint. Variable-height column profiles round the cloud tops; solar optical
+depth and an exterior density-gradient approximation supply their shading.
 There is no fabricated observed hurricane, measured cloud liquid water or
 global satellite cloud-height reconstruction.
 
@@ -53,7 +57,11 @@ spectral Rayleigh/Mie multiple-scattering solution.
 
 Run `npm run test:globe`, `npm run test:clouds`, `npm run typecheck` and
 `npm run build`. `/dev/globe` is a development-only visual-check page, with
-fixed date/camera presets for day, north, south, night, cloud and limb views.
+fixed date/camera presets for day, north, south, night, cloud, close and limb views.
+The close preset is an oblique cloud view. Shift-drag tilts the live camera;
+wheel zoom uses bounded altitude targets and frame-rate-independent damping.
+Adaptive clipping and exclusive parent/child tile visibility prevent orbital
+depth fighting between terrain and the cloud volume.
 It returns 404 in production. Weather remains live, so these presets do not
 yet constitute deterministic weather-snapshot screenshot regressions.
 Shader compilation failures and renderer diagnostics are shown on that page.
@@ -69,8 +77,8 @@ wind advection, weather-time interpolation, temporal reprojection, calibrated
 atmospheric scattering, bloom and measured desktop/mobile GPU performance
 remain unimplemented. Tile handoff currently waits for all child images; it
 does not cross-fade them. Ground imagery LOD is capped at level 6. No 60/30 FPS
-claim is made without profiling. Final GPU visual inspection and before/after
-captures are still required before accepting the ISS-photo visual target.
+claim is made without profiling. Local GPU visual checks cover orbital and
+close-up cloud views, but the ISS-photo visual target is not yet accepted.
 
 ## Production login-session recovery
 

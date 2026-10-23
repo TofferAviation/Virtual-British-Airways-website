@@ -91,11 +91,9 @@ export class GlobeSurface {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.visible = z === 0;
     mesh.renderOrder = z;
-    // Polygon offset places children over their parents during handoff without
-    // inventing terrain elevation or creating geographic gaps.
-    material.polygonOffset = true;
-    material.polygonOffsetFactor = -z;
-    material.polygonOffsetUnits = -z;
+    // A parent is removed before its ready children are displayed. No depth
+    // bias: at orbital distances polygon offsets can move terrain through
+    // kilometre-high cloud layers even when both geometries are correct.
     this.group.add(mesh);
     const bounds = geographicTileBounds(z, x, y);
     const centre = new THREE.Vector3(
@@ -212,7 +210,10 @@ export class GlobeSurface {
         tile.mesh.visible = !ready;
         for (const child of tile.children) {
           if (ready) visit(child);
-          else child.mesh.visible = false;
+          else {
+            child.mesh.visible = false;
+            this.hideChildren(child);
+          }
         }
       } else {
         tile.mesh.visible = tile.ready;

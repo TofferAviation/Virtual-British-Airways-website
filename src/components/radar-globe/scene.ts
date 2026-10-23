@@ -13,6 +13,9 @@ import {
   geodeticToWorld,
   solarDirection,
   wrapLongitude,
+  globeClipRange,
+  globeZoomTarget,
+  globeZoomStep,
 } from "@/lib/radar-globe-geodesy";
 import { GlobeSurface } from "./surface";
 import { cloudNoiseTexture } from "./noise";
@@ -56,7 +59,12 @@ export type GlobeSceneState = {
   onCameraChange: (camera: GlobeCamera) => void;
   /** Used exclusively by the local visual regression page. */
   testDate?: string;
-  testView?: { latitude: number; longitude: number; distanceKm: number };
+  testView?: {
+    latitude: number;
+    longitude: number;
+    distanceKm: number;
+    pitch?: number;
+  };
 };
 
 function clearGroup(group: THREE.Group) {
@@ -141,6 +149,9 @@ export function createGlobeScene(
     testView?.distanceKm ?? zoomDistance(initial?.zoom ?? 0.6),
   );
   camera.lookAt(0, 0, 0);
+  let distance = camera.position.z,
+    targetDistance = distance;
+  let pitch = THREE.MathUtils.clamp(testView?.pitch ?? initial?.pitch ?? 0, 0, 78);
   let longitude = testView?.longitude ?? initial?.center[0] ?? -25,
     latitude = testView?.latitude ?? initial?.center[1] ?? 35;
   // For YXZ, rotations are applied X then Y. Use quaternion explicitly so the
@@ -176,6 +187,7 @@ export function createGlobeScene(
     uCloudOpacity: { value: 1 },
     uShadows: { value: 1 },
     uDebug: { value: 0 },
+    uPixelAngle: { value: 0.001 },
   };
   const material = (
     vertexShader: string,
@@ -209,6 +221,10 @@ export function createGlobeScene(
   const atmosphereMaterial = material(volumeVertex, atmosphereFragment);
   atmosphereMaterial.transparent = true;
   atmosphereMaterial.depthWrite = false;
+  // A tilted close-up can enter the 80 km atmosphere. March the back face
+  // in both cases; the analytic ground intersection clips the volume itself.
+  atmosphereMaterial.side = THREE.BackSide;
+  atmosphereMaterial.depthTest = false;
   const atmosphere = new THREE.Mesh(ellipsoidShell(80), atmosphereMaterial);
   atmosphere.renderOrder = 4;
   earth.add(atmosphere);
@@ -442,11 +458,12 @@ export function createGlobeScene(
   const remember = () =>
     read().onCameraChange({
       center: [longitude, latitude],
-      zoom: -Math.log((camera.position.z / WGS84_A_KM - 1) / 1.7) / 0.38,
+      zoom: -Math.log((targetDistance / WGS84_A_KM - 1) / 1.7) / 0.38,
       bearing: 0,
-      pitch: 0,
+      pitch,
     });
   let down = false,
+    tilting = false,
     moved = 0,
     previousX = 0,
     previousY = 0;
@@ -454,6 +471,7 @@ export function createGlobeScene(
     raycaster = new THREE.Raycaster();
   const onDown = (event: PointerEvent) => {
     down = true;
+    tilting = event.shiftKey;
     moved = 0;
     previousX = event.clientX;
     previousY = event.clientY;
@@ -465,9 +483,12 @@ export function createGlobeScene(
       dy = event.clientY - previousY;
     moved += Math.abs(dx) + Math.abs(dy);
     const sensitivity =
-      0.16 * Math.min(1, (camera.position.z - WGS84_A_KM) / 3500);
-    longitude = wrapLongitude(longitude - dx * sensitivity);
-    latitude = THREE.MathUtils.clamp(latitude + dy * sensitivity, -90, 90);
+      0.16 * Math.min(1, (distance - WGS84_A_KM) / 3500);
+    if (tilting) pitch = THREE.MathUtils.clamp(pitch + dy * 0.2, 0, 78);
+    else {
+      longitude = wrapLongitude(longitude - dx * sensitivity);
+      latitude = THREE.MathUtils.clamp(latitude + dy * sensitivity, -90, 90);
+    }
     previousX = event.clientX;
     previousY = event.clientY;
     orbit();
@@ -506,14 +527,12 @@ export function createGlobeScene(
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
-    const height = camera.position.z - WGS84_A_KM;
-    camera.position.z =
-      WGS84_A_KM +
-      THREE.MathUtils.clamp(
-        height * Math.exp(event.deltaY * 0.0012),
-        90,
-        40000,
-      );
+    targetDistance = globeZoomTarget(
+      targetDistance,
+      event.deltaY,
+      event.deltaMode,
+      host.clientHeight,
+    );
     remember();
   };
   const onKey = (event: KeyboardEvent) => {
@@ -536,6 +555,9 @@ export function createGlobeScene(
     camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
     camera.updateProjectionMatrix();
     renderer.setSize(host.clientWidth, host.clientHeight, false);
+    shared.uPixelAngle.value =
+      (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) /
+      (Math.max(1, host.clientHeight) * renderer.getPixelRatio());
   };
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(host);
@@ -544,9 +566,21 @@ export function createGlobeScene(
   let frame = 0,
     disposed = false,
     lastSunUpdate = 0,
-    lastLodUpdate = 0;
+    lastLodUpdate = 0,
+    previousFrame = started;
   const render = (now: number) => {
     if (disposed) return;
+    const deltaSeconds = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
+    previousFrame = now;
+    distance = globeZoomStep(distance, targetDistance, deltaSeconds);
+    const height = distance - WGS84_A_KM,
+      tilt = THREE.MathUtils.degToRad(pitch);
+    camera.position.set(
+      0,
+      height * Math.sin(tilt),
+      WGS84_A_KM + height * Math.cos(tilt),
+    );
+    camera.lookAt(0, 0, WGS84_A_KM);
     sync();
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
@@ -556,6 +590,12 @@ export function createGlobeScene(
       lastSunUpdate = now;
     }
     earth.updateMatrixWorld(true);
+    // Keep the depth buffer useful at every altitude. A fixed 0.5 km near
+    // plane loses tens of kilometres of depth precision from orbit.
+    const clipping = globeClipRange(camera.position.length());
+    camera.near = clipping.near;
+    camera.far = clipping.far;
+    camera.updateProjectionMatrix();
     shared.uCamera.value.copy(camera.position);
     earth.worldToLocal(shared.uCamera.value);
     if (now - lastLodUpdate > 200) {
@@ -572,6 +612,10 @@ export function createGlobeScene(
         clouds: cloudMesh.visible,
         aurora: curtains.visible,
         sun: shared.uSun.value.toArray(),
+        cameraKm: Math.round(camera.position.length()),
+        pitch: Math.round(pitch),
+        focus: [Math.round(longitude), Math.round(latitude)],
+        clippingKm: [Math.round(camera.near), Math.round(camera.far)],
       });
     }
     frame = requestAnimationFrame(render);

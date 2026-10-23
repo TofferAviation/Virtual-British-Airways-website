@@ -8,7 +8,9 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
   const container = useRef<HTMLDivElement>(null),
     current = useRef(props);
   const [error, setError] = useState<string | null>(null);
-  current.current = props;
+  useEffect(() => {
+    current.current = props;
+  }, [props]);
   useEffect(() => {
     let disposed = false,
       cleanup: (() => void) | undefined;
@@ -35,7 +37,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
       <div className="ba-radar-globe-caption">
         <strong>Earth · WGS84</strong>
         <span>
-          {error ?? "Drag to orbit · scroll to zoom · arrow keys to pan"}
+          {error ?? "Drag to orbit · scroll to zoom · Shift-drag to tilt"}
         </span>
         <span>NASA GIBS / Blue Marble · NOAA GFS / SWPC</span>
       </div>
