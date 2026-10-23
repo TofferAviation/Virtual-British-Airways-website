@@ -385,6 +385,10 @@ function ovationTimestamp(value: unknown) {
 function normaliseAurora(value: unknown): RadarAuroraData {
   const record = asRecord(value);
   const coordinates = Array.isArray(record?.coordinates) ? record.coordinates : [];
+  // Verified live schema: [Longitude, Latitude, Aurora]. Reject a changed
+  // coordinate order instead of silently drawing a mislocated auroral oval.
+  const schema = asString(record?.["Data Format"]);
+  if (schema && !/^\[\s*Longitude\s*,\s*Latitude\s*,\s*Aurora\s*\]$/i.test(schema)) throw new Error("Unexpected NOAA OVATION coordinate schema.");
   return {
     source: "NOAA SWPC OVATION Prime",
     observedAt: ovationTimestamp(record?.["Observation Time"]),
@@ -397,7 +401,7 @@ function normaliseAurora(value: unknown): RadarAuroraData {
       const longitude = asNumber(entry[0]);
       const latitude = asNumber(entry[1]);
       const probability = asNumber(entry[2]);
-      if (longitude === null || latitude === null || probability === null || Math.abs(latitude) < 45 || probability < 5) return [];
+      if (longitude === null || latitude === null || probability === null || longitude < -180 || longitude > 360 || Math.abs(latitude) > 90 || Math.abs(latitude) < 45 || probability < 5) return [];
       return [{ longitude, latitude, probability: Math.max(0, Math.min(100, probability)) }];
     }),
     refreshedAt: new Date().toISOString(),
