@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { RankInsignia } from "@/components/RankInsignia";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { getActiveAcarsSessionForPilot } from "@/lib/acars-store";
+import { getActiveAcarsSessionForPilot, listRecoverableAcarsSessionsForPilot } from "@/lib/acars-store";
 import { getActivePilotBooking, getPilotFlightPlan, listPilotPireps } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { getPilotById, getRewardSettings, unreadPilotNotificationCount } from "@/lib/pilot-store";
@@ -26,7 +26,7 @@ export default async function AccountPage() {
   const session = await requirePilotSession();
   const account = await getPilotById(session.pilotId);
   if (!account) redirect("/login");
-  const [assignment, pireps, rewardSettings, activeAcars, unreadNotifications] = await Promise.all([
+  const [assignment, pireps, rewardSettings, activeAcars, unreadNotifications, recoverableSessions] = await Promise.all([
     getActivePilotBooking(account.id),
     listPilotPireps(account.id),
     getRewardSettings(),
@@ -34,6 +34,7 @@ export default async function AccountPage() {
     // their account. Ember will report its state again as soon as it reconnects.
     getActiveAcarsSessionForPilot(account.id).catch(() => null),
     unreadPilotNotificationCount(account.id),
+    listRecoverableAcarsSessionsForPilot(account.id, 20).catch(() => []),
   ]);
   const flightPlan = assignment ? await getPilotFlightPlan(assignment.id, account.id) : null;
   const tierTarget = rewardSettings.tierGoldThreshold;
@@ -44,6 +45,7 @@ export default async function AccountPage() {
     .map((award) => ({ award, detail: getPilotAwardDisplay(award) }))
     .sort((left, right) => left.detail.order - right.detail.order || left.award.awardedAt.localeCompare(right.award.awardedAt));
   const relatedPirep = assignment ? pireps.find((pirep) => pirep.bookingId === assignment.id) ?? null : null;
+  const recoverableCount = recoverableSessions.filter((session) => !pireps.some((pirep) => pirep.acarsSessionId === session.id)).length;
   const trackedAssignment = activeAcars && assignment && activeAcars.bookingId === assignment.id ? activeAcars : null;
   const trackingFresh = trackedAssignment ? trackingIsFresh(trackedAssignment.updatedAt) : false;
   const stats = [
@@ -79,6 +81,7 @@ export default async function AccountPage() {
           <article className={!assignment ? "waiting" : relatedPirep ? "complete" : "waiting"}><i aria-hidden="true">4</i><div><span>FLIGHT REPORT</span><strong>{!assignment ? "Waiting for a flight" : relatedPirep ? relatedPirep.status.replaceAll("_", " ") : "PIREP will be automatic"}</strong><small>{!assignment ? "A linked PIREP is created after an Ember flight." : relatedPirep ? "This flight report is now in the BAV review flow." : "After shutdown, Ember submits the linked PIREP for review."}</small></div></article>
         </div>
         {assignment && !trackedAssignment ? <p className="account-v2-readiness-help">Need Ember? <Link href="/account/profile">Download or open Ember access</Link>. Only use the manual PIREP if an Ember flight cannot be completed.</p> : null}
+        {recoverableCount ? <p className="account-v2-readiness-help"><Link href="/account/acars-recovery">Recover {recoverableCount} interrupted Ember flight{recoverableCount === 1 ? "" : "s"} →</Link></p> : null}
       </section><div className="account-v2-stat-grid">{stats.map((stat) => <article className="account-v2-stat" key={stat.label}><span className="account-v2-stat-label">{stat.label}</span><strong className={`account-v2-stat-value${stat.label === "CURRENT RANK" ? " account-v2-rank-value" : ""}`}>{stat.label === "CURRENT RANK" ? <><RankInsignia rank={account.rank} size="compact" /><span>{stat.value}</span></> : stat.value}</strong><small className="account-v2-stat-note">{stat.note}</small></article>)}</div>{careerAwards.length ? <section className="account-v2-awards" aria-label="Career awards">{careerAwards.map(({ award, detail }) => <article className="account-v2-award" key={`${award.id}-${award.eventId ?? "career"}`}><span className="account-v2-award-mark" aria-hidden="true">★</span><div><span className="account-v2-award-kicker">CAREER AWARD · {detail.criterion.toUpperCase()}</span><strong>{detail.title}</strong><p>Earned {new Date(award.awardedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })} · {detail.description}</p></div></article>)}</section> : null}<div className="account-v2-lower">
         <article className="account-v2-card account-v2-flights"><h3>Recent flight reports</h3><div className="account-v2-flight-list">{pireps.length ? pireps.slice(0, 5).map((pirep) => <div className="account-v2-flight-row" key={pirep.id}><Link className="account-v2-flight-debrief" href={`/account/flights/${encodeURIComponent(pirep.id)}`}><strong>{pirep.flightNumber}</strong><small>Open debrief</small></Link><span>{pirep.from} → {pirep.to}</span><span>{pirep.aircraft}</span><span>{Math.floor(pirep.blockMinutes / 60)}h {pirep.blockMinutes % 60}m</span><span>{pirep.landingFpm == null ? "—" : `${pirep.landingFpm} fpm`}</span><span className={`ops-pirep-chip ${pirep.status}`}>{pirep.status.replaceAll("_", " ")}</span><Link className="account-v2-debrief-link" href={`/flight-debrief/${encodeURIComponent(pirep.id)}`}>Route trace ↗</Link></div>) : <p className="account-v2-subtitle">No BAV PIREPs yet. Completed Ember ACARS flights and manual fallback reports appear here for review.</p>}</div></article>
         <aside className="account-v2-card account-v2-assignment"><h3>Active assignment</h3>{assignment ? <><strong>{assignment.flightNumber} · {assignment.from} → {assignment.to}</strong><p>{assignment.date} · {assignment.aircraft} · {assignment.departure}</p>{flightPlan ? <p><b>Flight plan:</b> {flightPlan.status === "synced" ? `SimBrief OFP ${flightPlan.simbriefOfpId ? `#${flightPlan.simbriefOfpId}` : "synced"}` : "Briefing not yet synced"}</p> : null}<Link className="ops-inline-link" href="/manage-assignment">Manage assignment & view briefing →</Link><Link className="ops-inline-link" href="/operations/pirep">Manual PIREP fallback →</Link></> : <><strong>No flight booked</strong><p>Choose a flight from the BAV schedule when you&apos;re ready to fly.</p></>}<Link href="/book">Find a virtual flight →</Link><div className="account-v2-tier-box" id="membership"><div className="account-v2-tier-head"><span>Next rank / tier</span><span>{account.tierPoints.toLocaleString()} / {tierTarget.toLocaleString()}</span></div><div className="account-v2-progress" aria-label={`${tierProgress.toFixed(0)} percent progress toward next tier`}><span style={{ width: `${tierProgress}%` }} /></div><p>Tier progression is calculated from accepted BAV flight records.</p></div></aside>

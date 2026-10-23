@@ -50,7 +50,13 @@ export type AcarsFlightSnapshot = {
   trueAirspeedKt: number | null;
   squawk: string | null;
   beaconOn: boolean;
+  /** Remaining fuel mass reported by the simulator, in kilograms. */
   fuelKg: number | null;
+  /**
+   * Aircraft-reported trip fuel burn for the current simulator flight, in kg.
+   * Native adapters normalise their source into this cross-aircraft value.
+   */
+  fuelBurnKg: number | null;
   enginesRunning: boolean;
   parkingBrakeSet: boolean;
   onGround: boolean;

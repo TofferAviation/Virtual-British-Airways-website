@@ -87,7 +87,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     trueAirspeedKt: optionalFinite(body.trueAirspeedKt, 0, 1_000),
     squawk: optionalSquawk(body.squawk),
     beaconOn: Boolean(body.beaconOn),
-    fuelKg: optionalFinite(body.fuelKg, 0, 1_000_000),
+    // Some native sources emit a startup zero before their fuel system is
+    // ready. Treat it as unavailable rather than pinning the whole PIREP to
+    // a false 0 kg burn.
+    fuelKg: optionalFinite(body.fuelKg, 0.001, 1_000_000),
+    // The adapter normalises an aircraft's own trip counter into kilograms.
+    // Zero is valid before engine start, unlike remaining fuel.
+    fuelBurnKg: optionalFinite(body.fuelBurnKg, 0, 1_000_000),
     enginesRunning: Boolean(body.enginesRunning),
     parkingBrakeSet: Boolean(body.parkingBrakeSet),
     onGround: Boolean(body.onGround),

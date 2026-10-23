@@ -477,6 +477,18 @@ export async function getPirep(id: string) {
   return state.pireps.find((pirep) => pirep.id === id) ?? null;
 }
 
+/** Used by Ember recovery to guarantee one automatic PIREP per ACARS session. */
+export async function getPirepForAcarsSession(acarsSessionId: string) {
+  const client = getPirepClient();
+  if (client) {
+    const { data, error } = await client.from("pilot_pireps").select("*").eq("acars_session_id", acarsSessionId).maybeSingle();
+    if (error) throw error;
+    return data ? pirepFromRow(data as PirepRow) : null;
+  }
+  const state = await readState();
+  return state.pireps.find((pirep) => pirep.acarsSessionId === acarsSessionId) ?? null;
+}
+
 export async function cancelActivePilotBooking(pilotId: string) {
   const state = await readState();
   const booking = [...state.bookings].reverse().find((item) => item.pilotId === pilotId && ["booked", "in_progress"].includes(item.status));

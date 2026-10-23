@@ -50,6 +50,9 @@ public sealed class ProcessSimulatorAdapter : ISimulatorAdapter
             onGround ? 18 : 489,
             284,
             Math.Max(3200, 62000 - progress * 47000),
+            // The process bridge is only for pipeline testing. It must never
+            // fabricate a trip counter; native adapters supply real burn.
+            null,
             true,
             progress < .005 || progress > .998,
             onGround,

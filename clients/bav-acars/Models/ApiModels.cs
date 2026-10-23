@@ -19,6 +19,7 @@ public sealed record TelemetryPayload(
     double GroundSpeedKt,
     double HeadingDeg,
     double? FuelKg,
+    double? FuelBurnKg,
     bool EnginesRunning,
     bool ParkingBrakeSet,
     bool OnGround,

@@ -235,7 +235,9 @@ public partial class MainWindow : Window
         GroundSpeedText.Text = $"{payload.GroundSpeedKt:N0} kt";
         VerticalSpeedText.Text = $"{payload.VerticalSpeedFpm ?? 0:N0} fpm";
         HeadingText.Text = $"{payload.HeadingDeg:N0}°";
-        FuelText.Text = payload.FuelKg is null ? "—" : $"{payload.FuelKg:N0} kg";
+        FuelText.Text = payload.FuelBurnKg is null
+            ? payload.FuelKg is null ? "—" : $"{payload.FuelKg:N0} kg remaining"
+            : $"{payload.FuelBurnKg:N0} kg used";
         FlightTimeText.Text = $"{(int)elapsed.TotalHours:00}:{elapsed.Minutes:00}";
         RouteProgress.Value = progress * 100;
         var phase = DeterminePhase(progress, payload);

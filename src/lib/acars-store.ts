@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AcarsCabinStatus, AcarsConnectivityStatus, AcarsFlightSnapshot, SupportedSimulator } from "@/lib/acars-contract";
+import { usableFuelBurnKg, usableRemainingFuelKg } from "@/lib/acars-fuel";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "acars-sessions.json");
@@ -19,34 +20,35 @@ const MAX_PUBLIC_TRACK_REPORTS = 18_000;
 const MAX_PUBLIC_TRACK_POINTS = 640;
 const PUBLIC_TRACK_CACHE_MS = 45_000;
 const ACARS_REPORT_PAGE_SIZE = 1_000;
+const RECOVERY_STALE_MS = 2 * 60_000;
 
 export type AcarsSessionStatus = "active" | "completed" | "disconnected";
 export type AcarsSession = {
   id: string; pilotId: string; pilotNumber: string; pilotName: string; bookingId: string;
   flightNumber: string; from: string; to: string; aircraft: string; simulator: SupportedSimulator;
   status: AcarsSessionStatus; startedAt: string; updatedAt: string; completedAt: string | null;
-  firstFuelKg: number | null; lastFuelKg: number | null; distanceNm: number; landingFpm: number | null;
+  firstFuelKg: number | null; lastFuelKg: number | null; lastFuelBurnKg: number | null; distanceNm: number; landingFpm: number | null;
   lastSnapshot: AcarsFlightSnapshot | null; recentSnapshots?: AcarsFlightSnapshot[];
 };
 
 /** A durable, pilot-authorised telemetry sample used to replay their own completed route. */
 export type AcarsPositionReport = Pick<AcarsFlightSnapshot,
   "timestamp" | "latitude" | "longitude" | "altitudeFt" | "groundSpeedKt" |
-  "headingDeg" | "fuelKg" | "enginesRunning" | "parkingBrakeSet" | "onGround" |
+  "headingDeg" | "fuelKg" | "fuelBurnKg" | "enginesRunning" | "parkingBrakeSet" | "onGround" |
   "verticalSpeedFpm">;
 
 type State = { version: 1; sessions: AcarsSession[] };
-type NewSessionInput = Omit<AcarsSession, "id" | "status" | "startedAt" | "updatedAt" | "completedAt" | "firstFuelKg" | "lastFuelKg" | "distanceNm" | "landingFpm" | "lastSnapshot">;
+type NewSessionInput = Omit<AcarsSession, "id" | "status" | "startedAt" | "updatedAt" | "completedAt" | "firstFuelKg" | "lastFuelKg" | "lastFuelBurnKg" | "distanceNm" | "landingFpm" | "lastSnapshot">;
 type AcarsSessionRow = {
   id: string; pilot_id: string; pilot_number: string; pilot_name: string; booking_id: string;
   flight_number: string; departure_station: string; arrival_station: string; aircraft: string;
   simulator: string; status: string; started_at: string; updated_at: string; completed_at: string | null;
-  first_fuel_kg: number | null; last_fuel_kg: number | null; distance_nm: number; landing_fpm: number | null;
+  first_fuel_kg: number | null; last_fuel_kg: number | null; last_fuel_burn_kg: number | null; distance_nm: number; landing_fpm: number | null;
   last_snapshot: unknown; recent_snapshots: unknown;
 };
 type AcarsPositionReportRow = {
   session_id: string; reported_at: string; latitude: number; longitude: number;
-  altitude_ft: number; ground_speed_kt: number; heading_deg: number; fuel_kg: number | null;
+  altitude_ft: number; ground_speed_kt: number; heading_deg: number; fuel_kg: number | null; fuel_burn_kg: number | null;
   engines_running: boolean; parking_brake_set: boolean; on_ground: boolean; vertical_speed_fpm: number | null;
 };
 
@@ -64,6 +66,9 @@ function asNumber(value: unknown): number | null { return typeof value === "numb
 function asRecord(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function asBoundedWhole(value: unknown, maximum: number) { return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= maximum ? value : null; }
 function asShortLabel(value: unknown, maximum = 48) { const label = typeof value === "string" ? value.trim() : ""; return label && label.length <= maximum ? label : null; }
+function isRecoveryStale(session: Pick<AcarsSession, "status" | "updatedAt">) {
+  return session.status !== "active" || Date.now() - new Date(session.updatedAt).getTime() >= RECOVERY_STALE_MS;
+}
 function cabinStatusFromStorage(value: unknown): AcarsCabinStatus | null {
   const cabin = asRecord(value);
   if (!cabin) return null;
@@ -111,21 +116,21 @@ function snapshotFromStorage(value: unknown, session: Pick<AcarsSession, "id" | 
   const diversionAirport = typeof snapshot.diversionAirport === "string" && /^[A-Z0-9]{3,4}$/i.test(snapshot.diversionAirport.trim())
     ? snapshot.diversionAirport.trim().toUpperCase()
     : null;
-  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration, detectedAirport, diversionAirport, cabin: cabinStatusFromStorage(snapshot.cabin), connectivity: connectivityStatusFromStorage(snapshot.connectivity) };
+  return { simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId, timestamp: snapshot.timestamp, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, indicatedAirspeedKt, trueAirspeedKt, squawk, beaconOn: Boolean(snapshot.beaconOn), fuelKg: asNumber(snapshot.fuelKg), fuelBurnKg: asNumber(snapshot.fuelBurnKg), enginesRunning: Boolean(snapshot.enginesRunning), parkingBrakeSet: Boolean(snapshot.parkingBrakeSet), onGround: Boolean(snapshot.onGround), verticalSpeedFpm: asNumber(snapshot.verticalSpeedFpm), flightStarted: Boolean(snapshot.flightStarted), registration, detectedAirport, diversionAirport, cabin: cabinStatusFromStorage(snapshot.cabin), connectivity: connectivityStatusFromStorage(snapshot.connectivity) };
 }
 function sessionFromRow(row: AcarsSessionRow): AcarsSession {
   if (!isSupportedSimulator(row.simulator)) throw new Error(`Unsupported ACARS simulator returned from storage: ${row.simulator}`);
   if (row.status !== "active" && row.status !== "completed" && row.status !== "disconnected") throw new Error(`Unsupported ACARS session status returned from storage: ${row.status}`);
   const base = { id: row.id, pilotId: row.pilot_id, bookingId: row.booking_id, simulator: row.simulator };
   const recentSnapshots = Array.isArray(row.recent_snapshots) ? row.recent_snapshots.map((snapshot) => snapshotFromStorage(snapshot, base)).filter((snapshot): snapshot is AcarsFlightSnapshot => snapshot != null) : [];
-  return { id: row.id, pilotId: row.pilot_id, pilotNumber: row.pilot_number, pilotName: row.pilot_name, bookingId: row.booking_id, flightNumber: row.flight_number, from: row.departure_station, to: row.arrival_station, aircraft: row.aircraft, simulator: row.simulator, status: row.status, startedAt: row.started_at, updatedAt: row.updated_at, completedAt: row.completed_at, firstFuelKg: asNumber(row.first_fuel_kg), lastFuelKg: asNumber(row.last_fuel_kg), distanceNm: asNumber(row.distance_nm) ?? 0, landingFpm: asNumber(row.landing_fpm), lastSnapshot: snapshotFromStorage(row.last_snapshot, base), recentSnapshots };
+  return { id: row.id, pilotId: row.pilot_id, pilotNumber: row.pilot_number, pilotName: row.pilot_name, bookingId: row.booking_id, flightNumber: row.flight_number, from: row.departure_station, to: row.arrival_station, aircraft: row.aircraft, simulator: row.simulator, status: row.status, startedAt: row.started_at, updatedAt: row.updated_at, completedAt: row.completed_at, firstFuelKg: asNumber(row.first_fuel_kg), lastFuelKg: asNumber(row.last_fuel_kg), lastFuelBurnKg: asNumber(row.last_fuel_burn_kg), distanceNm: asNumber(row.distance_nm) ?? 0, landingFpm: asNumber(row.landing_fpm), lastSnapshot: snapshotFromStorage(row.last_snapshot, base), recentSnapshots };
 }
 function snapshotFromPositionRow(row: AcarsPositionReportRow, session: Pick<AcarsSession, "id" | "pilotId" | "bookingId" | "simulator">): AcarsFlightSnapshot {
   return {
     simulator: session.simulator, sessionId: session.id, pilotId: session.pilotId, bookingId: session.bookingId,
     timestamp: row.reported_at, latitude: row.latitude, longitude: row.longitude, altitudeFt: row.altitude_ft,
     groundSpeedKt: row.ground_speed_kt, headingDeg: row.heading_deg, indicatedAirspeedKt: null, trueAirspeedKt: null, squawk: null,
-    beaconOn: false, fuelKg: asNumber(row.fuel_kg), enginesRunning: row.engines_running,
+    beaconOn: false, fuelKg: asNumber(row.fuel_kg), fuelBurnKg: asNumber(row.fuel_burn_kg), enginesRunning: row.engines_running,
     parkingBrakeSet: row.parking_brake_set, onGround: row.on_ground,
     verticalSpeedFpm: asNumber(row.vertical_speed_fpm), flightStarted: !row.on_ground, registration: null,
     detectedAirport: null, diversionAirport: null, cabin: null, connectivity: null,
@@ -156,7 +161,7 @@ function positionReportFromRow(row: AcarsPositionReportRow): AcarsPositionReport
   const latitude = asNumber(row.latitude); const longitude = asNumber(row.longitude); const altitudeFt = asNumber(row.altitude_ft);
   const groundSpeedKt = asNumber(row.ground_speed_kt); const headingDeg = asNumber(row.heading_deg);
   if (latitude == null || longitude == null || altitudeFt == null || groundSpeedKt == null || headingDeg == null || typeof row.reported_at !== "string") return null;
-  return { timestamp: row.reported_at, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, fuelKg: asNumber(row.fuel_kg), enginesRunning: Boolean(row.engines_running), parkingBrakeSet: Boolean(row.parking_brake_set), onGround: Boolean(row.on_ground), verticalSpeedFpm: asNumber(row.vertical_speed_fpm) };
+  return { timestamp: row.reported_at, latitude, longitude, altitudeFt, groundSpeedKt, headingDeg, fuelKg: asNumber(row.fuel_kg), fuelBurnKg: asNumber(row.fuel_burn_kg), enginesRunning: Boolean(row.engines_running), parkingBrakeSet: Boolean(row.parking_brake_set), onGround: Boolean(row.on_ground), verticalSpeedFpm: asNumber(row.vertical_speed_fpm) };
 }
 
 function getSupabaseClient(): SupabaseClient | null {
@@ -186,7 +191,7 @@ function haversineNm(a: AcarsFlightSnapshot, b: AcarsFlightSnapshot) {
 
 async function startLocalAcarsSession(input: NewSessionInput) {
   const state = await readState(); for (const session of state.sessions) if (session.pilotId === input.pilotId && session.status === "active") session.status = "disconnected";
-  const now = new Date().toISOString(); const session: AcarsSession = { ...input, id: randomUUID(), status: "active", startedAt: now, updatedAt: now, completedAt: null, firstFuelKg: null, lastFuelKg: null, distanceNm: 0, landingFpm: null, lastSnapshot: null, recentSnapshots: [] };
+  const now = new Date().toISOString(); const session: AcarsSession = { ...input, id: randomUUID(), status: "active", startedAt: now, updatedAt: now, completedAt: null, firstFuelKg: null, lastFuelKg: null, lastFuelBurnKg: null, distanceNm: 0, landingFpm: null, lastSnapshot: null, recentSnapshots: [] };
   state.sessions.push(session); await writeState(state); return session;
 }
 async function getLocalAcarsSession(id: string) { const state = await readState(); return state.sessions.find((session) => session.id === id) ?? null; }
@@ -196,13 +201,24 @@ async function appendLocalAcarsSnapshot(id: string, pilotId: string, snapshot: A
   const state = await readState(); const session = state.sessions.find((item) => item.id === id && item.pilotId === pilotId); if (!session || session.status !== "active") return null;
   if (session.lastSnapshot) { const leg = haversineNm(session.lastSnapshot, snapshot); if (Number.isFinite(leg) && leg >= 0 && leg < 25) session.distanceNm += leg; }
   const recentSnapshots = session.recentSnapshots ?? (session.recentSnapshots = []); recentSnapshots.push(snapshot); if (recentSnapshots.length > MAX_RECENT_SNAPSHOTS) recentSnapshots.splice(0, recentSnapshots.length - MAX_RECENT_SNAPSHOTS);
-  if (session.firstFuelKg == null && snapshot.fuelKg != null) session.firstFuelKg = snapshot.fuelKg; if (snapshot.fuelKg != null) session.lastFuelKg = snapshot.fuelKg;
+  const remainingFuel = usableRemainingFuelKg(snapshot.fuelKg);
+  if (session.firstFuelKg == null && remainingFuel != null) session.firstFuelKg = remainingFuel;
+  if (remainingFuel != null) session.lastFuelKg = remainingFuel;
+  const fuelBurn = usableFuelBurnKg(snapshot.fuelBurnKg);
+  // A trip counter should never decrease. Ignore an add-on's transient reset
+  // rather than replacing a reliable final value with zero.
+  if (fuelBurn != null && (session.lastFuelBurnKg == null || fuelBurn >= session.lastFuelBurnKg)) session.lastFuelBurnKg = fuelBurn;
   if (snapshot.onGround && snapshot.verticalSpeedFpm != null && snapshot.verticalSpeedFpm < -20) session.landingFpm = Math.round(snapshot.verticalSpeedFpm);
   session.lastSnapshot = snapshot; session.updatedAt = new Date().toISOString(); await writeState(state); return session;
 }
 async function completeLocalAcarsSession(id: string, pilotId: string, landingFpm?: number | null) {
   const state = await readState(); const session = state.sessions.find((item) => item.id === id && item.pilotId === pilotId); if (!session || session.status !== "active") return null;
   session.status = "completed"; session.completedAt = new Date().toISOString(); session.updatedAt = session.completedAt; if (landingFpm != null && Number.isFinite(landingFpm)) session.landingFpm = Math.round(landingFpm); await writeState(state); return session;
+}
+async function recoverLocalAcarsSession(id: string, pilotId: string) {
+  const state = await readState(); const session = state.sessions.find((item) => item.id === id && item.pilotId === pilotId);
+  if (!session || !isRecoveryStale(session) || (session.status !== "disconnected" && session.status !== "active")) return null;
+  session.status = "completed"; session.completedAt = session.lastSnapshot?.timestamp ?? session.updatedAt; session.updatedAt = new Date().toISOString(); await writeState(state); return session;
 }
 async function listLocalLiveAcarsSessions() { const state = await readState(); const cutoff = Date.now() - 90_000; return state.sessions.filter((session) => session.status === "active").map((session) => ({ ...session, connectionHealthy: new Date(session.updatedAt).getTime() >= cutoff })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
 async function listLocalCompletedAcarsSessionsForPilot(pilotId: string, limit: number) {
@@ -212,16 +228,23 @@ async function listLocalCompletedAcarsSessionsForPilot(pilotId: string, limit: n
     .sort((left, right) => (right.completedAt ?? "").localeCompare(left.completedAt ?? ""))
     .slice(0, limit);
 }
+async function listLocalRecoverableAcarsSessionsForPilot(pilotId: string, limit: number) {
+  const state = await readState();
+  return state.sessions
+    .filter((session) => session.pilotId === pilotId && (session.status === "disconnected" || session.status === "completed" || (session.status === "active" && isRecoveryStale(session))))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, limit);
+}
 
 async function startPersistentAcarsSession(client: SupabaseClient, input: NewSessionInput) {
   const now = new Date().toISOString(); const { error: disconnectError } = await client.from("acars_sessions").update({ status: "disconnected", updated_at: now }).eq("pilot_id", input.pilotId).eq("status", "active"); if (disconnectError) throw disconnectError;
-  const { data, error } = await client.from("acars_sessions").insert({ id: randomUUID(), pilot_id: input.pilotId, pilot_number: input.pilotNumber, pilot_name: input.pilotName, booking_id: input.bookingId, flight_number: input.flightNumber, departure_station: input.from, arrival_station: input.to, aircraft: input.aircraft, simulator: input.simulator, status: "active", started_at: now, updated_at: now, completed_at: null, first_fuel_kg: null, last_fuel_kg: null, distance_nm: 0, landing_fpm: null, last_snapshot: null, recent_snapshots: [] }).select("*").single();
+  const { data, error } = await client.from("acars_sessions").insert({ id: randomUUID(), pilot_id: input.pilotId, pilot_number: input.pilotNumber, pilot_name: input.pilotName, booking_id: input.bookingId, flight_number: input.flightNumber, departure_station: input.from, arrival_station: input.to, aircraft: input.aircraft, simulator: input.simulator, status: "active", started_at: now, updated_at: now, completed_at: null, first_fuel_kg: null, last_fuel_kg: null, last_fuel_burn_kg: null, distance_nm: 0, landing_fpm: null, last_snapshot: null, recent_snapshots: [] }).select("*").single();
   if (error) throw error; return sessionFromRow(data as AcarsSessionRow);
 }
 async function getPersistentAcarsSession(client: SupabaseClient, id: string) { const { data, error } = await client.from("acars_sessions").select("*").eq("id", id).maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null; }
 async function listPersistentAcarsPositionReports(client: SupabaseClient, id: string, pilotId: string) {
   const session = await getPersistentAcarsSession(client, id); if (!session || session.pilotId !== pilotId) return [];
-  const { data, error } = await client.from("acars_position_reports").select("reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm").eq("session_id", id).order("reported_at", { ascending: true }).limit(2_000);
+  const { data, error } = await client.from("acars_position_reports").select("reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,fuel_burn_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm").eq("session_id", id).order("reported_at", { ascending: true }).limit(2_000);
   if (error) throw error;
   return (data as AcarsPositionReportRow[]).map(positionReportFromRow).filter((report): report is AcarsPositionReport => report != null);
 }
@@ -230,10 +253,21 @@ async function appendPersistentAcarsSnapshot(client: SupabaseClient, id: string,
   const session = await getPersistentAcarsSession(client, id); if (!session || session.pilotId !== pilotId || session.status !== "active") return null;
   let distanceNm = session.distanceNm; if (session.lastSnapshot) { const leg = haversineNm(session.lastSnapshot, snapshot); if (Number.isFinite(leg) && leg >= 0 && leg < 25) distanceNm += leg; }
   const recentSnapshots = [...(session.recentSnapshots ?? []), snapshot].slice(-MAX_RECENT_SNAPSHOTS); const now = new Date().toISOString();
-  const { error: reportError } = await client.from("acars_position_reports").insert({ session_id: id, reported_at: snapshot.timestamp, latitude: snapshot.latitude, longitude: snapshot.longitude, altitude_ft: snapshot.altitudeFt, ground_speed_kt: snapshot.groundSpeedKt, heading_deg: snapshot.headingDeg, fuel_kg: snapshot.fuelKg, engines_running: snapshot.enginesRunning, parking_brake_set: snapshot.parkingBrakeSet, on_ground: snapshot.onGround, vertical_speed_fpm: snapshot.verticalSpeedFpm }); if (reportError) throw reportError;
-  const { data, error } = await client.from("acars_sessions").update({ updated_at: now, first_fuel_kg: session.firstFuelKg ?? snapshot.fuelKg, last_fuel_kg: snapshot.fuelKg ?? session.lastFuelKg, distance_nm: distanceNm, landing_fpm: snapshot.onGround && snapshot.verticalSpeedFpm != null && snapshot.verticalSpeedFpm < -20 ? Math.round(snapshot.verticalSpeedFpm) : session.landingFpm, last_snapshot: snapshot, recent_snapshots: recentSnapshots }).eq("id", id).eq("pilot_id", pilotId).eq("status", "active").select("*").maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null;
+  const remainingFuel = usableRemainingFuelKg(snapshot.fuelKg);
+  const fuelBurn = usableFuelBurnKg(snapshot.fuelBurnKg);
+  const lastFuelBurnKg = fuelBurn != null && (session.lastFuelBurnKg == null || fuelBurn >= session.lastFuelBurnKg) ? fuelBurn : session.lastFuelBurnKg;
+  const { error: reportError } = await client.from("acars_position_reports").insert({ session_id: id, reported_at: snapshot.timestamp, latitude: snapshot.latitude, longitude: snapshot.longitude, altitude_ft: snapshot.altitudeFt, ground_speed_kt: snapshot.groundSpeedKt, heading_deg: snapshot.headingDeg, fuel_kg: remainingFuel, fuel_burn_kg: fuelBurn, engines_running: snapshot.enginesRunning, parking_brake_set: snapshot.parkingBrakeSet, on_ground: snapshot.onGround, vertical_speed_fpm: snapshot.verticalSpeedFpm }); if (reportError) throw reportError;
+  const { data, error } = await client.from("acars_sessions").update({ updated_at: now, first_fuel_kg: session.firstFuelKg ?? remainingFuel, last_fuel_kg: remainingFuel ?? session.lastFuelKg, last_fuel_burn_kg: lastFuelBurnKg, distance_nm: distanceNm, landing_fpm: snapshot.onGround && snapshot.verticalSpeedFpm != null && snapshot.verticalSpeedFpm < -20 ? Math.round(snapshot.verticalSpeedFpm) : session.landingFpm, last_snapshot: snapshot, recent_snapshots: recentSnapshots }).eq("id", id).eq("pilot_id", pilotId).eq("status", "active").select("*").maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null;
 }
 async function completePersistentAcarsSession(client: SupabaseClient, id: string, pilotId: string, landingFpm?: number | null) { const completedAt = new Date().toISOString(); const update: Record<string, unknown> = { status: "completed", completed_at: completedAt, updated_at: completedAt }; if (landingFpm != null && Number.isFinite(landingFpm)) update.landing_fpm = Math.round(landingFpm); const { data, error } = await client.from("acars_sessions").update(update).eq("id", id).eq("pilot_id", pilotId).eq("status", "active").select("*").maybeSingle(); if (error) throw error; return data ? sessionFromRow(data as AcarsSessionRow) : null; }
+async function recoverPersistentAcarsSession(client: SupabaseClient, id: string, pilotId: string) {
+  const existing = await getPersistentAcarsSession(client, id);
+  if (!existing || existing.pilotId !== pilotId || !isRecoveryStale(existing) || (existing.status !== "disconnected" && existing.status !== "active")) return null;
+  const completedAt = existing.lastSnapshot?.timestamp ?? existing.updatedAt;
+  const { data, error } = await client.from("acars_sessions").update({ status: "completed", completed_at: completedAt, updated_at: new Date().toISOString() }).eq("id", id).eq("pilot_id", pilotId).in("status", ["disconnected", "active"]).select("*").maybeSingle();
+  if (error) throw error;
+  return data ? sessionFromRow(data as AcarsSessionRow) : null;
+}
 async function listPersistentLiveAcarsSessions(client: SupabaseClient) { const { data, error } = await client.from("acars_sessions").select("*").eq("status", "active").order("updated_at", { ascending: false }); if (error) throw error; const cutoff = Date.now() - 90_000; return (data as AcarsSessionRow[]).map(sessionFromRow).map((session) => ({ ...session, connectionHealthy: new Date(session.updatedAt).getTime() >= cutoff })); }
 async function listPersistentCompletedAcarsSessionsForPilot(client: SupabaseClient, pilotId: string, limit: number) {
   const { data, error } = await client.from("acars_sessions")
@@ -241,6 +275,13 @@ async function listPersistentCompletedAcarsSessionsForPilot(client: SupabaseClie
     .order("completed_at", { ascending: false }).limit(limit);
   if (error) throw error;
   return (data as AcarsSessionRow[]).map(sessionFromRow);
+}
+async function listPersistentRecoverableAcarsSessionsForPilot(client: SupabaseClient, pilotId: string, limit: number) {
+  const { data, error } = await client.from("acars_sessions")
+    .select("*").eq("pilot_id", pilotId).in("status", ["disconnected", "completed", "active"])
+    .order("updated_at", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return (data as AcarsSessionRow[]).map(sessionFromRow).filter(isRecoveryStale);
 }
 async function listPersistentAcarsSessionSnapshots(client: SupabaseClient, id: string, pilotId: string) {
   const session = await getPersistentAcarsSession(client, id);
@@ -262,7 +303,7 @@ async function listPersistentPositionReports(client: SupabaseClient, sessionId: 
   for (let offset = 0; offset < maximum; offset += ACARS_REPORT_PAGE_SIZE) {
     const end = Math.min(maximum - 1, offset + ACARS_REPORT_PAGE_SIZE - 1);
     const { data, error } = await client.from("acars_position_reports")
-      .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
+      .select("session_id,reported_at,latitude,longitude,altitude_ft,ground_speed_kt,heading_deg,fuel_kg,fuel_burn_kg,engines_running,parking_brake_set,on_ground,vertical_speed_fpm")
       .eq("session_id", sessionId)
       .order("reported_at", { ascending: true })
       .range(offset, end);
@@ -299,8 +340,16 @@ export async function listCompletedAcarsSessionsForPilot(pilotId: string, reques
   const client = requirePersistentClient();
   return client ? listPersistentCompletedAcarsSessionsForPilot(client, pilotId, limit) : listLocalCompletedAcarsSessionsForPilot(pilotId, limit);
 }
+/** Interrupted or completed sessions that may be missing their automatic PIREP. */
+export async function listRecoverableAcarsSessionsForPilot(pilotId: string, requestedLimit = 12) {
+  const limit = Math.max(1, Math.min(30, Math.round(requestedLimit)));
+  const client = requirePersistentClient();
+  return client ? listPersistentRecoverableAcarsSessionsForPilot(client, pilotId, limit) : listLocalRecoverableAcarsSessionsForPilot(pilotId, limit);
+}
 export async function appendAcarsSnapshot(id: string, pilotId: string, snapshot: AcarsFlightSnapshot) { const client = requirePersistentClient(); return client ? appendPersistentAcarsSnapshot(client, id, pilotId, snapshot) : appendLocalAcarsSnapshot(id, pilotId, snapshot); }
 export async function completeAcarsSession(id: string, pilotId: string, landingFpm?: number | null) { const client = requirePersistentClient(); return client ? completePersistentAcarsSession(client, id, pilotId, landingFpm) : completeLocalAcarsSession(id, pilotId, landingFpm); }
+/** Converts an interrupted own-session into a completed record without losing its telemetry. */
+export async function recoverAcarsSession(id: string, pilotId: string) { const client = requirePersistentClient(); return client ? recoverPersistentAcarsSession(client, id, pilotId) : recoverLocalAcarsSession(id, pilotId); }
 /** Retrieves a pilot's own telemetry history for their private flight debrief. */
 export async function listAcarsSessionSnapshots(id: string, pilotId: string) {
   const client = requirePersistentClient();
