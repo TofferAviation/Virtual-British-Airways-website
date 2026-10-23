@@ -16,7 +16,7 @@ import {
   wrapLongitude,
   globeClipRange,
   globeZoomTarget,
-  globeZoomStep,
+  globeAltitudeStep, globeDescentFloor,
 } from "@/lib/radar-globe-geodesy";
 import { GlobeSurface } from "./surface";
 import { buildAuroraCurtains, updateAuroraCurtains } from "./aurora";
@@ -176,8 +176,12 @@ export function createGlobeScene(
     testView?.distanceKm ?? zoomDistance(initial?.zoom ?? 0.6),
   );
   camera.lookAt(0, 0, 0);
-  let distance = camera.position.z,
-    targetDistance = distance;
+  let targetDistance = camera.position.z,
+    distance = Math.max(targetDistance, WGS84_A_KM + 9.1),
+    initialDescent = targetDistance < distance;
+  let verticalVelocity = 0, groundPitchTarget: number | null = null;
+  let maxDescentFrameFraction=0,lastCameraTrace=0;
+  const cameraTrace: number[][]=[];
   let pitch = THREE.MathUtils.clamp(testView?.pitch ?? initial?.pitch ?? 0, 0, 175);
   let bearing = testView?.bearing ?? initial?.bearing ?? 0;
   let longitude = testView?.longitude ?? initial?.center[0] ?? -25,
@@ -574,13 +578,14 @@ export function createGlobeScene(
     lastMotionAt = performance.now();
     orbit();
   };
-  const resetView = () => { bearing = 0; pitch = 0; lastMotionAt = performance.now(); remember(); };
+  const resetView = () => { bearing = 0; pitch = 0; groundPitchTarget=null; lastMotionAt = performance.now(); remember(); };
   let groundRequested = false;
-  const groundView = () => { groundRequested=true; pitch=88; lastMotionAt=performance.now(); };
+  const groundView = () => { initialDescent=false;groundRequested=true; groundPitchTarget=88;maxDescentFrameFraction=0;cameraTrace.length=0; lastMotionAt=performance.now(); };
   const onDown = (event: PointerEvent) => {
     if (down) return;
     dragMode = globeDragMode(event.button, event.shiftKey);
     if (!dragMode) return;
+    groundPitchTarget=null;
     event.preventDefault(); // particularly suppress middle-button autoscroll
     canvas.focus({ preventScroll: true });
     down = true;
@@ -650,6 +655,10 @@ export function createGlobeScene(
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
     groundRequested=false;
+    initialDescent=false;
+    groundPitchTarget=null;
+    // A reverse gesture takes effect now, not after an old dolly completes.
+    targetDistance=event.deltaY>0?Math.max(distance,targetDistance):Math.min(distance,targetDistance);
     targetDistance = globeZoomTarget(
       targetDistance,
       event.deltaY,
@@ -668,6 +677,7 @@ export function createGlobeScene(
     }
     if (event.key === "Home") { event.preventDefault(); resetView(); return; }
     if (event.shiftKey && event.key.startsWith("Arrow")) {
+      groundPitchTarget=null;
       ({ bearing, pitch } = globeLookDrag(bearing, pitch, event.key === "ArrowLeft" ? -25 : event.key === "ArrowRight" ? 25 : 0, event.key === "ArrowUp" ? -25 : event.key === "ArrowDown" ? 25 : 0));
       lastMotionAt = performance.now(); event.preventDefault(); remember(); return;
     }
@@ -790,16 +800,28 @@ export function createGlobeScene(
     }
     if (keys.has("q") || keys.has("e")) {
       groundRequested=false;
+      initialDescent=false;
+      groundPitchTarget=null;
+      targetDistance=keys.has("e")?Math.max(targetDistance,distance):Math.min(targetDistance,distance);
       targetDistance=Math.max(targetDistance,WGS84_A_KM+ground.heightKm+TERRAIN_CLEARANCE_KM);
       targetDistance = THREE.MathUtils.clamp(targetDistance + (Number(keys.has("e")) - Number(keys.has("q"))) * speed, WGS84_A_KM + TERRAIN_CLEARANCE_KM, WGS84_A_KM + 40000);
       lastMotionAt = now;
     }
     if(groundRequested) targetDistance=WGS84_A_KM+ground.heightKm+TERRAIN_CLEARANCE_KM;
-    // Descend only after a DEM is present at the camera. Unsupported polar
-    // caps and failed downloads remain explicitly above a conservative floor.
-    const floor=WGS84_A_KM+(ground.ready?ground.heightKm+TERRAIN_CLEARANCE_KM:Math.max(9.1,ground.heightKm+0.1));
-    const safeTarget=Math.max(targetDistance,floor);
-    distance = Math.max(floor,globeZoomStep(distance, safeTarget, deltaSeconds));
+    const floor=globeDescentFloor(distance-WGS84_A_KM,ground.heightKm,ground.ready);
+    // Discard blocked wheel/key debt. Only an explicit ground-view request
+    // remains automatic when its DEM becomes available.
+    if(!ground.ready&&!groundRequested&&!initialDescent) targetDistance=Math.max(targetDistance,WGS84_A_KM+floor);
+    if(ground.ready)initialDescent=false;
+    const priorHeight=distance-WGS84_A_KM;
+    const vertical=globeAltitudeStep(distance-WGS84_A_KM,targetDistance-WGS84_A_KM,verticalVelocity,ground.heightKm,ground.ready,deltaSeconds);
+    distance=WGS84_A_KM+vertical.heightKm; verticalVelocity=vertical.velocityKmS;
+    maxDescentFrameFraction=Math.max(maxDescentFrameFraction,(priorHeight-vertical.heightKm)/Math.max(.005,priorHeight-ground.heightKm));
+    if(process.env.NODE_ENV!=="production"&&now-lastCameraTrace>=100){
+      lastCameraTrace=now;cameraTrace.push([Math.round(now-started),Math.round(vertical.heightKm*1e6)/1000,Math.round(verticalVelocity*1e6)/1000,ground.ready?1:0,Math.round(ground.heightKm*1e6)/1000]);
+      if(cameraTrace.length>320)cameraTrace.shift();
+    }
+    if(groundPitchTarget!==null){pitch+=(groundPitchTarget-pitch)*(1-Math.exp(-deltaSeconds*3));if(Math.abs(pitch-groundPitchTarget)<.01)groundPitchTarget=null;}
     const height = distance - WGS84_A_KM,
       tilt = THREE.MathUtils.degToRad(pitch), yaw = THREE.MathUtils.degToRad(bearing);
     // Height means actual altitude above the selected WGS84 surface, even at
@@ -835,7 +857,9 @@ export function createGlobeScene(
       camera.updateMatrixWorld(true);
       frustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(earth.matrixWorld);
       localFrustum.setFromProjectionMatrix(frustumMatrix);
-      surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled, groundRequested||targetDistance-WGS84_A_KM<9.1);
+      // Fetch the collision tile while still approaching, not only once the
+      // eye has already reached the old 9.1 km safety barrier.
+      surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled, groundRequested||targetDistance-WGS84_A_KM<30||(!ground.ready&&height<80));
       lastLodUpdate = now;
     }
     const moving = (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
@@ -899,6 +923,7 @@ export function createGlobeScene(
     if (now - measuredSince >= 1000) { measuredFps = measuredFrames * 1000 / (now - measuredSince); passesPerSecond = volumePasses * 1000 / (now - measuredSince); measuredSince = now; measuredFrames = 0; volumePasses = 0; }
     if (now - lastDiagnostics > 1000) {
       lastDiagnostics = now;
+      if(process.env.NODE_ENV!=="production")host.dataset.globeCameraTrace=JSON.stringify(cameraTrace);
       const costs = [...frameCosts].sort((a, b) => a - b);
       host.dataset.globeDiagnostics = JSON.stringify({
         quality: effectiveQuality,
@@ -936,6 +961,10 @@ export function createGlobeScene(
         aboveGroundMetres: Math.round((height-ground.heightKm)*1000),
         terrainReady: ground.ready,
         groundRequested,
+        verticalKmS:Math.round(verticalVelocity*10000)/10000,
+        maxDescentFrameFraction:Math.round(maxDescentFrameFraction*10000)/10000,
+        descentFloorKm:Math.round(floor*1000)/1000,
+        waitingForTerrain:!ground.ready&&(groundRequested||targetDistance-WGS84_A_KM<=floor+.01),
         pitch: Math.round(pitch),
         bearing: Math.round(bearing * 10) / 10,
         focus: [Number(longitude.toFixed(5)), Number(latitude.toFixed(5))],

@@ -145,3 +145,29 @@ export function globeZoomTarget(
 export function globeZoomStep(current: number, target: number, seconds: number) {
   return current + (target - current) * (1 - Math.exp(-Math.max(0, seconds) * 14));
 }
+
+/** Loading data may hold descent, but must not teleport an already low eye up. */
+export function globeDescentFloor(heightKm: number, terrainKm: number, ready: boolean) {
+  const collision = Math.max(0, terrainKm) + .005;
+  return ready ? collision : Math.max(collision, Math.min(heightKm, Math.max(9.1, terrainKm + .1)));
+}
+
+/** Velocity/acceleration-limited dolly in physical kilometres. Small fixed
+ * integration steps keep the same trajectory at 30/60/144 Hz and discard stall
+ * catch-up. Only a genuine terrain collision can require immediate correction. */
+export function globeAltitudeStep(heightKm: number, targetKm: number, velocityKmS: number, terrainKm: number, ready: boolean, seconds: number) {
+  const floor = globeDescentFloor(heightKm, terrainKm, ready), goal = Math.max(floor, targetKm);
+  let height = Math.max(heightKm, floor), velocity = height > heightKm ? Math.max(0, velocityKmS) : velocityKmS;
+  const dt = Math.min(.1, Math.max(0, seconds)), steps = Math.max(1, Math.ceil(dt * 120)), step = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    const clearance = Math.max(0, height - Math.max(0, terrainKm) - .005);
+    const desired = Math.max(-(.003 + clearance * .75), Math.min(.01 + clearance * 1.5, (goal - height) * 6));
+    const acceleration = Math.max(.01, clearance * 2.2);
+    const nextVelocity = velocity + Math.max(-acceleration * step, Math.min(acceleration * step, desired - velocity));
+    const next = height + (velocity + nextVelocity) * .5 * step;
+    // Stop at the requested altitude, rather than ringing through it.
+    if ((goal - height) * (goal - next) <= 0) { height = goal; velocity = 0; }
+    else { height = Math.max(floor, next); velocity = height === floor ? Math.max(0, nextVelocity) : nextVelocity; }
+  }
+  return { heightKm: height, velocityKmS: velocity, floorKm: floor };
+}

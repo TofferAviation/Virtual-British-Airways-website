@@ -72,6 +72,7 @@ const views = {
   norway: { latitude:67, longitude:20, distanceKm:6878.137, pitch:85, bearing:0, fov:60, date:"2026-03-20T22:00:00Z" },
   aurora: {latitude:58,longitude:71,distanceKm:6878.137,pitch:68,bearing:0,fov:60,date:"2026-03-20T22:00:00Z"},
   curtains: {latitude:64.55,longitude:115.8,distanceKm:6526.983,pitch:91,bearing:28.4,fov:65,date:"2026-03-20T11:00:00Z"},
+  rays: {latitude:64.55,longitude:115.8,distanceKm:6388.242,pitch:108,bearing:28.4,fov:65,date:"2026-03-20T11:00:00Z"},
   limb: {
     latitude: 10,
     longitude: 90,
@@ -93,6 +94,7 @@ export function GlobeVisualCheck() {
     [auroraCase,setAuroraCase]=useState("live"),
     [paused,setPaused]=useState(false),
     [recording,setRecording]=useState(false),
+    [captureSeconds,setCaptureSeconds]=useState(6),
     [captureUrl,setCaptureUrl]=useState(""),
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
@@ -105,7 +107,7 @@ export function GlobeVisualCheck() {
       const stream=canvas.captureStream(30),recorder=new MediaRecorder(stream),chunks:BlobPart[]=[];
       recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
       recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());if(captureRef.current)URL.revokeObjectURL(captureRef.current);captureRef.current=URL.createObjectURL(new Blob(chunks,{type:recorder.mimeType}));setCaptureUrl(captureRef.current);setRecording(false);recordingRef.current=null;};
-      recorder.start();setRecording(true);const timer=setTimeout(()=>{if(recorder.state!=="inactive")recorder.stop();},6000);recordingRef.current={stream,recorder,timer};
+      recorder.start();setRecording(true);const timer=setTimeout(()=>{if(recorder.state!=="inactive")recorder.stop();},captureSeconds*1000);recordingRef.current={stream,recorder,timer};
     }catch(e){setErrors(v=>[...v,String(e)]);}
   };
   useEffect(() => {
@@ -242,7 +244,8 @@ export function GlobeVisualCheck() {
         <label>Hemisphere <select aria-label="Aurora hemisphere" value={hemisphere} onChange={e=>setHemisphere(e.target.value as AuroraSettings["hemisphere"])}><option value="both">Both</option><option value="north">North</option><option value="south">South</option></select></label>
         <label>Forecast <select aria-label="Aurora test forecast" value={auroraCase} onChange={e=>setAuroraCase(e.target.value)}><option value="live">Live NOAA</option><option value="quiet">Synthetic quiet</option><option value="storm">Synthetic active</option><option value="shift">Synthetic shifted · transition</option></select></label>
         <label><input type="checkbox" checked={paused} onChange={e=>setPaused(e.target.checked)}/>Pause aurora</label>
-        <button onClick={record} disabled={recording}>{recording?"Recording…":"Record 6 s"}</button>
+        <select aria-label="Capture length" value={captureSeconds} onChange={e=>setCaptureSeconds(Number(e.target.value))} disabled={recording}><option value={6}>6 s</option><option value={12}>12 s</option><option value={20}>20 s</option></select>
+        <button onClick={record} disabled={recording}>{recording?"Recording…":`Record ${captureSeconds} s`}</button>
         {captureUrl?<a href={captureUrl} download={`globe-${view}-${auroraCase}.webm`} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
           {auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}

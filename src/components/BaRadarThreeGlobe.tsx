@@ -35,7 +35,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
       if (host?.dataset.globeStatus) { setPerformanceLabel(host.dataset.globeStatus); return; }
       if (!host?.dataset.globeDiagnostics) return;
       const info = JSON.parse(host.dataset.globeDiagnostics);
-      setPerformanceLabel(`${info.mode === "auto" ? "Auto → " : ""}${info.quality} · ${info.fps} fps · LOD ${info.terrain.level} · ${info.aboveGroundMetres.toLocaleString()} m AGL${!info.terrainReady&&(info.groundRequested||info.altitudeKm<10) ? " · loading DEM / descent held" : ""}`);
+      setPerformanceLabel(`${info.mode === "auto" ? "Auto → " : ""}${info.quality} · ${info.fps} fps · LOD ${info.terrain.level} · ${info.aboveGroundMetres.toLocaleString()} m AGL${info.waitingForTerrain ? " · loading terrain / descent held safely" : ""}`);
     }, 2000);
     return () => {
       disposed = true;

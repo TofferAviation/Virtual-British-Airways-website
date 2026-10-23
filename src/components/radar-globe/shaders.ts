@@ -1,4 +1,4 @@
-import { auroraShapeGLSL } from "@/lib/radar-aurora-shape";
+import { auroraShapeGLSL, auroraRayGLSL } from "@/lib/radar-aurora-shape";
 
 // All positions are Earth-fixed kilometres. Weather uses north-first rows,
 // -180°..180° columns. Density and shadows call the SAME function.
@@ -384,6 +384,7 @@ uniform sampler2D uAuroraPrevious;uniform sampler2D uAuroraCurrent;uniform float
 ${geoGLSL}
 float bell(float h,float centre,float width){float q=(h-centre)/width;return exp(-0.5*q*q);}
 ${auroraShapeGLSL}
+${auroraRayGLSL}
 void main(){
   #include <logdepthbuf_fragment>
   if(uHemisphere*vNormal.y<0.0)discard;
@@ -400,19 +401,28 @@ void main(){
   float knots=auroraNoise(vec2(s*.003-t*.07,seed+11.0));
   float gaps=smoothstep(.15,.5,auroraNoise(vec2(s*.0018+seed,t*.04+8.0)));
   float folds=auroraNoise(vec2(s*.008+seed,t*.07));
-  float lower=107.0+folds*55.0;
-  float rayCoord=s*.17+auroraNoise(vec2(s*.018+seed,t*.12))*3.0-t*.4;
+  vec4 packet=auroraRayState(s,seed,t);
+  // Subpixel packets converge to a local low-frequency envelope, rather than
+  // turning into flashing speckles when viewed from orbit.
+  float unresolved=smoothstep(12.0,65.0,fwidth(s));
+  packet.x=mix(packet.x,.35+.35*knots,unresolved);
+  float lower=103.0+folds*31.0+packet.z;
+  float rayCoord=s*.17+auroraNoise(vec2(s*.018+seed,t*.12))*3.0-t*.22;
   rayCoord+=(h-lower)*.018*(auroraNoise(vec2(s*.005,seed))-.5);
   float filament=pow(auroraNoise(vec2(rayCoord,(h-lower)*.006+seed)),1.7);
   // Band-limit fixed geographic filaments; zoom only integrates their detail.
   filament=mix(filament,.3,smoothstep(.3,1.5,fwidth(rayCoord)));
-  float rayTop=155.0+auroraNoise(vec2(s*.025+seed,t*.09))*95.0;
-  float rays=mix(.7,1.65,filament)*(1.0-smoothstep(rayTop,rayTop+55.0,h));
-  float body=bell(h,lower+26.0,24.0+folds*15.0)*(.75+rays*.45);
-  body+=bell(h,lower+62.0,43.0)*rays*.25;
-  float hem=bell(h,lower+7.0,5.5)*(.2+knots*.6);
-  float red=bell(h,338.0+folds*30.0,55.0)*.14*smoothstep(280.0,315.0,h);
-  float nitrogen=bell(h,lower+2.0,4.0)*.10*strength*(.3+knots);
+  float rayTop=packet.y;
+  float rays=packet.x*(.18+filament*2.2)*(1.0-smoothstep(rayTop,rayTop+28.0,h));
+  // Remove the strong uniform sheet underneath the detail: packets can really
+  // weaken/dissolve, not merely scroll a stripe texture across a bright pane.
+  float body=bell(h,lower+26.0,23.0+folds*14.0)*(.10+packet.x*.55);
+  body+=bell(h,lower+72.0,47.0)*rays*.85;
+  body+=bell(h,packet.w,15.0)*max(0.0,packet.x-.12)*.16*(1.0-smoothstep(270.0,310.0,h));
+  float hem=bell(h,lower+7.0,5.5)*(.08+sqrt(packet.x)*.65);
+  // High oxygen glow evolves much more slowly than the prompt lower border.
+  float red=bell(h,338.0+folds*30.0,55.0)*(.04+.12*auroraNoise(vec2(s*.003+seed,t*.005)))*smoothstep(280.0,315.0,h);
+  float nitrogen=bell(h,lower+2.0,4.0)*.13*strength*packet.x;
   float vertical=smoothstep(95.0,108.0,h)*(1.0-smoothstep(400.0,450.0,h));
   float night=1.0-smoothstep(-0.18,0.08,dot(vNormal,uSun));
   float envelope=strength*uActivity*taper*vArc.y*life*gaps*(.35+knots)*night*uBrightness*vertical;

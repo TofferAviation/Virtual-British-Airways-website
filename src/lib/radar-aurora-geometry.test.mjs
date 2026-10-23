@@ -4,7 +4,7 @@ import {readFile} from "node:fs/promises";
 import ts from "typescript";
 import * as THREE from "three";
 import {worldToGeodetic} from "./radar-globe-geodesy.ts";
-import {AURORA_DETAIL,auroraArc,auroraFold,auroraNoise} from "./radar-aurora-shape.ts";
+import {AURORA_DETAIL,auroraArc,auroraFold,auroraNoise,auroraRayState,auroraSeed} from "./radar-aurora-shape.ts";
 async function moduleUrl(relative,replace){let source=await readFile(new URL(relative,import.meta.url),"utf8");for(const [from,to] of Object.entries(replace))source=source.replace(JSON.stringify(from),JSON.stringify(to));return `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString("base64")}`;}
 const magnetic=await moduleUrl("./radar-aurora-magnetic.ts",{"./data/wmm2025":new URL("./data/wmm2025.ts",import.meta.url).href,"./radar-globe-geodesy":new URL("./radar-globe-geodesy.ts",import.meta.url).href});
 const url=await moduleUrl("../components/radar-globe/aurora.ts",{"three":import.meta.resolve("three"),"@/lib/radar-aurora-field":new URL("./radar-aurora-field.ts",import.meta.url).href,"@/lib/radar-aurora-shape":new URL("./radar-aurora-shape.ts",import.meta.url).href,"@/lib/radar-globe-geodesy":new URL("./radar-globe-geodesy.ts",import.meta.url).href,"@/lib/radar-aurora-magnetic":magnetic});
@@ -59,4 +59,29 @@ test("forecast morph reuses geometry/buffers, retaining an exact in-progress end
   updateAuroraCurtains(group,data(12),1);
   for(const m of group.children)for(const name of ["position","aNextPosition"]){const p=m.geometry.getAttribute(name);for(let i=0;i<p.count;i+=71)assert.ok(m.geometry.boundingSphere.containsPoint(new THREE.Vector3().fromBufferAttribute(p,i)),"both forecast endpoints stay inside culling bounds");}
   group.children.forEach(m=>m.geometry.dispose());material.dispose();
+});
+test("vertical ray bundles independently brighten, die back and vary emission height",()=>{
+  for(const seed of [3.17,29.7,181.37]){
+    const samples=Array.from({length:161},(_,i)=>auroraRayState(600,seed,i*.2));
+    const energy=samples.map(v=>v.energy),tops=samples.map(v=>v.top);
+    assert.ok(Math.max(...energy)-Math.min(...energy)>.5,"not just a scrolling static stripe");
+    assert.ok(Math.max(...tops)-Math.min(...tops)>30,"ray height follows its own event");
+    assert.ok(samples.every(v=>Object.values(v).every(Number.isFinite)&&v.energy>=0&&v.energy<=2.2&&v.top>=95&&v.top<=340));
+    assert.notDeepEqual(samples[50],auroraRayState(675,seed,10),"neighbouring bundles must not pulse in lockstep");
+    assert.deepEqual(samples[50],auroraRayState(600,seed,10),"pause/replay is deterministic");
+  }
+});
+test("ray events and spatial cell crossings remain continuous, including event reseeding",()=>{
+  for(const seed of [3.17,29.7,181.37])for(let s=-76;s<1500;s+=38){
+    for(const t of [0,3.91,17.22,81.99]){
+      const a=auroraRayState(s-1e-5,seed,t),b=auroraRayState(s+1e-5,seed,t);
+      assert.ok(Math.abs(a.energy-b.energy)<1e-5&&Math.abs(a.top-b.top)<1e-3,"no vertical seam between packet cells");
+      const c=auroraRayState(s,seed,t+1/60);
+      assert.ok(Math.abs(c.energy-b.energy)<.1,"no frame-to-frame flashing");
+    }
+    const key=Math.floor(s/38)*11.73+seed*3.17,period=4+auroraSeed(key)*10;
+    const boundary=period*7-auroraSeed(key+1)*30;
+    const a=auroraRayState(s,seed,boundary-1e-6),b=auroraRayState(s,seed,boundary+1e-6);
+    assert.ok(Math.abs(a.energy-b.energy)<1e-5&&Math.abs(a.top-b.top)<1e-3,"new event seed cannot pop its ray");
+  }
 });

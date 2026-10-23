@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WGS84_A_KM } from "./radar-globe-geodesy.ts";
-import { globeClipRange, globeZoomTarget, globeZoomStep } from "./radar-globe-geodesy.ts";
+import { globeClipRange, globeZoomTarget, globeZoomStep, globeAltitudeStep, globeDescentFloor } from "./radar-globe-geodesy.ts";
 
 test("depth precision resolves cloud/ground separation at every supported zoom", () => {
   for (const height of [0.005, 0.02, 4, 6, 12, 90, 400, 2600, 16000, 40000]) {
@@ -46,4 +46,27 @@ test("ground zoom uses clearance, not mountain elevation as its dolly speed",()=
   const sea=globeZoomTarget(WGS84_A_KM+.005,80,0,800),mountain=globeZoomTarget(WGS84_A_KM+3+.005,80,0,800,3);
   assert.ok(Math.abs(mountain-sea-3)<1e-9);
   assert.equal(globeZoomTarget(WGS84_A_KM+3,-160,0,800,3),WGS84_A_KM+3+.005);
+});
+test("DEM readiness releases descent from rest without a catch-up drop",()=>{
+  let h=9.1,v=0;
+  for(let i=0;i<120;i++){const next=globeAltitudeStep(h,.105,v,.1,false,1/60);h=next.heightKm;v=next.velocityKmS;}
+  assert.equal(h,9.1);assert.equal(v,0);
+  const first=globeAltitudeStep(h,.105,v,.1,true,1/60);
+  assert.ok(h-first.heightKm<.004,"no kilometre-sized first frame after DEM arrives");
+  let prior=h;
+  for(let i=0;i<1200;i++){const next=globeAltitudeStep(h,.105,v,.1,true,1/60);h=next.heightKm;v=next.velocityKmS;assert.ok(h<=prior&&h>=.105);assert.ok(prior-h<.12);prior=h;}
+  assert.ok(Math.abs(h-.105)<1e-6);
+});
+test("loading gaps hold an already low eye instead of launching it to the 9.1 km barrier",()=>{
+  assert.equal(globeDescentFloor(.205,.1,false),.205);
+  const next=globeAltitudeStep(.205,.105,-.3,.1,false,1/30);
+  assert.equal(next.heightKm,.205);assert.equal(next.velocityKmS,0);
+  const escape=globeAltitudeStep(.05,.105,-.2,.1,true,1/60);
+  assert.ok(escape.heightKm>=.105,"actual terrain collision protection is retained");
+});
+test("dolly trajectory is consistent at Low/High/high-refresh rates and bounds stall catch-up",()=>{
+  const run=hz=>{let h=12,v=0;for(let i=0;i<hz*5;i++){const n=globeAltitudeStep(h,.005,v,0,true,1/hz);h=n.heightKm;v=n.velocityKmS;}return h;};
+  assert.ok(Math.abs(run(30)-run(60))<.01);
+  assert.ok(Math.abs(run(144)-run(60))<.015);
+  assert.deepEqual(globeAltitudeStep(9.1,.005,0,0,true,2),globeAltitudeStep(9.1,.005,0,0,true,.1));
 });

@@ -222,7 +222,7 @@ export class GlobeSurface {
       tile.mesh.geometry.dispose(); tile.mesh.geometry=geometry; tile.elevation=grid;
       this.revision++;
       tile.ready=Boolean(tile.dayTexture)||tile.borrowed;
-    } catch { tile.elevationRetryAt=Date.now()+30000; }
+    } catch { tile.elevationRetryAt=controller.signal.aborted?0:Date.now()+30000; }
     finally { this.elevationRequests--; tile.elevationLoading=false; tile.elevationAbort=null; }
   }
   /** Height of the actual finest rendered triangle under the camera. A coarse
@@ -355,6 +355,29 @@ export class GlobeSurface {
     // actually reserve images. Recount before I/O: otherwise repeated estimates
     // can starve the DEM queue even while several MiB remain available.
     reservedMb=this.reservedMb();
+    // A wider approach frustum can make previously created, still-unloaded
+    // sibling images wanted again. Their reservations must not starve the
+    // collision chain: borrow an existing image before scheduling more I/O.
+    if(groundIntent&&reservedMb>profile.cacheMb-1.5){
+      for(const tile of [...this.tiles.values()].sort((a,b)=>b.z-a.z)){
+        if(tile.z<4||tile.touched!==this.frame||tile.dayTexture||tile.loading||tile.borrowed)continue;
+        tile.borrowed=true;tile.ready=Boolean(tile.elevation);this.bindDay(tile);
+        reservedMb=this.reservedMb();if(reservedMb<=profile.cacheMb-1.5)break;
+      }
+    }
+    if(groundIntent&&!this.heightAt(focus.latitude,focus.longitude).ready&&reservedMb>profile.cacheMb-2){
+      // A warm/full horizon cache may have no unloaded images left to borrow.
+      // Reclaim non-focus images (hidden ancestors first), keeping the roots
+      // and the camera's own imagery chain. Rebind before releasing the texture.
+      const reclaim=[...this.tiles.values()].filter(t=>t.z>0&&t.dayTexture&&!t.loading&&!containsFocus(t))
+        .sort((a,b)=>Number(a.mesh.visible)-Number(b.mesh.visible)||b.centre.distanceToSquared(cameraLocal)-a.centre.distanceToSquared(cameraLocal));
+      for(const tile of reclaim){
+        const texture=tile.dayTexture!;tile.dayTexture=null;tile.borrowed=true;tile.upgrade=false;
+        for(const visible of this.tiles.values())if(visible.mesh.visible)this.bindDay(visible);
+        texture.dispose();(texture.image as ImageBitmap)?.close?.();
+        reservedMb=this.reservedMb();if(reservedMb<=profile.cacheMb-2)break;
+      }
+    }
     // Cancel work made irrelevant by a fast orbit, while keeping siblings
     // needed for an atomic parent/child switch marked as wanted above.
     for (const tile of this.tiles.values()) if (tile.z > 0 && tile.touched < this.frame - 2) { tile.abort?.abort(); tile.elevationAbort?.abort(); }
@@ -370,6 +393,17 @@ export class GlobeSurface {
         a.centre.distanceToSquared(cameraLocal) -
           b.centre.distanceToSquared(cameraLocal),
     );
+    // Reserve a free request for collision data before background imagery can
+    // refill every slot. Focus-first refinement is already bounded by the same
+    // tile/memory/concurrency budgets; no extra download lane is introduced.
+    const elevationOrder=[...this.tiles.values()].sort((a,b)=>
+      Number(containsFocus(b))-Number(containsFocus(a)) || a.z-b.z || a.centre.distanceToSquared(cameraLocal)-b.centre.distanceToSquared(cameraLocal));
+    const startElevation=()=>{
+      if(this.elevationRequests>=1||this.requests+this.elevationRequests>=profile.requests||reservedMb+.25>=profile.cacheMb)return;
+      const tile=elevationOrder.find(t=>t.z>=4&&t.touched===this.frame&&!t.elevation&&!t.elevationLoading&&t.elevationRetryAt<=Date.now());
+      if(tile){this.loadElevation(tile);reservedMb+=.25;}
+    };
+    if(groundIntent)startElevation();
     for (const tile of [...this.queue]) {
       if (this.requests+this.elevationRequests >= profile.requests) break;
       if (tile.touched !== this.frame) continue;
@@ -382,10 +416,7 @@ export class GlobeSurface {
     // upscaled night image for every high-resolution daytime tile.
     for (const tile of this.tiles.values()) {
       if (tile.mesh.visible) this.bindDay(tile);
-      if(this.quality!=="low"&&tile.mesh.visible&&tile.borrowed&&tile.z<=10&&reservedMb+1.4<profile.cacheMb){tile.borrowed=false;tile.upgrade=true;this.queue.push(tile);reservedMb+=1.4;}
-      if (tile.z >= 4 && tile.touched === this.frame && !tile.elevation && !tile.elevationLoading && tile.elevationRetryAt<=Date.now() && this.elevationRequests<1 && this.requests+this.elevationRequests<profile.requests && reservedMb+0.25<profile.cacheMb) {
-        this.loadElevation(tile); reservedMb+=0.25;
-      }
+      if(this.quality!=="low"&&tile.mesh.visible&&tile.borrowed&&tile.z<=10&&reservedMb+1.4<profile.cacheMb&&(!groundIntent||containsFocus(tile))){tile.borrowed=false;tile.upgrade=true;this.queue.push(tile);reservedMb+=1.4;}
       if (tile.mesh.visible) this.bindNight(tile);
       if (this.requests+this.elevationRequests >= profile.requests) continue;
       const nightSide = !dayNight || tile.centre.clone().normalize().dot(sun) < Math.sin(Math.min(Math.PI / 2, tile.radius / WGS84_A_KM)) + 0.15;
@@ -393,6 +424,7 @@ export class GlobeSurface {
         this.load(tile, false, true); reservedMb += 1.34;
       }
     }
+    startElevation();
     this.trim(profile.cacheMb, profile.maxTiles);
     const visible = [...this.tiles.values()].filter(t => t.mesh.visible);
     const signature=visible.map(t=>`${t.z}/${t.x}/${t.y}`).join(",");

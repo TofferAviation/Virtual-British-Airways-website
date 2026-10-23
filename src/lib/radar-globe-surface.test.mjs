@@ -40,10 +40,10 @@ test("actual terrain scheduler bounds memory/requests, refines near terrain and 
   const surface = new GlobeSurface((texture, night) => new THREE.ShaderMaterial({ uniforms: { uSurface: { value: texture }, uNight: { value: night } } }), 8);
   const camera = new THREE.PerspectiveCamera(55, 16 / 9, 1, 20000);
   const sun = new THREE.Vector3(0, 0, 1);
-  const update = (latitude = 51.5, longitude = -0.12, heightMetres = 12000, groundIntent = false) => {
+  const update = (latitude = 51.5, longitude = -0.12, heightMetres = 12000, groundIntent = false, pitch = 30) => {
     camera.near = 0.0002;camera.updateProjectionMatrix();
     camera.position.set(...geodeticToWorld(latitude, longitude, heightMetres));
-    camera.lookAt(0, 0, 0); camera.rotateX(Math.PI / 6); camera.updateMatrixWorld();
+    camera.lookAt(0, 0, 0); camera.rotateX(pitch*Math.PI/180); camera.updateMatrixWorld();
     const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     surface.update(camera.position, 1080, camera.fov, frustum, sun, false, groundIntent);
     for (const tile of surface.tiles.values()) if (tile.mesh.visible) {
@@ -74,6 +74,9 @@ test("actual terrain scheduler bounds memory/requests, refines near terrain and 
     assert.ok(surface.tiles.size <= GLOBE_PROFILES.low.maxTiles);
     assert.ok(surface.stats.level >= 6, `never reached useful close-up detail: ${JSON.stringify({...surface.stats,nodes:surface.tiles.size,levels:[...surface.tiles.values()].filter(t=>t.z>=5).map(t=>({id:`${t.z}/${t.x}/${t.y}`,ready:t.ready,borrowed:t.borrowed,dem:!!t.elevation,image:!!t.dayTexture,touched:t.touched,visible:t.mesh.visible,demRetry:t.elevationRetryAt,retry:t.retryAt}))})}`);
     checkCoverage();
+    for(let i=0;i<100;i++){await drain();update(51.5,-0.12,60000,true,88);}
+    const prefetched=surface.heightAt(51.5,-.12);
+    assert.ok(prefetched.ready,`collision detail must prefetch at 60 km: ${JSON.stringify({stats:surface.stats,nodes:surface.tiles.size,ground:prefetched})}`);
     for(let i=0;i<100;i++){await drain();update(51.5,-0.12,9100,true);}
     const ground=surface.heightAt(51.5,-0.12);
     assert.ok(ground.ready,`Low could not finish the ground DEM: ${JSON.stringify(surface.stats)}`);
@@ -90,6 +93,7 @@ test("actual terrain scheduler bounds memory/requests, refines near terrain and 
     assert.ok(surface.stats.imageryMb <= GLOBE_PROFILES.low.cacheMb + 0.1, JSON.stringify(surface.stats));
     assert.ok(surface.tiles.size <= GLOBE_PROFILES.low.maxTiles);
     assert.ok(peak <= 4, `High started ${peak} requests`);
+    assert.ok([...surface.tiles.values()].every(t=>t.elevationRetryAt===0),"cancelled obsolete DEM work must not impose a 30-second retry lock");
     surface.dispose(); await drain();
     assert.equal(active, 0); assert.equal(surface.tiles.size, 0); assert.ok(closed > 0);
   } finally {
