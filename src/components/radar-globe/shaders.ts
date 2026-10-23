@@ -1,3 +1,5 @@
+import { auroraShapeGLSL } from "@/lib/radar-aurora-shape";
+
 // All positions are Earth-fixed kilometres. Weather uses north-first rows,
 // -180°..180° columns. Density and shadows call the SAME function.
 export const geoGLSL = `
@@ -347,55 +349,74 @@ void main(){
 }
 `;
 
-// Curtain mesh coordinates are periodic phase along the forecast oval and altitude.
-// They never converge at the geographic pole, unlike longitude sine bands.
+// Local arc distance and altitude: finite, independently seeded and deforming
+// in both horizontal directions. No global rings or camera-dependent pattern.
 export const auroraVertex = `
-in vec3 aNormal;in vec3 aField;in vec3 aNextPosition;in vec3 aNextNormal;
+in vec3 aNormal;in vec3 aField;in vec4 aArc;in vec3 aNextPosition;in vec3 aNextNormal;
 uniform float uAuroraTime;uniform float uSpeed;uniform float uAuroraBlend;
 #include <common>
 #include <logdepthbuf_pars_vertex>
-out vec3 vPosition;out vec3 vNormal;out vec3 vField;
+out vec3 vPosition;out vec3 vNormal;out vec3 vField;out vec4 vArc;
+${auroraShapeGLSL}
 void main(){
-  float phase=aField.x,seed=aField.z;
-  float fold=sin(phase*11.0+sin(phase*3.0+seed+uAuroraTime*0.025)*1.8+uAuroraTime*0.045)*2.4;
-  fold+=sin(phase*37.0+seed-uAuroraTime*0.08)*0.7;
+  float s=aField.x,seed=aField.z;
+  vec2 fold=auroraFold(s,seed,uAuroraTime);
   vec3 n=normalize(mix(aNormal,aNextNormal,uAuroraBlend));
   vec3 east=normalize(cross(vec3(0.0,1.0,0.0),n));vec3 north=normalize(cross(n,east));
   vec3 blended=mix(position,aNextPosition,uAuroraBlend),radii=vec3(6378.137,6356.752314245,6378.137);
+  // Slight upper-curtain shear, while retaining the dominant WMM inclination.
+  float shear=(aField.y-120.0)*.025*auroraNoise(vec2(s*.004+seed,uAuroraTime*.04));
+  blended+=north*(fold.x+shear)+east*fold.y;
   vec3 heightNormal=normalize(blended/(radii*radii)),foot=radii*radii*heightNormal/length(radii*heightNormal);
-  vPosition=blended+heightNormal*(aField.y-dot(blended-foot,heightNormal))+north*fold;vNormal=n;vField=aField;
+  vPosition=blended+heightNormal*(aField.y-dot(blended-foot,heightNormal));
+  // Sample NOAA at the displaced footprint, not a fixed source latitude.
+  vNormal=normalize(n+(north*fold.x+east*fold.y)/6371.0);vField=aField;vArc=aArc;
   gl_Position=projectionMatrix*modelViewMatrix*vec4(vPosition,1.0);
   #include <logdepthbuf_vertex>
 }
 `;
 export const auroraFragment = `
 precision highp float;
-in vec3 vPosition;in vec3 vNormal;in vec3 vField;out vec4 fragColor;
+in vec3 vPosition;in vec3 vNormal;in vec3 vField;in vec4 vArc;out vec4 fragColor;
 uniform float uBrightness;uniform float uActivity;uniform float uSpeed;uniform float uAuroraTime;
 uniform sampler2D uAuroraPrevious;uniform sampler2D uAuroraCurrent;uniform float uAuroraBlend;uniform float uAuroraDebug;uniform float uHemisphere;
 #include <logdepthbuf_pars_fragment>
 ${geoGLSL}
 float bell(float h,float centre,float width){float q=(h-centre)/width;return exp(-0.5*q*q);}
-float noise1(float x){float i=floor(x),f=fract(x);f=f*f*(3.0-2.0*f);return mix(fract(sin(i*127.1)*43758.5453),fract(sin((i+1.0)*127.1)*43758.5453),f);}
+${auroraShapeGLSL}
 void main(){
   #include <logdepthbuf_fragment>
   if(uHemisphere*vNormal.y<0.0)discard;
   vec2 geo=vec2(atan(vNormal.x,vNormal.z)/(2.0*PI)+0.5,0.5-asin(clamp(vNormal.y,-1.0,1.0))/PI);vec2 uv=vec2(geo.x+0.5/360.0,(geo.y*180.0+0.5)/181.0);
   float probability=mix(texture(uAuroraPrevious,uv).r,texture(uAuroraCurrent,uv).r,uAuroraBlend);
   float strength=pow(smoothstep(0.045,0.6,probability),1.3);
-  if(strength<0.001)discard;
-  float phase=vField.x,h=vField.y,seed=vField.z;
-  float motion=uAuroraTime;
-  float fold=noise1(phase*17.0+seed+motion*0.018),frequency=mix(2400.0,240.0,smoothstep(200.0,2000.0,length(vPosition-uCamera)));
-  float filament=pow(noise1(phase*frequency+noise1(phase*23.0+seed)*4.0-motion*0.05),3.0);
-  filament=mix(filament,0.25,smoothstep(0.35,1.4,fwidth(phase)*frequency));
-  float rays=0.35+filament*1.4;
-  float core=bell(h,135.0+fold*12.0,24.0)+bell(h,185.0,45.0)*0.18;
-  float red=bell(h,325.0+fold*25.0,57.0)*0.18*noise1(phase*9.0+seed+3.0);
-  float nitrogen=bell(h,108.0,7.0)*0.06*strength;
+  if(strength<0.00001)discard;
+  float s=vField.x,h=vField.y,seed=vField.z,t=uAuroraTime;
+  float taper=auroraTaper(vArc.x);
+  if(taper<.001)discard;
+  // Slow independent life cycles and moving bright knots leave genuine gaps.
+  // These are coherent noise fields, not new random values on each frame.
+  float life=.22+.78*auroraNoise(vec2(seed+23.0,t*.025));
+  float knots=auroraNoise(vec2(s*.003-t*.07,seed+11.0));
+  float gaps=smoothstep(.15,.5,auroraNoise(vec2(s*.0018+seed,t*.04+8.0)));
+  float folds=auroraNoise(vec2(s*.008+seed,t*.07));
+  float lower=107.0+folds*55.0;
+  float rayCoord=s*.17+auroraNoise(vec2(s*.018+seed,t*.12))*3.0-t*.4;
+  rayCoord+=(h-lower)*.018*(auroraNoise(vec2(s*.005,seed))-.5);
+  float filament=pow(auroraNoise(vec2(rayCoord,(h-lower)*.006+seed)),1.7);
+  // Band-limit fixed geographic filaments; zoom only integrates their detail.
+  filament=mix(filament,.3,smoothstep(.3,1.5,fwidth(rayCoord)));
+  float rayTop=155.0+auroraNoise(vec2(s*.025+seed,t*.09))*95.0;
+  float rays=mix(.7,1.65,filament)*(1.0-smoothstep(rayTop,rayTop+55.0,h));
+  float body=bell(h,lower+26.0,24.0+folds*15.0)*(.75+rays*.45);
+  body+=bell(h,lower+62.0,43.0)*rays*.25;
+  float hem=bell(h,lower+7.0,5.5)*(.2+knots*.6);
+  float red=bell(h,338.0+folds*30.0,55.0)*.14*smoothstep(280.0,315.0,h);
+  float nitrogen=bell(h,lower+2.0,4.0)*.10*strength*(.3+knots);
+  float vertical=smoothstep(95.0,108.0,h)*(1.0-smoothstep(400.0,450.0,h));
   float night=1.0-smoothstep(-0.18,0.08,dot(vNormal,uSun));
-  float envelope=strength*uActivity*(0.3+0.7*fold)*rays*night*uBrightness;
-  vec3 emission=(vec3(0.12,0.85,0.29)*core+vec3(0.85,0.035,0.055)*red+vec3(0.38,0.10,0.8)*nitrogen)*envelope*0.65;
+  float envelope=strength*uActivity*taper*vArc.y*life*gaps*(.35+knots)*night*uBrightness*vertical;
+  vec3 emission=(vec3(.19,.85,.39)*body+vec3(.35,1.0,.57)*hem+vec3(.85,.035,.055)*red+vec3(.46,.10,.8)*nitrogen)*envelope*.48;
   // Attenuate emitted light only; sky in-scattering is already in the atmosphere pass.
   vec3 rd=normalize(vPosition-uCamera);vec2 air=intersectEllipsoid(uCamera,rd,RADII+vec3(80.0));
   float begin=max(0.0,air.x),end=min(length(vPosition-uCamera),air.y),optical=0.0;

@@ -822,7 +822,10 @@ export function createGlobeScene(
     earth.updateMatrixWorld(true);
     // Keep the depth buffer useful at every altitude. A fixed 0.5 km near
     // plane loses tens of kilometres of depth precision from orbit.
-    const clipping = globeClipRange(WGS84_A_KM + Math.max(TERRAIN_CLEARANCE_KM,height-ground.heightKm));
+    const clipping = globeClipRange(WGS84_A_KM + Math.max(TERRAIN_CLEARANCE_KM,height-ground.heightKm), read().auroraEnabled && height > 70 && height < 600);
+    // The eye can be inside a luminous curtain. An orbit-style 25%-altitude
+    // near plane visibly slices it into straight panes. Log depth preserves
+    // terrain precision with a close near plane while traversing the aurora.
     camera.near = clipping.near;
     camera.far = clipping.far;
     camera.updateProjectionMatrix();
@@ -925,6 +928,7 @@ export function createGlobeScene(
         auroraStale:Boolean(lastAurora?.stale),
         auroraTransition:Math.round(auroraMaterial.uniforms.uAuroraBlend.value*100)/100,
         auroraMeshes:curtains.children.length,
+        auroraArcs:curtains.children.reduce((n,mesh)=>n+(mesh.userData.arcs?.length??0),0),
         sun: shared.uSun.value.toArray(),
         cameraKm: Math.round(surfaceRadius+height),
         altitudeKm: Math.round(height * 1000) / 1000,

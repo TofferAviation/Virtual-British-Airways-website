@@ -71,6 +71,7 @@ const views = {
   ground: { latitude:69.65, longitude:18.96, distanceKm:6378.142, pitch:100, bearing:0, fov:65, date:"2026-03-20T22:00:00Z" },
   norway: { latitude:67, longitude:20, distanceKm:6878.137, pitch:85, bearing:0, fov:60, date:"2026-03-20T22:00:00Z" },
   aurora: {latitude:58,longitude:71,distanceKm:6878.137,pitch:68,bearing:0,fov:60,date:"2026-03-20T22:00:00Z"},
+  curtains: {latitude:64.55,longitude:115.8,distanceKm:6526.983,pitch:91,bearing:28.4,fov:65,date:"2026-03-20T11:00:00Z"},
   limb: {
     latitude: 10,
     longitude: 90,

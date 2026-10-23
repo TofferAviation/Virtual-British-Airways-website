@@ -115,10 +115,10 @@ export function geographicTileBounds(
 }
 
 /** Keep a useful depth interval without clipping a surface-level camera. */
-export function globeClipRange(distanceKm: number) {
+export function globeClipRange(distanceKm: number, nearbyEmission = false) {
   const height = Math.max(0, distanceKm - WGS84_A_KM);
   return {
-    near: Math.max(0.0002, height * 0.25),
+    near: Math.min(Math.max(0.0002, height * 0.25), nearbyEmission ? .01 : Infinity),
     far: distanceKm + WGS84_A_KM + 500,
   };
 }

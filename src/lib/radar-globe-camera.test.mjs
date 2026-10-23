@@ -26,6 +26,13 @@ test("wheel modes agree and extreme deltas allow the ground collision floor", ()
   assert.equal(close, WGS84_A_KM + 0.005);
   assert.equal(far, WGS84_A_KM + 40000);
 });
+test("inside-curtain camera keeps nearby emission instead of slicing kilometre-wide panes",()=>{
+  const distance=WGS84_A_KM+148.846;
+  assert.equal(globeClipRange(distance,true).near,.01);
+  assert.ok(globeClipRange(distance).near>37);
+  assert.equal(globeClipRange(distance,true).far,globeClipRange(distance).far);
+  assert.ok(globeClipRange(WGS84_A_KM+.005,true).near<.005,"ground clearance is still respected");
+});
 
 test("zoom damping neither overshoots nor depends on frame rate", () => {
   let a = 22000, b = a;
