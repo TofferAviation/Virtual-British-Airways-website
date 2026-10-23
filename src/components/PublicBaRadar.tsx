@@ -8,6 +8,8 @@ import { RADAR_WIND_LAYERS, type RadarAuroraData, type RadarCloudData, type Rada
 import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 import type { AuroraQuality, AuroraSettings } from "@/components/BaRadarAuroraLayer";
 import { AuroraPhotoControls } from "@/components/AuroraPhotoControls";
+import { DEFAULT_AURORA_MOTION_SPEED } from "@/lib/radar-aurora-motion";
+import { AuroraKpControls } from "@/components/AuroraKpControls";
 import type { CloudDebugMode, CloudQuality, CloudSettings } from "@/components/BaRadarCloudLayer";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
@@ -75,7 +77,7 @@ export type RadarLayers = {
   seasonal: boolean;
 };
 
-const initialAuroraSettings: AuroraSettings = { activity: 1, animationSpeed: 1, brightness: 1, quality: "auto", enhancedPresentation: false };
+const initialAuroraSettings: AuroraSettings = { activity: 1, animationSpeed: DEFAULT_AURORA_MOTION_SPEED, brightness: 1, quality: "auto", enhancedPresentation: false };
 // The globe is the home for the atmospheric view.  The source remains the
 // latest available GFS analysis (not a satellite observation), while the
 // modest relief makes the model's measured cloud columns readable in 3D.
@@ -118,15 +120,16 @@ function AuroraControls({ settings, onChange, data }: { settings: AuroraSettings
   };
   return <div className="ba-radar-aurora-controls" aria-label="Aurora appearance controls">
     <label><span>Emission intensity</span><output>{Math.round(settings.activity * 100)}%</output><input type="range" min="0.55" max="1.55" step="0.05" value={settings.activity} onChange={changeNumber("activity")} /></label>
-    <label><span>Motion speed</span><output>{Math.round(settings.animationSpeed * 100)}%</output><input type="range" min="0" max="1.8" step="0.1" value={settings.animationSpeed} onChange={changeNumber("animationSpeed")} /></label>
+    <label><span>Motion speed</span><output>{Math.round(settings.animationSpeed * 100)}%</output><input aria-label="Aurora motion speed" type="range" min="0" max="1.8" step="0.05" value={settings.animationSpeed} onChange={changeNumber("animationSpeed")} /></label>
     <label><span>Brightness</span><output>{Math.round(settings.brightness * 100)}%</output><input type="range" min="0.45" max="1.65" step="0.05" value={settings.brightness} onChange={changeNumber("brightness")} /></label>
     <AuroraPhotoControls settings={settings} onChange={photo=>onChange({...settings,...photo})}/>
-    <p className="ba-radar-cloud-status">{data?.forecastAt ? `NOAA valid ${new Date(data.forecastAt).toISOString().replace("T"," ").slice(0,16)} UTC · observed ${data.observedAt?.slice(11,16)??"unknown"} UTC · fetched ${Math.max(0,Math.round((clock-Date.parse(data.refreshedAt))/60000))} min ago${data.stale||(clock-Date.parse(data.observedAt??data.refreshedAt))>90*60000?" · STALE":""}` : "Waiting for a verified NOAA forecast"}</p>
+    <AuroraKpControls settings={settings} onChange={kp=>onChange({...settings,...kp})}/>
+    <p className="ba-radar-cloud-status">{data?.forecastAt ? `NOAA feed valid ${new Date(data.forecastAt).toISOString().replace("T"," ").slice(0,16)} UTC · observed ${data.observedAt?.slice(11,16)??"unknown"} UTC · fetched ${Math.max(0,Math.round((clock-Date.parse(data.refreshedAt))/60000))} min ago${data.stale||(clock-Date.parse(data.observedAt??data.refreshedAt))>90*60000?" · STALE":""}` : "Live NOAA feed not yet available"}</p>
     {data?.error?<p className="ba-radar-cloud-status error">{data.error}</p>:null}
     <label className="ba-radar-aurora-quality"><span>Hemisphere</span><select value={settings.hemisphere??"both"} onChange={e=>onChange({...settings,hemisphere:e.target.value as AuroraSettings["hemisphere"]})}><option value="both">Both</option><option value="north">Northern</option><option value="south">Southern</option></select></label>
     <label className="ba-radar-aurora-quality"><span>Presentation</span><select value={settings.enhancedPresentation?"photography":"realistic"} onChange={e=>onChange({...settings,enhancedPresentation:e.target.value==="photography"})}><option value="realistic">Realistic</option><option value="photography">Enhanced photography · exposure only</option></select></label>
     <label className="ba-radar-aurora-quality"><span>Quality</span><select value={settings.quality} onChange={(event) => onChange({ ...settings, quality: event.target.value as AuroraQuality })}><option value="auto">Auto</option><option value="high">High</option><option value="balanced">Balanced</option><option value="low">Performance</option></select></label>
-    <p className="ba-radar-layer-note">NOAA controls geographic activity. Individual curtains, rays, colour and motion are procedural—not observed fine structure or calibrated radiance.</p>
+    <p className="ba-radar-layer-note">{settings.kpOverrideEnabled?"Manual Kp controls an illustrative oval; the live NOAA field is not in use.":"NOAA controls geographic activity."} Individual curtains, rays, colour and motion are procedural—not observed fine structure or calibrated radiance.</p>
     {process.env.NODE_ENV!=="production"?<label className="ba-radar-aurora-quality"><span>Aurora debug</span><select value={settings.debug??"off"} onChange={e=>onChange({...settings,debug:e.target.value as AuroraSettings["debug"]})}><option value="off">Emission</option><option value="field">Raw NOAA activity field</option><option value="altitude">95–450 km altitude</option></select></label>:null}
   </div>;
 }

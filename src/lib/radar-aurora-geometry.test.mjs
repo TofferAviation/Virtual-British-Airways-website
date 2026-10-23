@@ -4,7 +4,9 @@ import {readFile} from "node:fs/promises";
 import ts from "typescript";
 import * as THREE from "three";
 import {worldToGeodetic} from "./radar-globe-geodesy.ts";
-import {AURORA_DETAIL,auroraArc,auroraFold,auroraNoise,auroraRayState,auroraSeed} from "./radar-aurora-shape.ts";
+import {AURORA_DETAIL,auroraArc,auroraFold,auroraNoise,auroraRayState,auroraSeed,auroraRayTime,auroraRayPeriod} from "./radar-aurora-shape.ts";
+import {DEFAULT_AURORA_MOTION_SPEED,advanceAuroraTime,auroraMotionSpeed} from "./radar-aurora-motion.ts";
+import {auroraKpOverride,auroraKpField} from "./radar-aurora-kp.ts";
 async function moduleUrl(relative,replace){let source=await readFile(new URL(relative,import.meta.url),"utf8");for(const [from,to] of Object.entries(replace))source=source.replace(JSON.stringify(from),JSON.stringify(to));return `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString("base64")}`;}
 const magnetic=await moduleUrl("./radar-aurora-magnetic.ts",{"./data/wmm2025":new URL("./data/wmm2025.ts",import.meta.url).href,"./radar-globe-geodesy":new URL("./radar-globe-geodesy.ts",import.meta.url).href});
 const url=await moduleUrl("../components/radar-globe/aurora.ts",{"three":import.meta.resolve("three"),"@/lib/radar-aurora-field":new URL("./radar-aurora-field.ts",import.meta.url).href,"@/lib/radar-aurora-shape":new URL("./radar-aurora-shape.ts",import.meta.url).href,"@/lib/radar-globe-geodesy":new URL("./radar-globe-geodesy.ts",import.meta.url).href,"@/lib/radar-aurora-magnetic":magnetic});
@@ -79,9 +81,86 @@ test("ray events and spatial cell crossings remain continuous, including event r
       const c=auroraRayState(s,seed,t+1/60);
       assert.ok(Math.abs(c.energy-b.energy)<.1,"no frame-to-frame flashing");
     }
-    const key=Math.floor(s/38)*11.73+seed*3.17,period=4+auroraSeed(key)*10;
-    const boundary=period*7-auroraSeed(key+1)*30;
+    const key=Math.floor(s/38)*11.73+seed*3.17,period=auroraRayPeriod(key),target=period*7-auroraSeed(key+1)*30;
+    // Invert the monotonic per-bundle clock to hit an actual reseed boundary.
+    let lo=-1000,hi=1000;for(let i=0;i<60;i++){const mid=(lo+hi)/2;if(auroraRayTime(key,mid)<target)lo=mid;else hi=mid;}
+    const boundary=(lo+hi)/2;
     const a=auroraRayState(s,seed,boundary-1e-6),b=auroraRayState(s,seed,boundary+1e-6);
     assert.ok(Math.abs(a.energy-b.energy)<1e-5&&Math.abs(a.top-b.top)<1e-3,"new event seed cannot pop its ray");
   }
+});
+
+test("calmer shared clock is frame-rate independent, pause-safe and cannot catch up after a stall",()=>{
+  assert.equal(DEFAULT_AURORA_MOTION_SPEED,.3);
+  for(const fps of [30,45,60,144]){
+    let clock=0;for(let i=0;i<20*fps;i++)clock=advanceAuroraTime(clock,1/fps,DEFAULT_AURORA_MOTION_SPEED);
+    assert.ok(Math.abs(clock-6)<1e-9,"20 real seconds must advance six animation seconds");
+    assert.equal(advanceAuroraTime(clock,.1,0),clock);
+    assert.equal(advanceAuroraTime(clock,.1,.5),clock+.05,"speed changes keep phase");
+  }
+  assert.equal(advanceAuroraTime(10,30,.3),10.03);
+  assert.equal(advanceAuroraTime(10,NaN,.3),10);
+  assert.equal(auroraMotionSpeed(NaN),.3);assert.equal(auroraMotionSpeed(-2),0);assert.equal(auroraMotionSpeed(99),1.8);
+});
+
+test("local ray tempo eases independently without reversing, jumping or repeating one uniform rate",()=>{
+  const rates=[];
+  for(const key of [-382,3.17,29.7,181.37,2201]){
+    assert.equal(auroraRayTime(key,0),0);
+    const local=[];
+    for(let time=-30;time<=120;time+=.37){
+      const a=auroraRayTime(key,time),b=auroraRayTime(key,time+1/60),rate=(b-a)*60;
+      assert.ok(rate>.479&&rate<1.521,"bounded, strictly forward motion");
+      assert.deepEqual(a,auroraRayTime(key,time));local.push(rate);
+    }
+    assert.ok(Math.max(...local)-Math.min(...local)>.35,"each bundle relaxes and accelerates rather than ticking uniformly");
+    rates.push(local[30]);
+  }
+  assert.ok(new Set(rates.map(r=>r.toFixed(2))).size>=4,"neighbours do not all share one tempo");
+});
+
+test("default tempo materially reduces frame-to-frame vertical and brightness changes",()=>{
+  let slow=0,old=0;
+  for(const seed of [3.17,29.7,181.37])for(let t=0;t<90;t+=.31){
+    const a=auroraRayState(600,seed,t),b=auroraRayState(600,seed,t+DEFAULT_AURORA_MOTION_SPEED/60),c=auroraRayState(600,seed,t+1/60);
+    slow+=Math.abs(a.energy-b.energy)+Math.abs(a.top-b.top)*.01;
+    old+=Math.abs(a.energy-c.energy)+Math.abs(a.top-c.top)*.01;
+  }
+  assert.ok(slow<old*.4,"calmer changes, without flattening the existing ray shapes");
+});
+
+test("manual Kp is opt-in, bounded and treats zero as a real override",()=>{
+  assert.equal(auroraKpOverride({}),null);
+  assert.equal(auroraKpOverride({kpOverrideEnabled:false,kpOverride:9}),null);
+  assert.equal(auroraKpOverride({kpOverrideEnabled:true,kpOverride:0}),0);
+  assert.equal(auroraKpOverride({kpOverrideEnabled:true,kpOverride:-12}),0);
+  assert.equal(auroraKpOverride({kpOverrideEnabled:true,kpOverride:99}),9);
+  assert.equal(auroraKpOverride({kpOverrideEnabled:true,kpOverride:NaN}),5);
+});
+
+test("illustrative Kp grids remain deterministic, bounded, seam-safe and present in both hemispheres",()=>{
+  for(const kp of [0,3,5,9]){
+    const field=auroraKpField(kp);assert.equal(field.length,360*181);assert.deepEqual(field,auroraKpField(kp));
+    assert.ok(field.subarray(0,90*360).some(v=>v>0));assert.ok(field.subarray(91*360).some(v=>v>0));
+    assert.ok(field.subarray(0,360).every(v=>v===0)&&field.subarray(180*360).every(v=>v===0),"no artificial polar fan");
+    for(let row=0;row<181;row++)assert.ok(Math.abs(field[row*360]-field[row*360+359])<45,"no hard dateline seam");
+  }
+});
+
+test("higher simulated Kp is brighter, broader and extends equatorward, never altering live source samples",()=>{
+  const moments=kp=>{
+    const grid=auroraKpField(kp);let total=0,latitude=0,lower=0;
+    for(let y=0;y<181;y++)for(let x=0;x<360;x++){
+      const lat=Math.abs(90-y),w=grid[y*360+x]*Math.cos(lat*Math.PI/180);
+      total+=w;latitude+=w*lat;if(lat<60)lower+=w;
+    }
+    return {total,latitude:latitude/total,lower:lower/total};
+  };
+  const quiet=moments(0),storm=moments(9);
+  assert.ok(storm.total>quiet.total*5);assert.ok(storm.latitude<quiet.latitude-10);assert.ok(storm.lower>quiet.lower+.3);
+  const live=data(),snapshot=JSON.stringify(live),material=new THREE.ShaderMaterial();
+  const group=buildAuroraCurtains(null,material,"low",auroraKpField(0)),mesh=group.children[0],geometry=mesh.geometry;
+  updateAuroraCurtains(group,null,1,auroraKpField(9));assert.equal(mesh.geometry,geometry);assert.equal(group.children.length,8);
+  updateAuroraCurtains(group,live,1);assert.equal(mesh.geometry,geometry);assert.equal(JSON.stringify(live),snapshot);
+  group.children.forEach(m=>m.geometry.dispose());material.dispose();
 });

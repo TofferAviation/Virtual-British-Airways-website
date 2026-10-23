@@ -8,6 +8,8 @@ import type { PublicRadarFlight } from "@/lib/radar-live";
 import type { CloudSettings } from "@/components/BaRadarCloudLayer";
 import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
 import { auroraPhotoUniforms } from "@/lib/radar-aurora-photo";
+import { advanceAuroraTime, auroraMotionSpeed } from "@/lib/radar-aurora-motion";
+import { auroraKpOverride, auroraKpField } from "@/lib/radar-aurora-kp";
 import {
   WGS84_A_KM,
   WGS84_B_KM,
@@ -321,6 +323,7 @@ export function createGlobeScene(
   fieldMaterial.transparent=true;fieldMaterial.depthWrite=false;fieldMaterial.side=THREE.DoubleSide;
   const fieldMesh=new THREE.Mesh(ellipsoidShell(120),fieldMaterial);fieldMesh.layers.set(2);fieldMesh.visible=false;earth.add(fieldMesh);
   let auroraPrevious:THREE.DataTexture|null=null,auroraCurrent:THREE.DataTexture|null=null,auroraTransitionAt=-100000,appliedForecast:string|null=null,appliedObservation:string|null=null;
+  let appliedAuroraSource="",appliedKp:number|null=null;
   const fieldTexture=(values:Uint8Array)=>{
     const texture=new THREE.DataTexture(values,360,181,THREE.RedFormat);
     texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.wrapS=THREE.RepeatWrapping;texture.unpackAlignment=1;texture.needsUpdate=true;return texture;
@@ -493,36 +496,41 @@ export function createGlobeScene(
       }
     }
     const qualityChanged=lastQuality !== `${state.auroraSettings.quality}-${effectiveQuality}`;
-    const forecastChanged=Boolean(state.aurora?.forecastAt && (state.aurora.forecastAt!==appliedForecast||state.aurora.observedAt!==appliedObservation));
-    if (forecastChanged&&state.aurora) {
+    const kp=auroraKpOverride(state.auroraSettings),hasAurora=kp!==null||Boolean(state.aurora?.samples.length);
+    const sourceKey=kp!==null?`manual-kp:${kp}`:hasAurora?`live:${state.aurora?.forecastAt}:${state.aurora?.observedAt}`:"none";
+    const forecastChanged=sourceKey!==appliedAuroraSource;
+    if (forecastChanged) {
       const blend=auroraMaterial.uniforms.uAuroraBlend.value as number;
-      const old=auroraCurrent?.image.data as Uint8Array|undefined,prev=auroraPrevious?.image.data as Uint8Array|undefined;
-      const source=old?Uint8Array.from(old,(v,i)=>Math.round((prev?.[i]??v)*(1-blend)+v*blend)):auroraField(state.aurora.samples);
+      const old=appliedAuroraSource==="none"?undefined:auroraCurrent?.image.data as Uint8Array|undefined,prev=auroraPrevious?.image.data as Uint8Array|undefined;
+      const target=kp!==null?auroraKpField(kp):auroraField(state.aurora?.samples??[]);
+      const source=old?Uint8Array.from(old,(v,i)=>Math.round((prev?.[i]??v)*(1-blend)+v*blend)):target;
       auroraPrevious?.dispose();auroraCurrent?.dispose();
-      auroraPrevious=fieldTexture(source);auroraCurrent=fieldTexture(auroraField(state.aurora.samples));
+      auroraPrevious=fieldTexture(source);auroraCurrent=fieldTexture(target);
       auroraMaterial.uniforms.uAuroraPrevious.value=auroraPrevious;auroraMaterial.uniforms.uAuroraCurrent.value=auroraCurrent;
-      if(curtains.children.length&&!qualityChanged) updateAuroraCurtains(curtains,state.aurora,blend);
-      auroraTransitionAt=performance.now(); appliedForecast=state.aurora.forecastAt;appliedObservation=state.aurora.observedAt;
+      if(curtains.children.length&&!qualityChanged&&hasAurora) updateAuroraCurtains(curtains,state.aurora,blend,target);
+      auroraTransitionAt=performance.now();appliedAuroraSource=sourceKey;appliedKp=kp;
+      appliedForecast=kp===null?state.aurora?.forecastAt??null:null;appliedObservation=kp===null?state.aurora?.observedAt??null:null;
       auroraMaterial.uniforms.uAuroraBlend.value=old?0:1;
     }
-    if (qualityChanged || (!curtains.children.length&&state.aurora?.samples.length)) {
+    if (qualityChanged || (!curtains.children.length&&hasAurora) || (!hasAurora&&curtains.children.length)) {
       lastAurora=state.aurora;
       lastQuality = `${state.auroraSettings.quality}-${effectiveQuality}`;
       clearGroup(curtains);
       earth.remove(curtains);
-      curtains = state.aurora
+      curtains = hasAurora
         ? buildAuroraCurtains(
             state.aurora,
             auroraMaterial,
             effectiveQuality === "low" || state.auroraSettings.quality === "low" ? "low" : state.auroraSettings.quality === "high" && (effectiveQuality === "high" || effectiveQuality === "ultra") ? "high" : "balanced",
+            auroraCurrent?.image.data as Uint8Array|undefined,
           )
         : new THREE.Group();
       earth.add(curtains);
       curtains.traverse(object => object.layers.set(2));
     }
     if(state.aurora)lastAurora=state.aurora;
-    curtains.visible = state.auroraEnabled&&state.auroraSettings.debug!=="field";
-    fieldMesh.visible=state.auroraEnabled&&state.auroraSettings.debug==="field";
+    curtains.visible = state.auroraEnabled&&hasAurora&&state.auroraSettings.debug!=="field";
+    fieldMesh.visible=state.auroraEnabled&&hasAurora&&state.auroraSettings.debug==="field";
     auroraMaterial.uniforms.uAuroraBlend.value=Math.min(1,(performance.now()-auroraTransitionAt)/12000);
     auroraMaterial.uniforms.uAuroraDebug.value=state.auroraSettings.debug==="altitude"?2:0;
     auroraMaterial.uniforms.uHemisphere.value=state.auroraSettings.hemisphere==="north"?1:state.auroraSettings.hemisphere==="south"?-1:0;
@@ -556,7 +564,7 @@ export function createGlobeScene(
     shared.uShadowSamples.value = profile.shadowSamples;
     auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness*(state.auroraSettings.enhancedPresentation?1.8:1);
     auroraMaterial.uniforms.uActivity.value = state.auroraSettings.activity;
-    auroraMaterial.uniforms.uSpeed.value = state.auroraSettings.animationSpeed;
+    auroraMaterial.uniforms.uSpeed.value = auroraMotionSpeed(state.auroraSettings.animationSpeed);
     const photo=auroraPhotoUniforms(state.auroraSettings);
     auroraMaterial.uniforms.uPhotoOverride.value=Number(photo.enabled);
     auroraMaterial.uniforms.uColourGains.value.set(...photo.gains);
@@ -838,7 +846,7 @@ export function createGlobeScene(
     camera.up.set(Math.sin(yaw) * Math.cos(tilt), Math.cos(yaw) * Math.cos(tilt), Math.sin(tilt));
     camera.lookAt(Math.sin(yaw) * Math.sin(tilt) * 1000, Math.cos(yaw) * Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
     sync();
-    auroraMaterial.uniforms.uAuroraTime.value+=deltaSeconds*read().auroraSettings.animationSpeed;
+    auroraMaterial.uniforms.uAuroraTime.value=advanceAuroraTime(auroraMaterial.uniforms.uAuroraTime.value,deltaSeconds,read().auroraSettings.animationSpeed);
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
       shared.uSun.value.set(
@@ -954,12 +962,15 @@ export function createGlobeScene(
         clouds: cloudMesh.visible,
         aurora: curtains.visible,
         auroraForecast:appliedForecast,
-        auroraObserved:lastAurora?.observedAt,
-        auroraStale:Boolean(lastAurora?.stale),
+        auroraObserved:appliedObservation,
+        auroraStale:appliedKp===null&&Boolean(lastAurora?.stale),
+        auroraSource:appliedAuroraSource,
+        auroraKpOverride:appliedKp,
         auroraTransition:Math.round(auroraMaterial.uniforms.uAuroraBlend.value*100)/100,
         auroraMeshes:curtains.children.length,
         auroraArcs:curtains.children.reduce((n,mesh)=>n+(mesh.userData.arcs?.length??0),0),
-        auroraSpeed:read().auroraSettings.animationSpeed,
+        auroraSpeed:auroraMaterial.uniforms.uSpeed.value,
+        auroraTime:Math.round(auroraMaterial.uniforms.uAuroraTime.value*1000)/1000,
         auroraPhotoOverride:Boolean(auroraMaterial.uniforms.uPhotoOverride.value),
         auroraColourGains:auroraMaterial.uniforms.uColourGains.value.toArray(),
         sun: shared.uSun.value.toArray(),

@@ -11,10 +11,10 @@ test("manual colours are opt-in, finite and bounded; disabling keeps choices but
   assert.deepEqual(auroraPhotoUniforms({photoMode:true,colourGains:{green:-2,red:99,violet:NaN,blue:Infinity}}).gains,[0,4,1,1]);
 });
 test("reset only changes screenshot options, not accepted motion, shape, exposure, forecast or camera settings",()=>{
-  const settings={photoMode:true,colourGains:{green:4,red:0,violet:3,blue:2},animationSpeed:1,brightness:1.3,activity:1.1,quality:"low",hemisphere:"south",camera:{altitude:10},forecast:"live"};
+  const settings={photoMode:true,colourGains:{green:4,red:0,violet:3,blue:2},animationSpeed:1,brightness:1.3,activity:1.1,quality:"low",hemisphere:"south",camera:{altitude:10},forecast:"live",kpOverrideEnabled:true,kpOverride:9};
   const reset=resetAuroraPhoto(settings);
   assert.equal(reset.photoMode,false);assert.deepEqual(reset.colourGains,{green:1,red:1,violet:1,blue:1});
-  for(const key of ["animationSpeed","brightness","activity","quality","hemisphere","camera","forecast"])assert.equal(reset[key],settings[key]);
+  for(const key of ["animationSpeed","brightness","activity","quality","hemisphere","camera","forecast","kpOverrideEnabled","kpOverride"])assert.equal(reset[key],settings[key]);
   assert.equal(settings.photoMode,true,"reset must not mutate current settings");
 });
 test("neutral colour split retains the original emission; each manual channel is non-negative and independent",()=>{

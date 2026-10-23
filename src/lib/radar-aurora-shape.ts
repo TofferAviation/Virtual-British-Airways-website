@@ -36,6 +36,13 @@ export function auroraFold(s: number, seed: number, time: number) {
     east: Math.cos(wave + curl * 1.4) * 28 + (auroraNoise(s * .003 - time * .025, seed + 8) - .5) * 40,
   };
 }
+/** Monotonic local tempo: each ray bundle gently accelerates/relaxes without
+ * ever reversing time or reseeding when speed/pause/forecast changes. */
+export function auroraRayTime(key:number,time:number) {
+  const speed=.7+.6*auroraSeed(key+31),frequency=.12+.1*auroraSeed(key+32),phase=auroraSeed(key+33)*Math.PI*2;
+  return time*speed+(Math.sin(phase+time*frequency)-Math.sin(phase))*.22/frequency;
+}
+export function auroraRayPeriod(key:number) { return 4+auroraSeed(key)*10; }
 /** Independent, overlapping ray packets. Every new event is born/dies at zero
  * amplitude, so changing its seed/height cannot cause a one-frame flash. */
 export function auroraRayState(s: number, seed: number, time: number) {
@@ -43,9 +50,11 @@ export function auroraRayState(s: number, seed: number, time: number) {
   let energy = 0, weight = 0, height = 0, lift = 0, front = 0, pulseWeight = 0;
   for (let i = -1; i <= 1; i++) {
     const id = cell + i, key = id * 11.73 + seed * 3.17;
-    const period = 4 + auroraSeed(key) * 10, clock = (time + auroraSeed(key + 1) * 30) / period;
+    const period = auroraRayPeriod(key), clock = (auroraRayTime(key,time) + auroraSeed(key + 1) * 30) / period;
     const cycle = Math.floor(clock), age = fract(clock), event = auroraSeed(key + cycle * 5.31 + 17);
-    const attack = smooth(Math.min(1, age / .24)), decay = 1 - smooth(Math.max(0, Math.min(1, (age - .30) / .70)));
+    const rise=.22+auroraSeed(key+cycle*5.31+19)*.16;
+    const release=rise+.08+auroraSeed(key+cycle*5.31+20)*.12, end=.86+auroraSeed(key+cycle*5.31+21)*.10;
+    const attack = smooth(Math.min(1, age / rise)), decay = 1 - smooth(Math.max(0, Math.min(1, (age-release)/(end-release))));
     const pulse = attack * decay * (.18 + event * 1.82);
     const centre = (id + .5) * 38 + (auroraSeed(key + 5) - .5) * 14 + Math.sin(time * (.06 + auroraSeed(key + 6) * .09) + key) * 6;
     const offset = Math.abs(s - centre), q = offset / (10 + auroraSeed(key + 2) * 16);
@@ -55,7 +64,7 @@ export function auroraRayState(s: number, seed: number, time: number) {
     energy += e; weight += spatial;
     height += e * (150 + auroraSeed(key + 3) * 55 + pulse * 65);
     lift += spatial * (auroraNoise(key + 8, time * .09) * 22 + pulse * 9);
-    front += spatial * pulse * (118 + age * (85 + event * 95)); pulseWeight += spatial * pulse;
+    front += spatial * pulse * (118 + smooth(age) * (85 + event * 95)); pulseWeight += spatial * pulse;
   }
   return { energy: energy / Math.max(.5, weight), top: height / Math.max(.0001, energy), lift: lift / Math.max(.5, weight), front: front / Math.max(.0001, pulseWeight) };
 }
@@ -80,14 +89,19 @@ float auroraTaper(float u){return smoothstep(0.0,.16,u)*(1.0-smoothstep(.78,1.0,
 `;
 
 export const auroraRayGLSL = `
+float auroraRayTime(float key,float time){
+  float speed=.7+.6*auroraHash(key+31.0),frequency=.12+.1*auroraHash(key+32.0),phase=auroraHash(key+33.0)*6.28318530718;
+  return time*speed+(sin(phase+time*frequency)-sin(phase))*.22/frequency;
+}
 vec4 auroraRayState(float s,float seed,float time){
   float cell=floor(s/38.0),energy=0.0,weight=0.0,top=0.0,lift=0.0,front=0.0,pulseWeight=0.0;
   for(int i=-1;i<=1;i++){
     float id=cell+float(i),key=id*11.73+seed*3.17;
-    float period=4.0+auroraHash(key)*10.0,clock=(time+auroraHash(key+1.0)*30.0)/period;
+    float period=4.0+auroraHash(key)*10.0,clock=(auroraRayTime(key,time)+auroraHash(key+1.0)*30.0)/period;
     float cycle=floor(clock),age=fract(clock),event=auroraHash(key+cycle*5.31+17.0);
     // Quintic envelopes match the CPU reference and have zero endpoint slope.
-    float a=clamp(age/.24,0.0,1.0),d=clamp((age-.30)/.70,0.0,1.0);
+    float rise=.22+auroraHash(key+cycle*5.31+19.0)*.16,release=rise+.08+auroraHash(key+cycle*5.31+20.0)*.12,end=.86+auroraHash(key+cycle*5.31+21.0)*.10;
+    float a=clamp(age/rise,0.0,1.0),d=clamp((age-release)/(end-release),0.0,1.0);
     float attack=a*a*a*(a*(a*6.0-15.0)+10.0),decay=1.0-d*d*d*(d*(d*6.0-15.0)+10.0);
     float pulse=attack*decay*(.18+event*1.82);
     float centre=(id+.5)*38.0+(auroraHash(key+5.0)-.5)*14.0+sin(time*(.06+auroraHash(key+6.0)*.09)+key)*6.0;
@@ -97,7 +111,8 @@ vec4 auroraRayState(float s,float seed,float time){
     energy+=e;weight+=spatial;
     top+=e*(150.0+auroraHash(key+3.0)*55.0+pulse*65.0);
     lift+=spatial*(auroraNoise(vec2(key+8.0,time*.09))*22.0+pulse*9.0);
-    front+=spatial*pulse*(118.0+age*(85.0+event*95.0));pulseWeight+=spatial*pulse;
+    float travel=age*age*age*(age*(age*6.0-15.0)+10.0);
+    front+=spatial*pulse*(118.0+travel*(85.0+event*95.0));pulseWeight+=spatial*pulse;
   }
   return vec4(energy/max(.5,weight),top/max(.0001,energy),lift/max(.5,weight),front/max(.0001,pulseWeight));
 }

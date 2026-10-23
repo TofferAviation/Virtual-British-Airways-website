@@ -21,7 +21,7 @@ export function AuroraPhotoControls({settings,onChange}:{settings:AuroraPhotoSet
         <input aria-label={label} type="range" min={0} max={4} step={.05} value={settings.colourGains?.[key]??1} onChange={e=>onChange({...settings,colourGains:{...DEFAULT_AURORA_COLOURS,...settings.colourGains,[key]:Number(e.target.value)}})}/>
       </label>)}
     </fieldset>
-    <small>{settings.photoMode?"SCREENSHOT OVERRIDE — artistic colour strengths, not measured NOAA colours.":"Original palette unchanged. Enable the override for screenshot colours."} Red stays high; nitrogen stays near the lower border. NOAA coverage is unchanged.</small>
+    <small>{settings.photoMode?"SCREENSHOT OVERRIDE — artistic colour strengths, not measured NOAA colours.":"Original palette unchanged. Enable the override for screenshot colours."} Red stays high; nitrogen stays near the lower border. Colour sliders never change the activity field.</small>
     <button type="button" onClick={()=>onChange(resetAuroraPhoto(settings))}>Reset screenshot colours</button>
   </div>;
 }

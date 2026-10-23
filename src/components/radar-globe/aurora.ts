@@ -5,8 +5,8 @@ import { geodeticNormal, geodeticToWorld, worldToGeodetic } from "@/lib/radar-gl
 import { magneticField } from "@/lib/radar-aurora-magnetic";
 import type { RadarAuroraData } from "@/lib/radar-external";
 
-function decimalYear(data: RadarAuroraData) {
-  const date = new Date(data.observedAt ?? data.refreshedAt), year = date.getUTCFullYear();
+function decimalYear(data: RadarAuroraData|null) {
+  const date = new Date(data?.observedAt ?? data?.refreshedAt ?? Date.now()), year = date.getUTCFullYear();
   return year + (date.getTime() - Date.UTC(year, 0, 1)) / (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1));
 }
 type Arc = ReturnType<typeof auroraArc>;
@@ -61,8 +61,8 @@ function trackPositions(grid: Uint8Array, hemisphere: 1 | -1, arcs: Arc[], colum
   return { points, normals, field, shape };
 }
 /** Many finite arcs, batched into eight draws. Forecasts retain stable arc IDs/buffers. */
-export function buildAuroraCurtains(data: RadarAuroraData, material: THREE.ShaderMaterial, quality: AuroraDetail) {
-  const group = new THREE.Group(), grid = auroraField(data.samples), year = decimalYear(data);
+export function buildAuroraCurtains(data: RadarAuroraData|null, material: THREE.ShaderMaterial, quality: AuroraDetail, gridOverride?:Uint8Array) {
+  const group = new THREE.Group(), grid = gridOverride??auroraField(data?.samples??[]), year = decimalYear(data);
   const { columns, rows, lanes, sectors } = AURORA_DETAIL[quality];
   for (const hemisphere of [1, -1] as const) for (let batch = 0; batch < 4; batch++) {
     const arcs: Arc[] = [];
@@ -85,8 +85,8 @@ export function buildAuroraCurtains(data: RadarAuroraData, material: THREE.Shade
   }
   return group;
 }
-export function updateAuroraCurtains(group: THREE.Group, data: RadarAuroraData, blend: number) {
-  const grid = auroraField(data.samples), year = decimalYear(data);
+export function updateAuroraCurtains(group: THREE.Group, data: RadarAuroraData|null, blend: number, gridOverride?:Uint8Array) {
+  const grid = gridOverride??auroraField(data?.samples??[]), year = decimalYear(data);
   for (const object of group.children) {
     const mesh = object as THREE.Mesh, { hemisphere, arcs, columns, rows } = mesh.userData;
     const next = trackPositions(grid, hemisphere, arcs, columns, rows, year), geometry = mesh.geometry;

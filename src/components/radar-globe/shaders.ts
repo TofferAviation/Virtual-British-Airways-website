@@ -410,7 +410,10 @@ void main(){
   float unresolved=smoothstep(12.0,65.0,fwidth(s));
   packet.x=mix(packet.x,.35+.35*knots,unresolved);
   float lower=103.0+folds*31.0+packet.z;
-  float rayCoord=s*.17+auroraNoise(vec2(s*.018+seed,t*.12))*3.0-t*.22;
+  // Slower coherent travel with a different, gently varying drift per arc.
+  // Zero time retains the accepted spatial filament pattern; no new vortex.
+  float drift=t*(.10+.06*auroraHash(seed+51.0))+(sin(t*.08+seed)-sin(seed))*.7;
+  float rayCoord=s*.17+auroraNoise(vec2(s*.018+seed,t*.12))*3.0-drift;
   rayCoord+=(h-lower)*.018*(auroraNoise(vec2(s*.005,seed))-.5);
   float filament=pow(auroraNoise(vec2(rayCoord,(h-lower)*.006+seed)),1.7);
   // Band-limit fixed geographic filaments; zoom only integrates their detail.

@@ -6,6 +6,9 @@ import type { GlobeQualityRequest } from "@/lib/radar-globe-quality";
 import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
 import { AuroraPhotoControls } from "@/components/AuroraPhotoControls";
 import type { AuroraPhotoSettings } from "@/lib/radar-aurora-photo";
+import { DEFAULT_AURORA_MOTION_SPEED } from "@/lib/radar-aurora-motion";
+import { AuroraKpControls } from "@/components/AuroraKpControls";
+import { auroraKpOverride,type AuroraKpSettings } from "@/lib/radar-aurora-kp";
 
 const views = {
   day: {
@@ -95,10 +98,12 @@ export function GlobeVisualCheck() {
     [hemisphere,setHemisphere]=useState<AuroraSettings["hemisphere"]>("both"),
     [auroraCase,setAuroraCase]=useState("live"),
     [paused,setPaused]=useState(false),
-    [photo,setPhoto]=useState<AuroraPhotoSettings>({photoMode:false}),
+    [motionSpeed,setMotionSpeed]=useState(DEFAULT_AURORA_MOTION_SPEED),
+    [photo,setPhoto]=useState<AuroraPhotoSettings & AuroraKpSettings>({photoMode:false}),
     [recording,setRecording]=useState(false),
     [captureSeconds,setCaptureSeconds]=useState(6),
     [captureUrl,setCaptureUrl]=useState(""),
+    [captureName,setCaptureName]=useState("globe.webm"),
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
   const recordingRef=useRef<{recorder:MediaRecorder;stream:MediaStream;timer:ReturnType<typeof setTimeout>}|null>(null),captureRef=useRef("");
@@ -107,9 +112,10 @@ export function GlobeVisualCheck() {
     const canvas=document.querySelector<HTMLCanvasElement>(".ba-radar-globe-three-canvas");
     if(!canvas||!canvas.captureStream||typeof MediaRecorder==="undefined"){setErrors(v=>[...v,"This browser does not support canvas recording"]);return;}
     try{
+      const kp=auroraKpOverride(photo),recordingName=`globe-${view}-${kp!==null?`kp-${kp}`:auroraCase}${photo.photoMode?"-colours":""}.webm`;
       const stream=canvas.captureStream(30),recorder=new MediaRecorder(stream),chunks:BlobPart[]=[];
       recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
-      recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());if(captureRef.current)URL.revokeObjectURL(captureRef.current);captureRef.current=URL.createObjectURL(new Blob(chunks,{type:recorder.mimeType}));setCaptureUrl(captureRef.current);setRecording(false);recordingRef.current=null;};
+      recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());if(captureRef.current)URL.revokeObjectURL(captureRef.current);captureRef.current=URL.createObjectURL(new Blob(chunks,{type:recorder.mimeType}));setCaptureUrl(captureRef.current);setCaptureName(recordingName);setRecording(false);recordingRef.current=null;};
       recorder.start();setRecording(true);const timer=setTimeout(()=>{if(recorder.state!=="inactive")recorder.stop();},captureSeconds*1000);recordingRef.current={stream,recorder,timer};
     }catch(e){setErrors(v=>[...v,String(e)]);}
   };
@@ -193,7 +199,7 @@ export function GlobeVisualCheck() {
           auroraSettings={{
             ...photo,
             activity: 1,
-            animationSpeed: paused?0:1,
+            animationSpeed: paused?0:motionSpeed,
             brightness: 1,
             quality: "high",
             enhancedPresentation: false,
@@ -246,18 +252,19 @@ export function GlobeVisualCheck() {
         <label style={{fontSize: 12}}><input type="checkbox" checked={motion} onChange={e => setMotion(e.target.checked)} />Motion test</label>
         <label>Aurora view <select aria-label="Aurora view" value={auroraDebug} onChange={e=>setAuroraDebug(e.target.value as AuroraSettings["debug"])}><option value="off">Curtains</option><option value="field">NOAA heatmap</option><option value="altitude">Altitude 95–450 km</option></select></label>
         <label>Hemisphere <select aria-label="Aurora hemisphere" value={hemisphere} onChange={e=>setHemisphere(e.target.value as AuroraSettings["hemisphere"])}><option value="both">Both</option><option value="north">North</option><option value="south">South</option></select></label>
-        <label>Forecast <select aria-label="Aurora test forecast" value={auroraCase} onChange={e=>setAuroraCase(e.target.value)}><option value="live">Live NOAA</option><option value="quiet">Synthetic quiet</option><option value="storm">Synthetic active</option><option value="shift">Synthetic shifted · transition</option></select></label>
+        <label>Forecast <select aria-label="Aurora test forecast" disabled={auroraKpOverride(photo)!==null} value={auroraCase} onChange={e=>setAuroraCase(e.target.value)}><option value="live">Live NOAA</option><option value="quiet">Synthetic quiet</option><option value="storm">Synthetic active</option><option value="shift">Synthetic shifted · transition</option></select></label>
         <label><input type="checkbox" checked={paused} onChange={e=>setPaused(e.target.checked)}/>Pause aurora</label>
+        <label>Motion · {Math.round(motionSpeed*100)}% <input aria-label="Aurora motion speed" style={{width:100}} type="range" min={0} max={1.8} step={.05} value={motionSpeed} onChange={e=>setMotionSpeed(Number(e.target.value))}/></label>
         <select aria-label="Capture length" value={captureSeconds} onChange={e=>setCaptureSeconds(Number(e.target.value))} disabled={recording}><option value={6}>6 s</option><option value={12}>12 s</option><option value={20}>20 s</option></select>
         <button onClick={record} disabled={recording}>{recording?"Recording…":`Record ${captureSeconds} s`}</button>
-        {captureUrl?<a href={captureUrl} download={`globe-${view}-${auroraCase}.webm`} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
+        {captureUrl?<a href={captureUrl} download={captureName} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
-          {photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
+          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
         </span>
       </nav>
       <details style={{position:"absolute",left:12,top:152,zIndex:4,width:280,maxHeight:"calc(100% - 250px)",overflowY:"auto",background:"#0a1929ed",border:"1px solid #35516c",borderRadius:5,padding:10}}>
-        <summary>Aurora screenshot colours</summary>
-        <div style={{paddingTop:12}}><AuroraPhotoControls settings={photo} onChange={setPhoto}/></div>
+        <summary>Aurora overrides</summary>
+        <div style={{paddingTop:12,display:"grid",gap:12}}><AuroraKpControls settings={photo} onChange={next=>{setPhoto(next);if(!next.kpOverrideEnabled)setAuroraCase("live");}}/><AuroraPhotoControls settings={photo} onChange={setPhoto}/></div>
       </details>
       <output
         style={{

@@ -1,10 +1,12 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarAuroraData, RadarAuroraSample } from "@/lib/radar-external";
 import type { AuroraPhotoSettings } from "@/lib/radar-aurora-photo";
+import { DEFAULT_AURORA_MOTION_SPEED } from "@/lib/radar-aurora-motion";
+import type { AuroraKpSettings } from "@/lib/radar-aurora-kp";
 
 export type AuroraQuality = "auto" | "high" | "balanced" | "low";
 
-export type AuroraSettings = AuroraPhotoSettings & {
+export type AuroraSettings = AuroraPhotoSettings & AuroraKpSettings & {
   activity: number;
   animationSpeed: number;
   brightness: number;
@@ -17,7 +19,7 @@ export type AuroraSettings = AuroraPhotoSettings & {
 
 export const DEFAULT_AURORA_SETTINGS: AuroraSettings = {
   activity: 1,
-  animationSpeed: 1,
+  animationSpeed: DEFAULT_AURORA_MOTION_SPEED,
   brightness: 1,
   quality: "auto",
   enhancedPresentation: false,

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GlobeSceneState } from "@/components/radar-globe/scene";
+import { auroraKpOverride } from "@/lib/radar-aurora-kp";
 export type { GlobeCamera } from "@/components/radar-globe/scene";
 
 export function BaRadarThreeGlobe(props: GlobeSceneState) {
@@ -47,6 +48,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
     <div className="ba-radar-globe-map ba-radar-globe-three" ref={container}>
       <div className="ba-radar-globe-caption">
         <strong>Earth · WGS84</strong>
+        {props.auroraEnabled&&auroraKpOverride(props.auroraSettings)!==null?<strong style={{color:"#ffcf83"}}>SIMULATION · manual Kp {auroraKpOverride(props.auroraSettings)} · not live NOAA</strong>:null}
         <span>
           {error ?? "Left-drag: orbit · Middle-drag: pan · Right / Shift+middle: look · Wheel: zoom"}
         </span>
