@@ -54,6 +54,7 @@ type ProgramBundle = {
   sliceCount: WebGLUniformLocation | null;
   debugMode: WebGLUniformLocation | null;
   meshStep: WebGLUniformLocation | null;
+  motionTime: WebGLUniformLocation | null;
   solarTime: WebGLUniformLocation | null;
   solarDeclination: WebGLUniformLocation | null;
 };
@@ -68,8 +69,8 @@ const QUALITY: Record<Exclude<CloudQuality, "auto">, QualityProfile> = {
   // mobile keeps its small, stable fallback.
   low: { stepDegrees: 10, slices: 3, repaintMs: 900 },
   medium: { stepDegrees: 3, slices: 5, repaintMs: 900 },
-  high: { stepDegrees: 1.5, slices: 8, repaintMs: 900 },
-  ultra: { stepDegrees: 1, slices: 10, repaintMs: 900 },
+  high: { stepDegrees: 1.25, slices: 12, repaintMs: 900 },
+  ultra: { stepDegrees: 0.75, slices: 16, repaintMs: 900 },
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -282,6 +283,9 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     gl.uniform1f(bundle.sliceCount, Math.max(1, this.meshSlices));
     gl.uniform1i(bundle.debugMode, this.settings.debugMode === "coverage" ? 1 : this.settings.debugMode === "density" ? 2 : this.settings.debugMode === "height" ? 3 : this.settings.debugMode === "lighting" ? 4 : this.settings.debugMode === "mesh" ? 5 : 0);
     gl.uniform1f(bundle.meshStep, QUALITY[this.resolvedQuality].stepDegrees);
+    // Animate only the procedural detail inside GFS-confirmed cloud columns.
+    // Coverage and the model cloud base/top never drift between data cycles.
+    gl.uniform1f(bundle.motionTime, performance.now() / 1_000);
     gl.uniform1f(bundle.solarTime, now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
     gl.uniform1f(bundle.solarDeclination, 0.409 * Math.sin(TAU * (dayOfYear - 81) / 365.25));
     // A tall convective column is supported only where all three GFS layers
@@ -431,6 +435,7 @@ uniform float u_layerKind;
 uniform float u_sliceCount;
 uniform int u_debugMode;
 uniform float u_meshStep;
+uniform float u_motionTime;
 uniform float u_solarTime;
 uniform float u_solarDeclination;
 out vec4 fragColor;
@@ -473,11 +478,16 @@ void main() {
   float modelCoverage = clamp(coverage * moisture, 0.0, 1.0);
   float density = smoothstep(0.075, 0.82, modelCoverage);
 
-  // Keep the detail field fixed in geographic space. Applying a differently
-  // sampled local wind direction to every fragment made hard model-cell
-  // transitions visible as fake contour lines. Wind still informs the live
-  // GFS columns; the visual sub-grid density stays continuous across them.
-  vec2 alignedGeo = vec2(v_geo.x * 1.35, v_geo.y);
+  // The GFS winds advect only the sub-grid density field, never the reported
+  // cloud coverage. This lets a cloud body breathe and drift naturally while
+  // preserving the model's hard meteorological footprint between refreshes.
+  vec4 geometry = texture(u_geometry, v_geo);
+  vec2 windMetresPerSecond = (geometry.ba * 2.0 - 1.0) * 80.0;
+  float latitudeForWind = (0.5 - v_geo.y) * CLOUD_PI;
+  float longitudeMetresPerDegree = max(20_000.0, cos(latitudeForWind) * 111_320.0);
+  // Convert degrees to the 0–1 texture domain before applying the drift.
+  vec2 windDrift = vec2(windMetresPerSecond.x / (longitudeMetresPerDegree * 360.0), -windMetresPerSecond.y / (111_320.0 * 180.0)) * u_motionTime;
+  vec2 alignedGeo = vec2(v_geo.x * 1.35, v_geo.y) + windDrift;
   float alongScale = u_layerKind < 0.5 ? 75.0 : (u_layerKind < 1.5 ? 58.0 : 34.0);
   float acrossScale = u_layerKind < 0.5 ? 48.0 : (u_layerKind < 1.5 ? 38.0 : 17.0);
   // Adjacent ordered samples must stay strongly correlated through height.
@@ -488,7 +498,10 @@ void main() {
   vec3 volumeCoordinate = vec3(alignedGeo.x * alongScale, alignedGeo.y * acrossScale, v_densityHeight * verticalScale);
   float broadForm = cloudNoise(volumeCoordinate * 0.42 + vec3(19.0, 7.0, u_layerKind * 13.0));
   float fineForm = cloudNoise(volumeCoordinate * 1.38 + vec3(3.0, 29.0, 41.0));
-  float structure = mix(broadForm, fineForm, u_layerKind < 1.5 ? 0.31 : 0.18);
+  // Billow noise produces rounded cumulus-like erosion instead of a flat
+  // cellular decal. It is detail within a real column, not a synthetic cloud.
+  float billowForm = 1.0 - abs(cloudNoise(volumeCoordinate * 2.85 + vec3(61.0, 11.0, 5.0)) * 2.0 - 1.0);
+  float structure = mix(mix(broadForm, fineForm, u_layerKind < 1.5 ? 0.31 : 0.18), billowForm, u_layerKind < 1.5 ? 0.24 : 0.13);
   // Density modulation is bounded and can only erode/densify an existing
   // model column. It makes transparent holes, clumps, and layered edges
   // visible when the camera moves through the ordered volume slices.
@@ -596,6 +609,7 @@ void main() {
       sliceCount: gl.getUniformLocation(program, "u_sliceCount"),
       debugMode: gl.getUniformLocation(program, "u_debugMode"),
       meshStep: gl.getUniformLocation(program, "u_meshStep"),
+      motionTime: gl.getUniformLocation(program, "u_motionTime"),
       solarTime: gl.getUniformLocation(program, "u_solarTime"),
       solarDeclination: gl.getUniformLocation(program, "u_solarDeclination"),
     };

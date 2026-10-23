@@ -8,12 +8,12 @@ type Cached<T> = { value: T; expiresAt: number };
 type MessageMap = Map<string, GribMessage | null>;
 
 const GFS_BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com";
-// Ingest the operational 0.25° analysis, then retain every other model cell
-// for a 0.5° globe texture. This is materially sharper than the former 1°
-// grid without shipping satellite-sized imagery or inventing coverage between
-// the model's reported cloud columns.
+// Keep the operational 0.25° analysis at its native grid. The original
+// 0.5° presentation grid looked blocky as pilots approached the globe and
+// threw away real model detail before the volumetric renderer saw it.
+// This remains a weather-model grid, not imagery or invented coverage.
 const GFS_RESOLUTION_DEGREES = 0.25;
-const DISPLAY_STRIDE = 2;
+const DISPLAY_STRIDE = 1;
 const CACHE_FOR_MS = 25 * 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 const WIND_RANGE_METRES_PER_SECOND = 80;
