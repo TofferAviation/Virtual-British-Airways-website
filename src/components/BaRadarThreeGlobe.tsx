@@ -15,7 +15,7 @@ const CLOUD_INNER_RADIUS = 1.00025;
 const CLOUD_OUTER_RADIUS = 1.0045;
 // Keep the surface clear. A baked cloud photograph on the diffuse Earth map
 // makes it impossible to tell the live atmospheric volume from the ground.
-const EARTH_TEXTURE = "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg";
+const EARTH_TEXTURE = "https://svs.gsfc.nasa.gov/vis/a000000/a003600/a003615/earth_noClouds.0330.jpg";
 
 function clamp(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)); }
 function validPoint(latitude: number, longitude: number) { return Number.isFinite(latitude) && Number.isFinite(longitude); }
@@ -51,6 +51,30 @@ function makeNoiseVolume(size: number, detail: boolean) {
     values[offset++] = Math.round(clamp(a * 0.68 + b * 0.32, 0, 1) * 255);
   }
   return values;
+}
+
+function makeAuroraTexture(three: typeof import("three"), samples: RadarAuroraData["samples"]) {
+  const width = 720; const height = 360; const values = new Uint8Array(width * height);
+  for (const sample of samples) {
+    if (sample.probability < 8) continue;
+    const x = Math.round((normalLongitude(sample.longitude) + 180) / 360 * (width - 1));
+    const y = Math.round((90 - sample.latitude) / 180 * (height - 1));
+    const intensity = clamp(sample.probability / 100, 0, 1);
+    // OVATION cells are intentionally softened into one continuous oval.
+    // This keeps source probability but removes the sampled-grid artefact.
+    for (let dy = -3; dy <= 3; dy += 1) for (let dx = -5; dx <= 5; dx += 1) {
+      const px = (x + dx + width) % width; const py = y + dy;
+      if (py < 0 || py >= height) continue;
+      const falloff = Math.max(0, 1 - Math.hypot(dx / 5, dy / 3));
+      const index = py * width + px;
+      values[index] = Math.max(values[index], Math.round(intensity * falloff * 255));
+    }
+  }
+  const texture = new three.DataTexture(values, width, height, three.RedFormat, three.UnsignedByteType);
+  texture.minFilter = three.LinearFilter; texture.magFilter = three.LinearFilter;
+  texture.wrapS = three.RepeatWrapping; texture.wrapT = three.ClampToEdgeWrapping;
+  texture.colorSpace = three.NoColorSpace; texture.needsUpdate = true;
+  return texture;
 }
 
 const cloudVertexShader = `
@@ -158,6 +182,71 @@ const cloudFragmentShader = `
   }
 `;
 
+const groundShadowVertexShader = `
+  out vec3 vWorldNormal;
+  out vec2 vUv;
+  void main() { vUv = uv; vWorldNormal = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+
+const groundShadowFragmentShader = `
+  precision highp float;
+  in vec3 vWorldNormal;
+  in vec2 vUv;
+  out vec4 fragColor;
+  uniform sampler2D uLowWeather;
+  uniform sampler2D uMiddleWeather;
+  uniform sampler2D uHighWeather;
+  uniform float uTime;
+  uniform float uEnabled;
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float noise(vec2 p) {
+    vec2 cell = floor(p); vec2 local = fract(p);
+    local = local * local * (3.0 - 2.0 * local);
+    return mix(mix(hash(cell), hash(cell + vec2(1.0, 0.0)), local.x), mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), local.x), local.y);
+  }
+  void main() {
+    float coverage = max(texture(uLowWeather, vUv).r, max(texture(uMiddleWeather, vUv).r, texture(uHighWeather, vUv).r));
+    float detail = noise(vUv * vec2(36.0, 22.0) + uTime * 0.003) * 0.68 + noise(vUv * vec2(83.0, 47.0) - uTime * 0.006) * 0.32;
+    float sunward = max(0.0, dot(normalize(vWorldNormal), normalize(vec3(-0.55, 0.62, 0.44))));
+    float alpha = smoothstep(0.18, 0.72, coverage) * smoothstep(0.20, 0.72, detail) * sunward * 0.30 * uEnabled;
+    fragColor = vec4(vec3(0.025, 0.06, 0.09), alpha);
+  }
+`;
+
+const auroraVertexShader = `
+  precision highp float;
+  uniform sampler2D uAuroraMap;
+  uniform float uTime;
+  uniform float uActivity;
+  uniform float uEnhanced;
+  out float vStrength;
+  out float vCurtain;
+  void main() {
+    float strength = texture(uAuroraMap, uv).r;
+    float folds = 0.56 + 0.44 * sin(uv.x * 188.0 + sin(uv.x * 29.0) * 3.0 + uTime * 0.8);
+    float height = strength * (0.018 + 0.074 * uEnhanced) * uActivity * (0.72 + folds * 0.42);
+    vStrength = strength;
+    vCurtain = folds;
+    vec3 displaced = position + normal * height;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  }
+`;
+
+const auroraFragmentShader = `
+  precision highp float;
+  in float vStrength;
+  in float vCurtain;
+  out vec4 fragColor;
+  uniform float uBrightness;
+  void main() {
+    float ribbon = smoothstep(0.20, 0.72, vCurtain);
+    float alpha = vStrength * ribbon * 0.72 * uBrightness;
+    if (alpha < 0.012) discard;
+    vec3 colour = mix(vec3(0.03, 0.44, 0.28), vec3(0.36, 1.0, 0.92), clamp(vCurtain, 0.0, 1.0));
+    fragColor = vec4(colour, alpha);
+  }
+`;
+
 function latLonVector(three: typeof import("three"), latitude: number, longitude: number, radius: number) {
   const lat = latitude * Math.PI / 180;
   const lon = longitude * Math.PI / 180;
@@ -245,11 +334,13 @@ export function BaRadarThreeGlobe(props: {
       };
       const fallbackWeather = new three.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, three.RGBAFormat);
       fallbackWeather.needsUpdate = true;
+      const baseNoise = noiseTexture(40, false);
+      const detailNoise = noiseTexture(28, true);
       const cloudMaterial = new three.ShaderMaterial({
         transparent: true, depthWrite: false, depthTest: true, glslVersion: three.GLSL3,
         uniforms: {
           uCameraLocal: { value: new three.Vector3() }, uLowWeather: { value: fallbackWeather }, uMiddleWeather: { value: fallbackWeather }, uHighWeather: { value: fallbackWeather },
-          uBaseNoise: { value: noiseTexture(40, false) }, uDetailNoise: { value: noiseTexture(28, true) },
+          uBaseNoise: { value: baseNoise }, uDetailNoise: { value: detailNoise },
           uOpacity: { value: 0.55 }, uTime: { value: 0 }, uUseLow: { value: 1 }, uUseMiddle: { value: 1 }, uUseHigh: { value: 1 }, uSelfShadow: { value: 1 }, uRelief: { value: 1 }, uSteps: { value: 30 },
         }, vertexShader: cloudVertexShader, fragmentShader: cloudFragmentShader,
       });
@@ -257,8 +348,31 @@ export function BaRadarThreeGlobe(props: {
       clouds.renderOrder = 2;
       globe.add(clouds);
 
-      const routes = new three.Group(); const traffic = new three.Group(); const auroraGroup = new three.Group();
-      globe.add(routes, traffic, auroraGroup);
+      // A low-opacity surface pass makes the cloud deck cast a readable
+      // shadow on the land/ocean texture. The volume remains the source of
+      // visible cloud form; this pass only supplies its ground response.
+      const shadowMaterial = new three.ShaderMaterial({
+        transparent: true, depthWrite: false, depthTest: true, glslVersion: three.GLSL3,
+        uniforms: { uLowWeather: { value: fallbackWeather }, uMiddleWeather: { value: fallbackWeather }, uHighWeather: { value: fallbackWeather }, uTime: { value: 0 }, uEnabled: { value: 1 } },
+        vertexShader: groundShadowVertexShader, fragmentShader: groundShadowFragmentShader,
+      });
+      const cloudShadows = new three.Mesh(new three.SphereGeometry(1.001, 176, 112), shadowMaterial);
+      cloudShadows.renderOrder = 1;
+      globe.add(cloudShadows);
+
+      const emptyAurora = new three.DataTexture(new Uint8Array([0]), 1, 1, three.RedFormat, three.UnsignedByteType);
+      emptyAurora.needsUpdate = true;
+      const auroraMaterial = new three.ShaderMaterial({
+        transparent: true, depthWrite: false, depthTest: true, side: three.DoubleSide, blending: three.AdditiveBlending, glslVersion: three.GLSL3,
+        uniforms: { uAuroraMap: { value: emptyAurora }, uTime: { value: 0 }, uActivity: { value: 1 }, uEnhanced: { value: 1 }, uBrightness: { value: 1 } },
+        vertexShader: auroraVertexShader, fragmentShader: auroraFragmentShader,
+      });
+      const auroraShell = new three.Mesh(new three.SphereGeometry(1.014, 240, 144), auroraMaterial);
+      auroraShell.renderOrder = 3; auroraShell.visible = false;
+      globe.add(auroraShell);
+
+      const routes = new three.Group(); const traffic = new three.Group();
+      globe.add(routes, traffic);
       const pointHits: Array<{ object: import("three").Object3D; kind: "flight" | "controller"; id: string }> = [];
       const disposeGroup = (group: import("three").Group) => {
         while (group.children.length) {
@@ -268,9 +382,11 @@ export function BaRadarThreeGlobe(props: {
         }
       };
       const weatherTextures = new Map<string, import("three").DataTexture>();
+      let auroraTexture: import("three").DataTexture = emptyAurora;
       const syncWeather = () => {
         const current = propsRef.current;
         clouds.visible = Boolean(current.cloudsEnabled && current.cloudData && current.cloudSettings.realWorld);
+        cloudShadows.visible = clouds.visible;
         cloudMaterial.uniforms.uOpacity.value = current.cloudSettings.opacity;
         cloudMaterial.uniforms.uUseLow.value = current.cloudSettings.low ? 1 : 0;
         cloudMaterial.uniforms.uUseMiddle.value = current.cloudSettings.middle ? 1 : 0;
@@ -293,6 +409,10 @@ export function BaRadarThreeGlobe(props: {
         cloudMaterial.uniforms.uLowWeather.value = weatherTextures.get("low") ?? fallbackWeather;
         cloudMaterial.uniforms.uMiddleWeather.value = weatherTextures.get("middle") ?? fallbackWeather;
         cloudMaterial.uniforms.uHighWeather.value = weatherTextures.get("high") ?? fallbackWeather;
+        shadowMaterial.uniforms.uLowWeather.value = weatherTextures.get("low") ?? fallbackWeather;
+        shadowMaterial.uniforms.uMiddleWeather.value = weatherTextures.get("middle") ?? fallbackWeather;
+        shadowMaterial.uniforms.uHighWeather.value = weatherTextures.get("high") ?? fallbackWeather;
+        shadowMaterial.uniforms.uEnabled.value = current.cloudSettings.selfShadows ? 1 : 0;
       };
       const addRoute = (points: Array<{ latitude: number; longitude: number }>, colour: number, dashed: boolean) => {
         if (points.length < 2) return;
@@ -303,7 +423,7 @@ export function BaRadarThreeGlobe(props: {
         const line = new three.Line(geometry, material); if (dashed) line.computeLineDistances(); routes.add(line);
       };
       const syncObjects = () => {
-        disposeGroup(routes); disposeGroup(traffic); disposeGroup(auroraGroup); pointHits.length = 0;
+        disposeGroup(routes); disposeGroup(traffic); pointHits.length = 0;
         const current = propsRef.current;
         const selected = current.flights.find((flight) => flight.id === current.selectedId);
         addRoute(selected?.plannedRoute?.points ?? [], 0x72c7ff, true);
@@ -321,35 +441,13 @@ export function BaRadarThreeGlobe(props: {
           const marker = new three.Mesh(new three.SphereGeometry(0.008, 10, 8), new three.MeshBasicMaterial({ color: 0x7de3ff }));
           marker.position.copy(latLonVector(three, controller.latitude, controller.longitude, 1.016)); traffic.add(marker); pointHits.push({ object: marker, kind: "controller", id: controller.callsign });
         }
-        if (current.auroraEnabled && current.aurora) {
-          const positions: number[] = []; const colours: number[] = []; const indices: number[] = [];
-          for (const sample of current.aurora.samples) {
-            if (sample.probability < 12) continue;
-            const probability = clamp(sample.probability / 100, 0, 1);
-            const baseRadius = 1.014;
-            const height = (0.014 + probability * (current.auroraSettings.enhancedPresentation ? 0.10 : 0.046)) * current.auroraSettings.activity;
-            // Each NOAA cell becomes an overlapping, east-west ribbon. The
-            // overlaps erase the dotted-grid appearance and read as connected
-            // curtains when viewed from space or close to the horizon.
-            const halfSpan = 0.72 + probability * 0.34;
-            const floorLeft = latLonVector(three, sample.latitude, sample.longitude - halfSpan, baseRadius);
-            const floorRight = latLonVector(three, sample.latitude, sample.longitude + halfSpan, baseRadius);
-            const crownLeft = latLonVector(three, sample.latitude, sample.longitude - halfSpan, baseRadius + height);
-            const crownRight = latLonVector(three, sample.latitude, sample.longitude + halfSpan, baseRadius + height);
-            const offset = positions.length / 3;
-            positions.push(floorLeft.x, floorLeft.y, floorLeft.z, floorRight.x, floorRight.y, floorRight.z, crownLeft.x, crownLeft.y, crownLeft.z, crownRight.x, crownRight.y, crownRight.z);
-            indices.push(offset, offset + 1, offset + 3, offset, offset + 3, offset + 2);
-            const r = 0.05 + probability * 0.16;
-            const g = 0.48 + probability * 0.48;
-            const b = 0.30 + probability * 0.62;
-            // The low edge is deliberately subdued; the brighter crown gives
-            // each ribbon a vertical luminous gradient rather than a neon bar.
-            colours.push(r * 0.18, g * 0.28, b * 0.20, r * 0.18, g * 0.28, b * 0.20, r, g, b, r, g, b);
-          }
-          if (positions.length) {
-            const geometry = new three.BufferGeometry(); geometry.setAttribute("position", new three.Float32BufferAttribute(positions, 3)); geometry.setAttribute("color", new three.Float32BufferAttribute(colours, 3)); geometry.setIndex(indices);
-            auroraGroup.add(new three.Mesh(geometry, new three.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: clamp(current.auroraSettings.brightness * 0.62, 0, 1), blending: three.AdditiveBlending, depthWrite: false, side: three.DoubleSide })));
-          }
+        const shouldShowAurora = Boolean(current.auroraEnabled && current.aurora?.samples.length);
+        auroraShell.visible = shouldShowAurora;
+        if (shouldShowAurora && current.aurora) {
+          const nextTexture = makeAuroraTexture(three, current.aurora.samples);
+          auroraMaterial.uniforms.uAuroraMap.value = nextTexture;
+          if (auroraTexture !== emptyAurora) auroraTexture.dispose();
+          auroraTexture = nextTexture;
         }
       };
       syncWeather(); syncObjects();
@@ -390,9 +488,24 @@ export function BaRadarThreeGlobe(props: {
         sun.visible = propsRef.current.dayNightEnabled;
         sun.position.set(Math.cos(solarAngle) * 4, 2.4, Math.sin(solarAngle) * 4);
         ambient.intensity = propsRef.current.dayNightEnabled ? 0.95 : 1.5;
+        const cloudOptions = propsRef.current.cloudSettings;
+        clouds.visible = Boolean(propsRef.current.cloudsEnabled && propsRef.current.cloudData && cloudOptions.realWorld);
+        cloudShadows.visible = clouds.visible;
+        cloudMaterial.uniforms.uOpacity.value = cloudOptions.opacity;
+        cloudMaterial.uniforms.uUseLow.value = cloudOptions.low ? 1 : 0;
+        cloudMaterial.uniforms.uUseMiddle.value = cloudOptions.middle ? 1 : 0;
+        cloudMaterial.uniforms.uUseHigh.value = cloudOptions.high ? 1 : 0;
+        cloudMaterial.uniforms.uSelfShadow.value = cloudOptions.selfShadows ? 1 : 0;
+        cloudMaterial.uniforms.uRelief.value = cloudOptions.enhancedPresentation ? 1.38 : 1;
+        cloudMaterial.uniforms.uSteps.value = qualitySteps(cloudOptions);
+        shadowMaterial.uniforms.uEnabled.value = cloudOptions.selfShadows ? 1 : 0;
         cloudMaterial.uniforms.uTime.value = (now - startedAt) / 1000;
+        shadowMaterial.uniforms.uTime.value = (now - startedAt) / 1000;
+        auroraMaterial.uniforms.uTime.value = (now - startedAt) / 1000 * propsRef.current.auroraSettings.animationSpeed;
+        auroraMaterial.uniforms.uActivity.value = propsRef.current.auroraSettings.activity;
+        auroraMaterial.uniforms.uEnhanced.value = propsRef.current.auroraSettings.enhancedPresentation ? 1 : 0.35;
+        auroraMaterial.uniforms.uBrightness.value = propsRef.current.auroraSettings.brightness;
         cloudMaterial.uniforms.uCameraLocal.value.copy(camera.position); globe.worldToLocal(cloudMaterial.uniforms.uCameraLocal.value);
-        auroraGroup.rotation.y = Math.sin((now - startedAt) / 1000 * 0.1) * 0.008 * propsRef.current.auroraSettings.animationSpeed;
         renderer.render(scene, camera); animationId = requestAnimationFrame(render);
       };
       animationId = requestAnimationFrame(render);
