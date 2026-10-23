@@ -8,12 +8,11 @@ type Cached<T> = { value: T; expiresAt: number };
 type MessageMap = Map<string, GribMessage | null>;
 
 const GFS_BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com";
-// Keep a 0.5° presentation grid for the global first load. The native 0.25°
-// data is intentionally sampled rather than blurred; a full six-texture
-// global response exceeded the production host's response budget and resulted
-// in no clouds at all. Close-range detail comes from the volume shader.
+// Keep the operational 0.25° analysis at its native grid. The compact one-
+// texture-per-layer transport keeps this within the production response budget
+// without smoothing away real model structure before the volume shader sees it.
 const GFS_RESOLUTION_DEGREES = 0.25;
-const DISPLAY_STRIDE = 2;
+const DISPLAY_STRIDE = 1;
 const CACHE_FOR_MS = 25 * 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 

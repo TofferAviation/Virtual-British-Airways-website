@@ -455,37 +455,52 @@ float cloudNoise(vec3 point) {
   return mix(mix(mix(n000, n100, local.x), mix(n010, n110, local.x), local.y), mix(mix(n001, n101, local.x), mix(n011, n111, local.x), local.y), local.z);
 }
 
+// Fractal detail lets a coarse numerical-weather coverage field describe a
+// cloud system without turning the whole field into a soft painted blanket.
+float cloudFbm(vec3 point) {
+  float total = 0.0;
+  float amplitude = 0.56;
+  float normaliser = 0.0;
+  for (int octave = 0; octave < 3; octave++) {
+    total += cloudNoise(point) * amplitude;
+    normaliser += amplitude;
+    point = point * 2.07 + vec3(17.0, 31.0, 11.0);
+    amplitude *= 0.48;
+  }
+  return total / normaliser;
+}
+
 void main() {
   vec4 weather = texture(u_weather, v_geo);
   float coverage = weather.r;
   float valid = weather.a * v_valid;
   if (valid < 0.5 || coverage < 0.035 || u_opacity < 0.01) discard;
 
-  float modelCoverage = clamp(coverage * 0.86, 0.0, 1.0);
-  float density = smoothstep(0.075, 0.82, modelCoverage);
+  float modelCoverage = clamp(coverage * 0.90, 0.0, 1.0);
 
   vec2 alignedGeo = vec2(v_geo.x * 1.35, v_geo.y);
-  float alongScale = u_layerKind < 0.5 ? 75.0 : (u_layerKind < 1.5 ? 58.0 : 34.0);
-  float acrossScale = u_layerKind < 0.5 ? 48.0 : (u_layerKind < 1.5 ? 38.0 : 17.0);
+  float alongScale = u_layerKind < 0.5 ? 126.0 : (u_layerKind < 1.5 ? 96.0 : 64.0);
+  float acrossScale = u_layerKind < 0.5 ? 84.0 : (u_layerKind < 1.5 ? 61.0 : 35.0);
   // Adjacent ordered samples must stay strongly correlated through height.
   // Larger Z frequencies made each shell read as a separate stamped plane;
   // this slow vertical evolution instead produces coherent columns, gaps, and
   // a continuous cloud body as the camera changes angle.
   float verticalScale = u_layerKind < 0.5 ? 0.72 : (u_layerKind < 1.5 ? 0.48 : 0.32);
   vec3 volumeCoordinate = vec3(alignedGeo.x * alongScale, alignedGeo.y * acrossScale, v_densityHeight * verticalScale);
-  float broadForm = cloudNoise(volumeCoordinate * 0.42 + vec3(19.0, 7.0, u_layerKind * 13.0));
-  float fineForm = cloudNoise(volumeCoordinate * 1.38 + vec3(3.0, 29.0, 41.0));
+  float broadForm = cloudNoise(volumeCoordinate * 0.30 + vec3(19.0, 7.0, u_layerKind * 13.0));
+  float fineForm = cloudFbm(volumeCoordinate * 1.62 + vec3(3.0, 29.0, 41.0));
   // Billow noise produces rounded cumulus-like erosion instead of a flat
   // cellular decal. It is detail within a real column, not a synthetic cloud.
-  float billowForm = 1.0 - abs(cloudNoise(volumeCoordinate * 2.85 + vec3(61.0, 11.0, 5.0)) * 2.0 - 1.0);
-  float structure = mix(mix(broadForm, fineForm, u_layerKind < 1.5 ? 0.31 : 0.18), billowForm, u_layerKind < 1.5 ? 0.24 : 0.13);
-  // Density modulation is bounded and can only erode/densify an existing
-  // model column. It makes transparent holes, clumps, and layered edges
-  // visible when the camera moves through the ordered volume slices.
-  float structureAmount = mix(0.26, 0.62, smoothstep(0.20, 0.92, modelCoverage));
-  float interiorStructure = smoothstep(0.22, 0.80, structure * 0.92 + broadForm * 0.08);
-  float densityModulation = mix(1.0, mix(0.30, 1.48, interiorStructure), structureAmount);
-  density *= densityModulation;
+  float billowForm = 1.0 - abs(cloudNoise(volumeCoordinate * 3.85 + vec3(61.0, 11.0, 5.0)) * 2.0 - 1.0);
+  float edgeErosion = cloudNoise(volumeCoordinate * 8.6 + vec3(43.0, 73.0, 29.0));
+  float structure = mix(mix(broadForm, fineForm, u_layerKind < 1.5 ? 0.42 : 0.30), billowForm, u_layerKind < 1.5 ? 0.30 : 0.18);
+  structure = mix(structure, edgeErosion, u_layerKind < 1.5 ? 0.16 : 0.08);
+  // Coverage is a boundary condition, not a blanket opacity. The threshold
+  // makes lower-coverage GFS cells resolve as gaps and individual banks;
+  // dense model systems remain full cloud systems without looking blurred.
+  float coverageThreshold = mix(0.86, 0.16, smoothstep(0.08, 0.96, modelCoverage));
+  float density = smoothstep(coverageThreshold - 0.105, coverageThreshold + 0.105, structure);
+  density *= smoothstep(0.07, 0.92, modelCoverage);
 
   float lowerFalloff = smoothstep(0.015, 0.16, v_densityHeight);
   float upperFalloff = 1.0 - smoothstep(0.76, 1.0, v_densityHeight);
@@ -522,7 +537,7 @@ void main() {
   vec3 duskColour = vec3(0.38, 0.26, 0.19) * twilight * (0.28 + (1.0 - thickness) * 0.44);
   vec3 nightColour = baseColour * 0.075;
   vec3 colour = mix(nightColour, dayColour + duskColour, daylight + twilight * 0.58);
-  float layerOpticalDepth = u_layerKind < 0.5 ? 0.76 : (u_layerKind < 1.5 ? 0.52 : 0.34);
+  float layerOpticalDepth = u_layerKind < 0.5 ? 0.46 : (u_layerKind < 1.5 ? 0.31 : 0.20);
   float atmosphericFade = 1.0 - smoothstep(15000.0, 24000.0, v_layerHeight);
   float opticalDepth = density * layerOpticalDepth * u_opacity * (0.52 + daylight * 0.48) * atmosphericFade;
   float alpha = 1.0 - exp(-opticalDepth / max(1.0, u_sliceCount));
