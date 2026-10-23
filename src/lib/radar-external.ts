@@ -1,3 +1,4 @@
+import type { SatelliteCloudObservation } from "./radar-satellite-math";
 type JsonRecord = Record<string, unknown>;
 
 export type VatsimStation = {
@@ -62,11 +63,9 @@ export type RadarWindGrid = {
 };
 
 /**
- * A compact, browser-safe subset of a decoded NOAA GFS model analysis.
- * Values remain model fields rather than satellite observations. The global
- * The grid can stay at the native model resolution because the API transports
- * cloud textures in a compressed form. Values remain model fields rather than
- * satellite observations or generated cloud coverage.
+ * Legacy forecast-layer contract retained for development calibration and the
+ * older map renderer. These fields do not grant cloud support in Live mode;
+ * the satellite observation contract below is authoritative there.
  */
 export type RadarCloudLayerId = "low" | "middle" | "high";
 
@@ -82,7 +81,9 @@ export type RadarCloudLayer = {
 };
 
 export type RadarCloudData = {
-  source: "NOAA GFS";
+  source: "NOAA GFS" | "NOAA GOES ABI";
+  /** Required by Live mode; absence never permits forecast/procedural coverage. */
+  satellite?: SatelliteCloudObservation;
   sourceResolutionDeg: number;
   displayResolutionDeg: number;
   cycleAt: string;
@@ -96,8 +97,9 @@ export type RadarCloudData = {
   stepDeg: number;
   /** Gzip is used only while travelling over the API; the globe expands it before upload. */
   encoding: "rgba8-base64" | "rgba8-gzip-base64";
-  /** GFS fields used to construct the compact cloud volume. */
+  /** Source product identifiers (or legacy forecast fields). */
   fields: string[];
+  /** Empty for satellite Live fields; columns live in satellite.current. */
   layers: RadarCloudLayer[];
 };
 

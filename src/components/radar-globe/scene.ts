@@ -10,6 +10,7 @@ import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
 import { auroraPhotoUniforms } from "@/lib/radar-aurora-photo";
 import { advanceAuroraTime, auroraMotionSpeed } from "@/lib/radar-aurora-motion";
 import { auroraKpOverride, auroraKpField } from "@/lib/radar-aurora-kp";
+import { SATELLITE_MAX_AGE_MS, satelliteGridIndex } from "@/lib/radar-satellite-math";
 import {
   WGS84_A_KM,
   WGS84_B_KM,
@@ -103,7 +104,7 @@ function ellipsoidShell(heightKm: number) {
   geometry.scale(1, (WGS84_B_KM + heightKm) / (WGS84_A_KM + heightKm), 1);
   return geometry;
 }
-function decodeTexture(data: RadarCloudData, encoded: string) {
+function decodeTexture(data: RadarCloudData, encoded: string, nearest=false) {
   const binary = atob(encoded),
     values = new Uint8Array(binary.length);
   if (binary.length !== data.width * data.height * 4)
@@ -115,7 +116,7 @@ function decodeTexture(data: RadarCloudData, encoded: string) {
     data.height,
     THREE.RGBAFormat,
   );
-  texture.minFilter = texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = texture.magFilter = nearest?THREE.NearestFilter:THREE.LinearFilter;
   texture.wrapS = THREE.RepeatWrapping;
   texture.unpackAlignment = 1;
   texture.needsUpdate = true;
@@ -222,6 +223,8 @@ export function createGlobeScene(
     uLowWeather: { value: fallback },
     uMiddleWeather: { value: fallback },
     uHighWeather: { value: fallback },
+    uSatelliteCurrent: {value:fallback},uSatellitePrevious:{value:fallback},uSatelliteMotion:{value:fallback},
+    uSatelliteMode:{value:1},uObservationBlend:{value:1},uObservationSeconds:{value:0},uObservationInterval:{value:0},
     uBaseNoise: { value: base },
     uDetailNoise: { value: detail },
     uLayers: { value: new THREE.Vector3(1, 1, 1) },
@@ -244,6 +247,7 @@ export function createGlobeScene(
   if (testCloudTexture) {
     testCloudTexture.needsUpdate = true;
     shared.uLowWeather.value = testCloudTexture;
+    shared.uSatelliteMode.value=0; // Explicitly labelled development calibration only.
   }
   const material = (
     vertexShader: string,
@@ -462,6 +466,7 @@ export function createGlobeScene(
     lastQuality = "";
   const weatherTextures: THREE.Texture[] = [];
   let weatherRevision = 0;
+  let satelliteReceivedAt=0,satelliteValidUntil=0,satellitePixels:Uint8Array|null=null,satelliteRevision="";
   const sync = () => {
     const state = read();
     if (
@@ -478,22 +483,26 @@ export function createGlobeScene(
     }
     if (
       state.cloudData !== lastData &&
-      !testProfile &&
-      state.cloudData?.encoding === "rgba8-base64"
+      !testProfile
     ) {
       lastData = state.cloudData;
+      const d=state.cloudData,s=d?.satellite;
+      const revision=s?.status==="ready"?(s.revision??`${s.current.observedAt}/${s.current.sources.map(x=>x.mask).join("/")}/${s.winds?.validAt}`):"";
+      if(revision!==satelliteRevision) {
+      satelliteRevision=revision;
       weatherRevision++;
+      shared.uSatelliteCurrent.value=shared.uSatellitePrevious.value=shared.uSatelliteMotion.value=fallback;
+      satellitePixels=null;satelliteValidUntil=0;
       weatherTextures.splice(0).forEach((texture) => texture.dispose());
-      for (const layer of state.cloudData.layers) {
-        const texture = decodeTexture(state.cloudData, layer.volume);
-        weatherTextures.push(texture);
-        const key =
-          layer.id === "low"
-            ? "uLowWeather"
-            : layer.id === "middle"
-              ? "uMiddleWeather"
-              : "uHighWeather";
-        shared[key].value = texture;
+      if(d?.source==="NOAA GOES ABI"&&d.encoding==="rgba8-base64"&&s?.status==="ready") {
+        const current=decodeTexture(d,s.current.volume,true),previous=s.previous?decodeTexture(d,s.previous.volume,true):current,motion=decodeTexture(d,s.motion,true);
+        weatherTextures.push(current,motion);if(previous!==current)weatherTextures.push(previous);
+        shared.uSatelliteCurrent.value=current;shared.uSatellitePrevious.value=previous;shared.uSatelliteMotion.value=motion;
+        shared.uObservationInterval.value=s.intervalSeconds;
+        satellitePixels=current.image.data as Uint8Array;
+        satelliteReceivedAt=performance.now();
+        satelliteValidUntil=Math.min(Date.parse(s.current.observedAt),...s.current.sources.map(source=>Date.parse(source.scanEndAt)))+SATELLITE_MAX_AGE_MS;
+      }
       }
     }
     const qualityChanged=lastQuality !== `${state.auroraSettings.quality}-${effectiveQuality}`;
@@ -536,7 +545,9 @@ export function createGlobeScene(
     auroraMaterial.uniforms.uAuroraDebug.value=state.auroraSettings.debug==="altitude"?2:0;
     auroraMaterial.uniforms.uHemisphere.value=state.auroraSettings.hemisphere==="north"?1:state.auroraSettings.hemisphere==="south"?-1:0;
     cloudMesh.visible =
-      state.cloudsEnabled && state.cloudSettings.realWorld && Boolean(lastData || testProfile);
+      state.cloudsEnabled && state.cloudSettings.realWorld && (!!testProfile || (satellitePixels!==null&&Date.now()<satelliteValidUntil));
+    shared.uObservationBlend.value=Math.min(1,Math.max(0,(performance.now()-satelliteReceivedAt)/12000));
+    shared.uObservationSeconds.value=state.cloudData?.satellite?.status==="ready"?Math.min(600,Math.max(0,(Date.now()-Date.parse(state.cloudData.satellite.current.observedAt))/1000)):0;
     shared.uClouds.value = cloudMesh.visible ? 1 : 0;
     shared.uCloudOpacity.value = state.cloudSettings.opacity * 1.7;
     shared.uShadows.value = state.cloudSettings.selfShadows ? 1 : 0;
@@ -889,7 +900,7 @@ export function createGlobeScene(
     shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
     shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
     const settings = read().cloudSettings;
-    const signature = [distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const signature = [distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),Math.floor(shared.uObservationSeconds.value),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
     const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
     const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();
@@ -961,6 +972,8 @@ export function createGlobeScene(
         textures: renderer.info.memory.textures,
         triangles: renderer.info.render.triangles,
         clouds: cloudMesh.visible,
+        cloudSource: testProfile?"synthetic-calibration":satellitePixels&&Date.now()<satelliteValidUntil?"satellite-observed":"unknown",
+        cloudBelowCamera: testProfile?"synthetic":satellitePixels&&Date.now()<satelliteValidUntil&&read().cloudData?(()=>{const flag=satellitePixels![satelliteGridIndex(latitude,longitude,read().cloudData!.width,read().cloudData!.height)*4+3]??0;return (flag&7)>=3&&(flag&24)?"cloud detected; volume unknown (missing optical depth/top)":(["unknown","clear","uncertain","probably cloudy","observed cloudy"][flag&7]??"unknown");})():"unknown",
         aurora: curtains.visible,
         auroraForecast:appliedForecast,
         auroraObserved:appliedObservation,

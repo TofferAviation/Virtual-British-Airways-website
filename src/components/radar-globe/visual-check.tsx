@@ -10,8 +10,10 @@ import { DEFAULT_AURORA_MOTION_SPEED } from "@/lib/radar-aurora-motion";
 import { createGlobeAuroraSettings, createGlobeCloudSettings } from "@/lib/radar-globe-settings";
 import { AuroraKpControls } from "@/components/AuroraKpControls";
 import { auroraKpOverride,type AuroraKpSettings } from "@/lib/radar-aurora-kp";
+import { unpackCloudData } from "@/lib/radar-cloud-transport";
 
 const views = {
+  observed: {latitude:15,longitude:-100,distanceKm:23000,date:undefined},
   day: {
     latitude: 25,
     longitude: 15,
@@ -121,29 +123,11 @@ export function GlobeVisualCheck() {
     }catch(e){setErrors(v=>[...v,String(e)]);}
   };
   useEffect(() => {
-    void fetch("/api/radar/clouds")
+    const refreshClouds=()=>void fetch("/api/radar/clouds",{cache:"no-store"})
       .then((r) => r.json())
-      .then(async (data: RadarCloudData) => {
-        if (data.encoding === "rgba8-gzip-base64")
-          for (const layer of data.layers) {
-            const bytes = Uint8Array.from(atob(layer.volume), (c) =>
-              c.charCodeAt(0),
-            );
-            const unpacked = new Uint8Array(
-              await new Response(
-                new Blob([bytes])
-                  .stream()
-                  .pipeThrough(new DecompressionStream("gzip")),
-              ).arrayBuffer(),
-            );
-            let result = "";
-            for (let i = 0; i < unpacked.length; i += 32768)
-              result += String.fromCharCode(...unpacked.subarray(i, i + 32768));
-            layer.volume = btoa(result);
-          }
-        setData({ ...data, encoding: "rgba8-base64" });
-      })
-      .catch((e) => setErrors((v) => [...v, String(e)]));
+      .then(async (data: RadarCloudData) => setData(await unpackCloudData(data)))
+      .catch((e) => {setData(null);setErrors((v) => [...v.slice(-7), String(e)]);});
+    refreshClouds();const cloudTimer=setInterval(refreshClouds,60_000);
     const refreshAurora=()=>void fetch("/api/radar/aurora").then(r=>r.json()).then(setAurora).catch(()=>{});
     refreshAurora();const auroraTimer=setInterval(refreshAurora,300000);
     const handler = (event: Event) =>
@@ -159,6 +143,7 @@ export function GlobeVisualCheck() {
     );
     return () => {
       clearInterval(timer);
+      clearInterval(cloudTimer);
       clearInterval(auroraTimer);
       window.removeEventListener("globe-shader-error", handler);
     };
@@ -254,7 +239,7 @@ export function GlobeVisualCheck() {
         <button onClick={record} disabled={recording}>{recording?"Recording…":`Record ${captureSeconds} s`}</button>
         {captureUrl?<a href={captureUrl} download={captureName} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
-          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
+          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `Satellite: ${data?.satellite?.status==="ready"?data.validAt:"unknown"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · Sun: {selected.date??"live UTC"}
         </span>
       </nav>
       <details style={{position:"absolute",left:12,top:152,zIndex:4,width:280,maxHeight:"calc(100% - 250px)",overflowY:"auto",background:"#0a1929ed",border:"1px solid #35516c",borderRadius:5,padding:10}}>

@@ -5,6 +5,7 @@ import type { RadarCloudData } from "@/lib/radar-external";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+let cachedTransport:{raw:RadarCloudData;packed:RadarCloudData}|null=null;
 
 function gzipBase64(value: string) {
   return gzipSync(Buffer.from(value, "base64"), { level: 6 }).toString("base64");
@@ -23,18 +24,19 @@ function transportCloudData(data: RadarCloudData): RadarCloudData {
       ...layer,
       volume: gzipBase64(layer.volume),
     })),
+    satellite: data.satellite ? {...data.satellite,current:{...data.satellite.current,volume:gzipBase64(data.satellite.current.volume)},previous:data.satellite.previous?{...data.satellite.previous,volume:gzipBase64(data.satellite.previous.volume)}:null,motion:gzipBase64(data.satellite.motion)} : undefined,
   };
 }
 
 export async function GET() {
   try {
-    return NextResponse.json(transportCloudData(await getRadarCloudData()), {
-      // Every viewer sees the same public GFS analysis. CDN caching prevents
-      // several pilots from independently rebuilding the same large texture
-      // set, while stale data is still better than an empty cloud globe.
-      headers: { "Cache-Control": "public, max-age=300, s-maxage=1500, stale-while-revalidate=3600" },
+    const raw=await getRadarCloudData();
+    if(cachedTransport?.raw!==raw)cachedTransport={raw,packed:transportCloudData(raw)};
+    return NextResponse.json(cachedTransport!.packed, {
+      // Clear/unknown are meaningful states. Never retain stale cloud cover.
+      headers: { "Cache-Control": "public, max-age=30, s-maxage=30" },
     });
   } catch {
-    return NextResponse.json({ error: "The NOAA GFS cloud model is temporarily unavailable." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ error: "Satellite cloud coverage is unknown." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

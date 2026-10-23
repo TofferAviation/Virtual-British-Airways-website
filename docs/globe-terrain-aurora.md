@@ -1,5 +1,7 @@
 # Terrain and NOAA aurora integration (2026-10-23)
 
+Current Live cloud placement supersedes the historical GFS cloud notes below: see [Satellite-observed Live clouds](satellite-clouds.md). Live locations are now satellite-mask gated; missing geography/retrievals are unknown and never receive generated/GFS cloud fill. Deployment remains on hold.
+
 Open `http://127.0.0.1:3107/dev/globe`. This remains a local change; it has not been deployed.
 
 ## Ground and terrain

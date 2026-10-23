@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test:clouds": "node --test src/lib/radar-cloud-math.test.mjs src/lib/radar-cloud-noise.test.mjs",
     "test:globe-integration": "node --test src/lib/radar-globe-integration.test.mjs",
+    "test:satellite-clouds": "node --test src/lib/radar-satellite.test.mjs",
+    "clouds:ingest": "node scripts/ingest-satellite-clouds.mjs",
+    "clouds:watch": "node scripts/ingest-satellite-clouds.mjs --watch",
     "test:globe": "node --test src/lib/radar-globe-geodesy.test.mjs src/lib/radar-globe-aurora.test.mjs src/lib/radar-globe-camera.test.mjs src/lib/radar-globe-quality.test.mjs src/lib/radar-globe-surface.test.mjs src/lib/radar-globe-navigation.test.mjs src/lib/radar-globe-gpu-timer.test.mjs src/lib/radar-globe-elevation.test.mjs src/lib/radar-aurora-field.test.mjs src/lib/radar-aurora-magnetic.test.mjs src/lib/radar-aurora-geometry.test.mjs src/lib/radar-aurora-photo.test.mjs",
     "migrate:pilot-state": "node --env-file=.env.local scripts/migrate-pilot-state-to-supabase.mjs"
   },
@@ -18,6 +21,7 @@
     "@supabase/supabase-js": "^2.116.0",
     "@types/leaflet": "^1.9.22",
     "@types/three": "^0.186.0",
+    "h5wasm": "0.10.3",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^5.19.0",
     "next": "^16.3.8",

@@ -10,6 +10,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
     current = useRef(props);
   const [error, setError] = useState<string | null>(null);
   const [performanceLabel, setPerformanceLabel] = useState("Loading globe assets…");
+  const [cloudCoverageLabel,setCloudCoverageLabel]=useState("Cloud coverage below camera: unknown (not clear)");
   useEffect(() => {
     current.current = props;
   }, [props]);
@@ -36,6 +37,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
       if (host?.dataset.globeStatus) { setPerformanceLabel(host.dataset.globeStatus); return; }
       if (!host?.dataset.globeDiagnostics) return;
       const info = JSON.parse(host.dataset.globeDiagnostics);
+      setCloudCoverageLabel(`Cloud coverage below camera: ${info.cloudBelowCamera??"unknown"}${info.cloudBelowCamera==="unknown"?" (not clear; no generated fill)":""}`);
       setPerformanceLabel(`${info.mode === "auto" ? "Auto → " : ""}${info.quality} · ${info.fps} fps · LOD ${info.terrain.level} · ${info.aboveGroundMetres.toLocaleString()} m AGL${info.waitingForTerrain ? " · loading terrain / descent held safely" : ""}`);
     }, 2000);
     return () => {
@@ -48,6 +50,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
     <div className="ba-radar-globe-map ba-radar-globe-three" ref={container}>
       <div className="ba-radar-globe-caption">
         <strong>Earth · WGS84</strong>
+        {props.cloudsEnabled?<span>{cloudCoverageLabel}</span>:null}
         {props.auroraEnabled&&auroraKpOverride(props.auroraSettings)!==null?<strong style={{color:"#ffcf83"}}>SIMULATION · manual Kp {auroraKpOverride(props.auroraSettings)} · not live NOAA</strong>:null}
         <details className="ba-radar-globe-help" open={!props.compactControls}>
         <summary>Camera controls &amp; sources</summary>
@@ -56,7 +59,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
           {error ?? "Left-drag: orbit · Middle-drag: pan · Right / Shift+middle: look · Wheel: zoom"}
         </span>
         <span>WASD: move · Q/E: down/up · Shift: faster · Home: reset view</span>
-        <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA GFS / SWPC</span>
+        <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA ABI / GFS winds / SWPC</span>
         <a href="/globe-sources" target="_blank" rel="noreferrer" style={{pointerEvents:"auto",color:"#a8c6d9"}}>Terrain: Mapzen / USGS / NOAA and contributors · credits & limits</a>
         <button type="button" style={{ pointerEvents: "auto", justifySelf: "start", font: "10px Arial", padding: "4px 7px", color: "#d7ebff", background: "#12344b", border: "1px solid #4982a6", borderRadius: 3 }} onClick={() => {
           const canvas = container.current?.querySelector("canvas");

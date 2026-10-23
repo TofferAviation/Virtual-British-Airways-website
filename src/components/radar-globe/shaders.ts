@@ -44,6 +44,13 @@ precision highp sampler3D;
 uniform sampler2D uLowWeather;
 uniform sampler2D uMiddleWeather;
 uniform sampler2D uHighWeather;
+uniform sampler2D uSatelliteCurrent;
+uniform sampler2D uSatellitePrevious;
+uniform sampler2D uSatelliteMotion;
+uniform float uSatelliteMode;
+uniform float uObservationBlend;
+uniform float uObservationSeconds;
+uniform float uObservationInterval;
 uniform sampler3D uBaseNoise;
 uniform sampler3D uDetailNoise;
 uniform vec3 uLayers;
@@ -113,10 +120,44 @@ float layerCloud(vec4 w,vec3 p,float h,float kind,bool fineDetail){
   float body=pow(smoothstep(threshold,threshold+0.06,shape-edgeErosion),1.25)*profile*(0.35+0.65*t);
   return body*smoothstep(0.0,0.03,t)*sqrt(cover);
 }
+float satelliteDensity(vec3 p,float h,bool fineDetail){
+  vec2 uv=geographicUV(p);
+  vec4 observed=textureLod(uSatelliteCurrent,uv,0.0);
+  float state=mod(floor(observed.a*255.0+0.5),8.0);
+  // Authoritative nearest-neighbour mask, BEFORE noise, optical depth, motion
+  // or blending. Confident clear and unknown have exactly zero extinction.
+  if(state<2.5||state>4.5)return 0.0;
+  float flags=floor(observed.a*255.0+0.5);
+  if(mod(floor(flags/8.0),4.0)>0.5)return 0.0; // missing COD/top: volume unknown
+  vec4 motion=textureLod(uSatelliteMotion,uv,0.0);
+  vec2 metresPerSecond=(motion.rg*255.0-128.0)*2.0;
+  float lat=(0.5-uv.y)*PI;
+  vec2 angular=metresPerSecond/vec2(40030228.0*max(0.1,cos(lat)),40030228.0);
+  vec2 beforeUV=uv-vec2(angular.x,-angular.y)*uObservationInterval;
+  vec4 before=textureLod(uSatellitePrevious,vec2(fract(beforeUV.x),clamp(beforeUV.y,0.0,1.0)),0.0);
+  float previousState=mod(floor(before.a*255.0+0.5),8.0);
+  vec3 properties=observed.rgb;
+  if(previousState>2.5&&previousState<4.5&&mod(floor(before.a*255.0/8.0),4.0)<0.5)properties=mix(before.rgb,properties,uObservationBlend);
+  float base=properties.g*25.5,top=properties.b*25.5;
+  if(h<base||h>top||top<=base)return 0.0;
+  float kind=top<3.0?0.0:top<8.0?1.0:2.0;
+  if((kind<0.5&&uLayers.x<0.5)||(kind>0.5&&kind<1.5&&uLayers.y<0.5)||(kind>1.5&&uLayers.z<0.5))return 0.0;
+  float opticalDepth=exp(properties.r*log(161.0))-1.0;
+  if(opticalDepth<=0.0)return 0.0;
+  vec3 n=ellipsoidNormal(p),east=normalize(vec3(n.z,0.0,-n.x)+vec3(1e-6,0.0,0.0)),north=cross(n,east);
+  // Wind/feature tracking transports detail only inside the detected mask.
+  // Never extrapolate a cloud into a currently clear/unknown observation.
+  vec3 advected=p-(east*metresPerSecond.x+north*metresPerSecond.y)*uObservationSeconds*0.001;
+  float shape=layerCloud(vec4(1.0,properties.g,properties.b,1.0),advected,h,kind,fineDetail);
+  float normalisation=kind>1.5?0.0015:0.25;
+  float growth=motion.a>0.9?mix(0.2,1.0,uObservationBlend):1.0;
+  return shape*opticalDepth/(max(0.1,top-base)*CLOUD_EXTINCTION*normalisation)*growth*(state<3.5?0.65:1.0);
+}
 float densityAtDetail(vec3 p,bool fineDetail){
   if(uClouds<0.5)return 0.0;
   float h=altitudeKm(p);
   if(h<0.0||h>18.0)return 0.0;
+  if(uSatelliteMode>0.5)return satelliteDensity(p,h,fineDetail);
   vec2 uv=geographicUV(p);
   float low=uLayers.x>0.5?layerCloud(weatherAt(uLowWeather,uv),p,h,0.0,fineDetail):0.0;
   float middle=uLayers.y>0.5?layerCloud(weatherAt(uMiddleWeather,uv),p,h,1.0,fineDetail):0.0;
@@ -271,9 +312,9 @@ void main(){
   float alpha=1.0-transmittance;if(alpha<0.004)discard;
   if(uDebug>0.5){
     vec3 p=uCamera+rd*((start+end)*0.5);vec2 uv=geographicUV(p);
-    vec4 weather=texture(uLowWeather,uv);
+    vec4 weather=uSatelliteMode>0.5?textureLod(uSatelliteCurrent,uv,0.0):texture(uLowWeather,uv);
     vec3 diagnostic=vec3(alpha);
-    if(uDebug>1.5&&uDebug<2.5)diagnostic=vec3(weather.r);
+    if(uDebug>1.5&&uDebug<2.5){float state=mod(floor(weather.a*255.0+0.5),8.0);diagnostic=uSatelliteMode<0.5?vec3(weather.r):state<0.5?vec3(0.5,0.1,0.7):state<1.5?vec3(0.02,0.06,0.12):state<2.5?vec3(0.8,0.5,0.1):vec3(0.9);}
     if(uDebug>2.5&&uDebug<3.5)diagnostic=vec3(weather.g,weather.b,0.1);
     if(uDebug>3.5&&uDebug<4.5)diagnostic=vec3(max(0.0,sunElevation(p)));
     fragColor=vec4(diagnostic,max(0.6,alpha));return;

@@ -10,6 +10,7 @@ import type { AuroraQuality, AuroraSettings } from "@/components/BaRadarAuroraLa
 import { AuroraPhotoControls } from "@/components/AuroraPhotoControls";
 import { createGlobeAuroraSettings, createGlobeCloudSettings } from "@/lib/radar-globe-settings";
 import { globeViewportHeight } from "@/lib/radar-globe-navigation";
+import { unpackCloudData } from "@/lib/radar-cloud-transport";
 import { AuroraKpControls } from "@/components/AuroraKpControls";
 import type { CloudDebugMode, CloudQuality, CloudSettings } from "@/components/BaRadarCloudLayer";
 
@@ -78,35 +79,6 @@ export type RadarLayers = {
   seasonal: boolean;
 };
 
-function bytesFromBase64(value: string) {
-  const binary = window.atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function base64FromBytes(bytes: Uint8Array) {
-  const chunkSize = 0x8000;
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += chunkSize) binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  return window.btoa(binary);
-}
-
-async function inflateGzipBase64(value: string) {
-  if (typeof DecompressionStream === "undefined") throw new Error("This browser cannot unpack the live cloud textures.");
-  const stream = new Blob([bytesFromBase64(value)]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return base64FromBytes(new Uint8Array(await new Response(stream).arrayBuffer()));
-}
-
-async function unpackCloudData(data: RadarCloudData): Promise<RadarCloudData> {
-  if (data.encoding === "rgba8-base64") return data;
-  const layers = await Promise.all(data.layers.map(async (layer) => ({
-    ...layer,
-    volume: await inflateGzipBase64(layer.volume),
-  })));
-  return { ...data, encoding: "rgba8-base64", layers };
-}
-
 function AuroraControls({ settings, onChange, data }: { settings: AuroraSettings; onChange: (settings: AuroraSettings) => void; data?: RadarAuroraData | null }) {
   const [clock,setClock]=useState(0);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer);},[]);
@@ -131,15 +103,18 @@ function AuroraControls({ settings, onChange, data }: { settings: AuroraSettings
 
 function CloudControls({ settings, data, error, onChange }: { settings: CloudSettings; data: RadarCloudData | null; error: string | null; onChange: (settings: CloudSettings) => void }) {
   const changeOpacity = (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, opacity: Number(event.target.value) });
-  const validTime = data ? new Date(data.validAt).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short", timeZone: "UTC" }) : null;
-  const refreshed = data ? new Date(data.fetchedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) : null;
+  const observed=data?.satellite,ready=observed?.status==="ready";
+  const validTime = ready ? new Date(observed.current.observedAt).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short", timeZone: "UTC" }) : null;
+  const total=data?data.width*data.height:1,known=ready?Math.round((1-observed.counts.unknown/total)*100):0;
   const developerMode = process.env.NODE_ENV !== "production";
-  return <div className="ba-radar-cloud-controls" aria-label="Forecast cloud-volume controls">
-    <label className="ba-radar-cloud-real-world"><span>Volumetric cloud field</span><input type="checkbox" checked={settings.realWorld} onChange={(event) => onChange({ ...settings, realWorld: event.target.checked })} /><small>GFS coverage and altitude · procedural 3D density</small></label>
+  return <div className="ba-radar-cloud-controls" aria-label="Satellite cloud controls">
+    <label className="ba-radar-cloud-real-world"><span>Live mode · satellite observations</span><input type="checkbox" checked={settings.realWorld} onChange={(event) => onChange({ ...settings, realWorld: event.target.checked })} /><small>Observed masks determine locations. Noise adds detail only inside detected clouds.</small></label>
     <label><span>Cloud opacity</span><output>{Math.round(settings.opacity * 100)}%</output><input type="range" min="0.2" max="1" step="0.05" value={settings.opacity} onChange={changeOpacity} /></label>
     <div className="ba-radar-cloud-toggles"><label><input type="checkbox" checked={settings.low} onChange={(event) => onChange({ ...settings, low: event.target.checked })} />Low</label><label><input type="checkbox" checked={settings.middle} onChange={(event) => onChange({ ...settings, middle: event.target.checked })} />Middle</label><label><input type="checkbox" checked={settings.high} onChange={(event) => onChange({ ...settings, high: event.target.checked })} />High</label><label><input type="checkbox" checked={settings.selfShadows} onChange={(event) => onChange({ ...settings, selfShadows: event.target.checked })} />Cloud shadows</label></div>
-    <p className={error ? "ba-radar-cloud-status error" : "ba-radar-cloud-status"}>{error ?? (data ? `${data.stale ? "Last good" : "NOAA GFS"} · ${data.displayResolutionDeg}° · valid ${validTime} UTC · updated ${refreshed} UTC` : "Loading the latest NOAA GFS cloud analysis…")}</p>
-    {developerMode && data ? <details className="ba-radar-cloud-debug"><summary>Developer cloud data</summary><p>{data.width} × {data.height} GFS grid · cycle {new Date(data.cycleAt).toISOString()} · fields {data.fields.length}</p><p>{data.layers.map((layer) => `${layer.label}: ${layer.basePressureHpa}–${layer.topPressureHpa} hPa`).join(" · ")}</p><p>Heights are pressure-layer geopotential heights from GFS, used as an MSL approximation. Individual cloud forms are inferred; height is never visually exaggerated.</p><label className="ba-radar-cloud-quality"><span>Debug render</span><select value={settings.debugMode} onChange={(event) => onChange({ ...settings, debugMode: event.target.value as CloudDebugMode })}><option value="lit">Lit volume</option><option value="coverage">GFS coverage</option><option value="density">Column density</option><option value="height">Column height</option><option value="lighting">Solar illumination</option><option value="mesh">Mesh edges</option></select></label></details> : null}
+    <p className={error||!ready ? "ba-radar-cloud-status error" : "ba-radar-cloud-status"}>{error ?? (ready ? `GOES observations · ${validTime} UTC · ${known}% of globe classified · ${100-known}% unknown` : observed?.reason??"Loading satellite observations — coverage is unknown until available.")}</p>
+    <p className="ba-radar-layer-note">Confident clear = zero cloud opacity. Outside usable GOES coverage, bad-quality pixels and missing/stale data are unknown, not clear. No generated fill.</p>
+    {ready?<p className="ba-radar-layer-note">{Math.round(observed.counts.reconstructed/Math.max(1,observed.counts.cloudy)*100)}% of detected cloud cells have usable optical depth AND top-height retrievals for volume reconstruction. Others remain “cloud detected · volume unknown” with no invented opacity/height. Only base/thickness are estimates. Filters classify columns, not hidden overlapping layers. Motion: consecutive scans{observed.winds?" + GFS wind assistance":"; winds unavailable"}. Developing cover is inferred after movement.</p>:null}
+    {developerMode && ready && data ? <details className="ba-radar-cloud-debug"><summary>Developer cloud data</summary><p>{data.width} × {data.height} · {data.stepDeg}° resampled grid. Native ACMF/CODF/ACHAF resolutions differ.</p>{observed.current.sources.map(source=><p key={source.satellite}>{source.satellite} · {source.scanStartAt}–{source.scanEndAt}<br/><a href={source.mask}>Mask</a> · <a href={source.opticalDepth}>Optical depth</a> · <a href={source.topHeight}>Top height</a></p>)}<label className="ba-radar-cloud-quality"><span>Debug render</span><select value={settings.debugMode} onChange={(event) => onChange({ ...settings, debugMode: event.target.value as CloudDebugMode })}><option value="lit">Lit volume</option><option value="coverage">Observed mask</option><option value="density">Column density</option><option value="height">Column height</option><option value="lighting">Solar illumination</option><option value="mesh">Mesh edges</option></select></label></details> : null}
   </div>;
 }
 
@@ -399,12 +374,8 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [auroraSettings, setAuroraSettings] = useState<AuroraSettings>(createGlobeAuroraSettings);
   const [globeVatsim, setGlobeVatsim] = useState(false);
   const [globeDayNight, setGlobeDayNight] = useState(true);
-  // Observed satellite imagery stays separate from the model. The GFS volume
-  // is the default atmospheric treatment on the 3D globe, but is always
-  // labelled as forecast analysis rather than observed cloud formation.
-  // The GFS-driven atmosphere loads only after a pilot opens the 3D globe, so
-  // The operational globe deliberately uses one coherent cloud system:
-  // forecast data for placement and a 3D density field for presentation.
+  // Live cloud locations are satellite-observed only. Coverage has no GFS or
+  // synthetic fallback; missing observations remain explicitly unknown.
   const [globeClouds, setGlobeClouds] = useState(true);
   const [cloudSettings, setCloudSettings] = useState<CloudSettings>(createGlobeCloudSettings);
   const [windLayer, setWindLayer] = useState<RadarWindLayerId>("surface");
@@ -605,15 +576,15 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       try {
         if (mounted) setCloudError(null);
         const response = await fetch("/api/radar/clouds");
-        if (!response.ok) throw new Error("The GFS cloud model is currently unavailable.");
+        if (!response.ok) throw new Error("Satellite observations are currently unavailable.");
         const payload = await unpackCloudData(await response.json() as RadarCloudData);
         if (mounted) setCloudData(payload);
       } catch {
-        if (mounted) setCloudError("NOAA GFS is temporarily unavailable. The last verified model, if any, remains in place.");
+        if (mounted) {setCloudData(null);setCloudError("Satellite observations unavailable — cloud coverage is unknown, not clear. No generated fill.");}
       }
     };
     void refresh();
-    const interval = window.setInterval(refresh, 25 * 60_000);
+    const interval = window.setInterval(refresh, 60_000);
     return () => { mounted = false; window.clearInterval(interval); };
   }, [cloudSettings.realWorld, globeClouds, viewMode]);
 
@@ -691,7 +662,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     {globeClouds ? <details className="ba-radar-globe-settings"><summary>Cloud settings</summary><CloudControls settings={cloudSettings} data={cloudData} error={cloudError} onChange={setCloudSettings}/></details> : null}
     <button type="button" className={layers.seasonal ? "active" : ""} onClick={() => toggleLayer("seasonal")} aria-pressed={layers.seasonal}>NOAA aurora forecast</button>
     {layers.seasonal ? <details className="ba-radar-globe-settings"><summary>Aurora settings{auroraSettings.kpOverrideEnabled ? " · SIMULATION" : ""}</summary><AuroraControls data={aurora} settings={auroraSettings} onChange={setAuroraSettings}/></details> : null}
-    <p className="ba-radar-layer-note">Auto adapts cloud resolution, lighting and terrain LOD within memory budgets. FPS caps are targets, not guarantees. GFS clouds are procedural forecast visualisation, not satellite observation.</p>
+    <p className="ba-radar-layer-note">Live clouds: satellite observations determine locations. GFS assists movement only; it never adds cloud cover. Clear stays clear; missing coverage is unknown. Auto adapts rendering within memory budgets.</p>
   </>;
 
   useEffect(() => {
