@@ -21,7 +21,7 @@ export type CloudSettings = {
 
 export const DEFAULT_CLOUD_SETTINGS: CloudSettings = {
   realWorld: true,
-  opacity: 0.72,
+  opacity: 0.48,
   quality: "auto",
   low: true,
   middle: true,
@@ -31,7 +31,7 @@ export const DEFAULT_CLOUD_SETTINGS: CloudSettings = {
   debugMode: "lit",
 };
 
-type QualityProfile = { stepDegrees: number; slices: number; repaintMs: number };
+type QualityProfile = { stepDegrees: number; raymarchSteps: number; repaintMs: number };
 type VolumeTexture = { volume: WebGLTexture };
 type VolumeMesh = { vertices: Float32Array; verticesPerSlice: number; slices: number };
 type ProgramBundle = {
@@ -51,7 +51,7 @@ type ProgramBundle = {
   selfShadow: WebGLUniformLocation | null;
   enhancedPresentation: WebGLUniformLocation | null;
   layerKind: WebGLUniformLocation | null;
-  sliceCount: WebGLUniformLocation | null;
+  raymarchSteps: WebGLUniformLocation | null;
   debugMode: WebGLUniformLocation | null;
   meshStep: WebGLUniformLocation | null;
   solarTime: WebGLUniformLocation | null;
@@ -63,13 +63,13 @@ const MAX_MERCATOR_LATITUDE = 85;
 const HEIGHT_SCALE_METRES = 100;
 
 const QUALITY: Record<Exclude<CloudQuality, "auto">, QualityProfile> = {
-  // Ordered slices are samples through a bounded cloud volume, not duplicate
-  // surface decals. Desktop profiles use enough separation for parallax while
-  // mobile keeps its small, stable fallback.
-  low: { stepDegrees: 10, slices: 3, repaintMs: 900 },
-  medium: { stepDegrees: 3, slices: 5, repaintMs: 900 },
-  high: { stepDegrees: 1.25, slices: 12, repaintMs: 900 },
-  ultra: { stepDegrees: 0.75, slices: 16, repaintMs: 900 },
+  // Each geographical cell is drawn once. The fragment shader marches through
+  // its full vertical cloud column, preventing the forecast from appearing as
+  // a visible stack of semi-transparent sheets.
+  low: { stepDegrees: 10, raymarchSteps: 4, repaintMs: 900 },
+  medium: { stepDegrees: 3, raymarchSteps: 6, repaintMs: 900 },
+  high: { stepDegrees: 1.25, raymarchSteps: 10, repaintMs: 900 },
+  ultra: { stepDegrees: 0.75, raymarchSteps: 14, repaintMs: 900 },
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -94,7 +94,7 @@ function buildVolumeMesh(profile: QualityProfile): VolumeMesh {
   const columns = Math.ceil(360 / profile.stepDegrees);
   const rows = Math.ceil((MAX_MERCATOR_LATITUDE * 2) / profile.stepDegrees);
   const verticesPerSlice = columns * rows * 6;
-  const vertices = new Float32Array(verticesPerSlice * profile.slices * 3);
+  const vertices = new Float32Array(verticesPerSlice * 3);
   let offset = 0;
   const appendShell = (leftLongitude: number, topLatitude: number, rightLongitude: number, bottomLatitude: number, slice: number) => {
     const left = (leftLongitude + 180) / 360;
@@ -111,22 +111,18 @@ function buildVolumeMesh(profile: QualityProfile): VolumeMesh {
     vertices[offset++] = right; vertices[offset++] = bottom; vertices[offset++] = slice;
     vertices[offset++] = left; vertices[offset++] = bottom; vertices[offset++] = slice;
   };
-  // Lay each shell out contiguously. Rendering outside-in then integrates
-  // the optically-thin volume in radial order instead of interleaving every
-  // cell's low and high samples (which caused unstable transparent fog).
-  for (let slice = 0; slice < profile.slices; slice += 1) {
-    const sliceCentre = (slice + 0.5) / profile.slices;
-    for (let row = 0; row < rows; row += 1) {
-      const topLatitude = MAX_MERCATOR_LATITUDE - row * profile.stepDegrees;
-      const bottomLatitude = Math.max(-MAX_MERCATOR_LATITUDE, topLatitude - profile.stepDegrees);
-      for (let column = 0; column < columns; column += 1) {
-        const leftLongitude = -180 + column * profile.stepDegrees;
-        const rightLongitude = Math.min(180, leftLongitude + profile.stepDegrees);
-        appendShell(leftLongitude, topLatitude, rightLongitude, bottomLatitude, sliceCentre);
-      }
+  // This is deliberately a single shell at the centre of each model column.
+  // The fragment shader integrates density above and below it in one pass.
+  for (let row = 0; row < rows; row += 1) {
+    const topLatitude = MAX_MERCATOR_LATITUDE - row * profile.stepDegrees;
+    const bottomLatitude = Math.max(-MAX_MERCATOR_LATITUDE, topLatitude - profile.stepDegrees);
+    for (let column = 0; column < columns; column += 1) {
+      const leftLongitude = -180 + column * profile.stepDegrees;
+      const rightLongitude = Math.min(180, leftLongitude + profile.stepDegrees);
+      appendShell(leftLongitude, topLatitude, rightLongitude, bottomLatitude, 0.5);
     }
   }
-  return { vertices, verticesPerSlice, slices: profile.slices };
+  return { vertices, verticesPerSlice, slices: 1 };
 }
 
 function decodeRgba(value: string, expectedBytes: number) {
@@ -155,27 +151,21 @@ function createTexture(gl: WebGL2RenderingContext, width: number, height: number
   if (!texture) throw new Error("Unable to allocate GFS cloud texture.");
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  // Mip filtering stops the GFS texture from aliasing into visible
-  // stripes and blocks when a globe tile is viewed at an oblique distance.
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  // Preserve the native GFS cells for the raymarcher's weather mask. Mipmaps
+  // made the mask look like a low-resolution painted layer at full-globe zoom.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, values);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  const anisotropic = gl.getExtension("EXT_texture_filter_anisotropic");
-  if (anisotropic) {
-    const maximum = gl.getParameter(anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number;
-    gl.texParameterf(gl.TEXTURE_2D, anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(4, maximum));
-  }
   return texture;
 }
 
 /**
- * Model-driven cloud renderer. NOAA GFS controls coverage, vertical extent,
- * humidity and condensate. It integrates the real model columns as ordered,
- * optically-thin shells; it never generates fake cloud coverage or drifts the
- * model across the globe between data refreshes.
+ * Model-driven cloud renderer. NOAA GFS supplies the geographical weather
+ * mask and model cloud heights; a bounded spherical-shell raymarch creates
+ * sub-grid cloud density, erosion and light inside those real columns. It
+ * never creates clouds outside the forecast mask or drifts it between updates.
  */
 export class BaRadarCloudLayer implements CustomLayerInterface {
   readonly id = "ba-radar-globe-gfs-cloud-volumes";
@@ -278,7 +268,7 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     gl.uniform1f(bundle.opacity, clamp(this.settings.opacity, 0, 1));
     gl.uniform1f(bundle.selfShadow, this.settings.selfShadows ? 1 : 0);
     gl.uniform1f(bundle.enhancedPresentation, this.settings.enhancedPresentation ? 1 : 0);
-    gl.uniform1f(bundle.sliceCount, Math.max(1, this.meshSlices));
+    gl.uniform1f(bundle.raymarchSteps, QUALITY[this.resolvedQuality].raymarchSteps);
     gl.uniform1i(bundle.debugMode, this.settings.debugMode === "coverage" ? 1 : this.settings.debugMode === "density" ? 2 : this.settings.debugMode === "height" ? 3 : this.settings.debugMode === "lighting" ? 4 : this.settings.debugMode === "mesh" ? 5 : 0);
     gl.uniform1f(bundle.meshStep, QUALITY[this.resolvedQuality].stepDegrees);
     gl.uniform1f(bundle.solarTime, now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
@@ -320,11 +310,7 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
       gl.bindTexture(gl.TEXTURE_2D, textures.volume);
       gl.uniform1i(bundle.geometry, 1);
       gl.uniform1f(bundle.layerKind, layer.id === "low" ? 0 : layer.id === "middle" ? 1 : 2);
-      // The camera is outside the atmosphere, so descending radial shells are
-      // a stable back-to-front approximation for each model cloud column.
-      for (let slice = this.meshSlices - 1; slice >= 0; slice -= 1) {
-        gl.drawArrays(gl.TRIANGLES, slice * this.verticesPerSlice, this.verticesPerSlice);
-      }
+      gl.drawArrays(gl.TRIANGLES, 0, this.verticesPerSlice);
     }
     gl.depthMask(true);
   }
@@ -422,7 +408,7 @@ uniform sampler2D u_weatherHigh;
 uniform float u_opacity;
 uniform float u_selfShadow;
 uniform float u_layerKind;
-uniform float u_sliceCount;
+uniform float u_raymarchSteps;
 uniform int u_debugMode;
 uniform float u_meshStep;
 uniform float u_solarTime;
@@ -470,6 +456,30 @@ float cloudFbm(vec3 point) {
   return total / normaliser;
 }
 
+// Worley distance gives coherent rounded cloud bodies. It is evaluated once
+// per pixel as the large-scale puff mask; the cheaper 3D noise below evolves
+// it through the raymarched column.
+float cloudHash2(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float cloudWorley(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  float nearest = 2.0;
+  for (int row = -1; row <= 1; row++) {
+    for (int column = -1; column <= 1; column++) {
+      vec2 offset = vec2(float(column), float(row));
+      vec2 feature = vec2(
+        cloudHash2(cell + offset),
+        cloudHash2(cell + offset + vec2(37.0, 17.0))
+      );
+      nearest = min(nearest, length(offset + feature - local));
+    }
+  }
+  return clamp(nearest, 0.0, 1.0);
+}
+
 void main() {
   vec4 weather = texture(u_weather, v_geo);
   float coverage = weather.r;
@@ -479,44 +489,48 @@ void main() {
   float modelCoverage = clamp(coverage * 0.90, 0.0, 1.0);
 
   vec2 alignedGeo = vec2(v_geo.x * 1.35, v_geo.y);
-  float alongScale = u_layerKind < 0.5 ? 126.0 : (u_layerKind < 1.5 ? 96.0 : 64.0);
-  float acrossScale = u_layerKind < 0.5 ? 84.0 : (u_layerKind < 1.5 ? 61.0 : 35.0);
-  // Adjacent ordered samples must stay strongly correlated through height.
-  // Larger Z frequencies made each shell read as a separate stamped plane;
-  // this slow vertical evolution instead produces coherent columns, gaps, and
-  // a continuous cloud body as the camera changes angle.
-  float verticalScale = u_layerKind < 0.5 ? 0.72 : (u_layerKind < 1.5 ? 0.48 : 0.32);
-  vec3 volumeCoordinate = vec3(alignedGeo.x * alongScale, alignedGeo.y * acrossScale, v_densityHeight * verticalScale);
-  float broadForm = cloudNoise(volumeCoordinate * 0.30 + vec3(19.0, 7.0, u_layerKind * 13.0));
-  float fineForm = cloudFbm(volumeCoordinate * 1.62 + vec3(3.0, 29.0, 41.0));
-  // Billow noise produces rounded cumulus-like erosion instead of a flat
-  // cellular decal. It is detail within a real column, not a synthetic cloud.
-  float billowForm = 1.0 - abs(cloudNoise(volumeCoordinate * 3.85 + vec3(61.0, 11.0, 5.0)) * 2.0 - 1.0);
-  float edgeErosion = cloudNoise(volumeCoordinate * 8.6 + vec3(43.0, 73.0, 29.0));
-  float structure = mix(mix(broadForm, fineForm, u_layerKind < 1.5 ? 0.42 : 0.30), billowForm, u_layerKind < 1.5 ? 0.30 : 0.18);
-  structure = mix(structure, edgeErosion, u_layerKind < 1.5 ? 0.16 : 0.08);
-  // Coverage is a boundary condition, not a blanket opacity. The threshold
-  // makes lower-coverage GFS cells resolve as gaps and individual banks;
-  // dense model systems remain full cloud systems without looking blurred.
-  float coverageThreshold = mix(0.86, 0.16, smoothstep(0.08, 0.96, modelCoverage));
-  float density = smoothstep(coverageThreshold - 0.105, coverageThreshold + 0.105, structure);
-  density *= smoothstep(0.07, 0.92, modelCoverage);
+  float alongScale = u_layerKind < 0.5 ? 47.0 : (u_layerKind < 1.5 ? 39.0 : 27.0);
+  float acrossScale = u_layerKind < 0.5 ? 31.0 : (u_layerKind < 1.5 ? 24.0 : 15.0);
+  vec2 cloudPlane = vec2(alignedGeo.x * alongScale, alignedGeo.y * acrossScale);
+  float cellBody = 1.0 - cloudWorley(cloudPlane + vec2(11.0, 23.0) * u_layerKind);
+  float macroForm = cloudFbm(vec3(cloudPlane * 0.56, u_layerKind * 7.0));
+  float fieldShape = mix(macroForm, cellBody, u_layerKind < 1.5 ? 0.68 : 0.43);
+  // Even an overcast GFS grid box is a forecast of coverage, not a flat
+  // painted pixel. Keep enough holes and broken edges for actual cloud bodies
+  // to read at globe scale; lower coverage becomes scattered banks.
+  float coverageThreshold = mix(0.88, u_layerKind < 1.5 ? 0.53 : 0.47, smoothstep(0.06, 0.98, modelCoverage));
+  float fieldMask = smoothstep(coverageThreshold - 0.075, coverageThreshold + 0.075, fieldShape);
+  fieldMask *= smoothstep(0.10, 0.94, modelCoverage);
+  if (fieldMask < 0.012) discard;
 
-  float lowerFalloff = smoothstep(0.015, 0.16, v_densityHeight);
-  float upperFalloff = 1.0 - smoothstep(0.76, 1.0, v_densityHeight);
-  float verticalCore = mix(0.52, 1.0, pow(sin(CLOUD_PI * clamp(v_densityHeight, 0.0, 1.0)), 0.72));
-  float layerBody = u_layerKind < 0.5 ? 1.0 : (u_layerKind < 1.5 ? 0.84 : 0.67);
-  density *= lowerFalloff * upperFalloff * verticalCore * layerBody;
-
-  // Co-located low, middle, and high GFS coverage identifies the limited
-  // parts of the model suitable for a deeper convective presentation. It is
-  // intentionally an enhancement of an existing model storm column, never a
-  // new cloud or a claim that GFS resolves an observed individual thunderhead.
   float stormCoverage = min(texture(u_weatherLow, v_geo).r, min(texture(u_weatherMiddle, v_geo).r, texture(u_weatherHigh, v_geo).r));
-  float stormColumn = smoothstep(0.56, 0.90, stormCoverage);
-  float towerCore = smoothstep(0.38, 0.86, broadForm) * stormColumn;
-  density *= 1.0 + towerCore * (u_layerKind < 1.5 ? 0.34 : 0.20);
-  if (density < 0.018) discard;
+  float stormColumn = smoothstep(0.68, 0.95, stormCoverage);
+  vec3 accumulatedColour = vec3(0.0);
+  float transmittance = 1.0;
+  float marchCount = max(1.0, u_raymarchSteps);
+  for (int march = 0; march < 14; march++) {
+    if (float(march) >= marchCount) break;
+    float height = (float(march) + 0.5) / marchCount;
+    float lowerFalloff = smoothstep(0.02, 0.18, height);
+    float upperFalloff = 1.0 - smoothstep(0.70, 1.0, height);
+    float verticalCore = pow(sin(CLOUD_PI * height), u_layerKind < 0.5 ? 0.82 : 1.18);
+    vec3 volumeCoordinate = vec3(cloudPlane, height * (u_layerKind < 0.5 ? 1.4 : 0.92));
+    float billow = cloudNoise(volumeCoordinate * 1.18 + vec3(17.0, 41.0, 9.0));
+    float erosion = cloudNoise(volumeCoordinate * 4.4 + vec3(71.0, 13.0, 31.0));
+    float internalShape = mix(billow, erosion, u_layerKind < 1.5 ? 0.34 : 0.58);
+    float stepDensity = fieldMask * smoothstep(0.35, 0.76, internalShape) * lowerFalloff * upperFalloff * verticalCore;
+    stepDensity *= u_layerKind < 0.5 ? 1.0 : (u_layerKind < 1.5 ? 0.74 : 0.42);
+    stepDensity *= 1.0 + stormColumn * (u_layerKind < 1.5 ? 0.22 : 0.10);
+    if (stepDensity < 0.006) continue;
+    float localLight = mix(0.48, 1.06, billow) * mix(0.72, 1.0, height);
+    vec3 marchColour = u_layerKind < 0.5 ? vec3(0.72, 0.75, 0.79) : (u_layerKind < 1.5 ? vec3(0.79, 0.81, 0.84) : vec3(0.87, 0.90, 0.94));
+    float stepOpticalDepth = stepDensity * (u_layerKind < 0.5 ? 1.14 : (u_layerKind < 1.5 ? 0.78 : 0.42)) * u_opacity / marchCount;
+    float stepAlpha = 1.0 - exp(-stepOpticalDepth * 3.4);
+    accumulatedColour += transmittance * marchColour * localLight * stepAlpha;
+    transmittance *= 1.0 - stepAlpha;
+  }
+  float density = 1.0 - transmittance;
+  if (density < 0.012) discard;
 
   float latitude = (0.5 - v_geo.y) * CLOUD_PI;
   float longitude = (v_geo.x - 0.5) * CLOUD_TAU;
@@ -525,22 +539,19 @@ void main() {
     + cos(latitude) * cos(u_solarDeclination) * cos(longitude - solarLongitude);
   float daylight = smoothstep(-0.13, 0.12, solarElevation);
   float twilight = smoothstep(-0.23, 0.03, solarElevation) * (1.0 - smoothstep(0.03, 0.24, solarElevation));
-  float thickness = clamp(density * (0.38 + coverage * 0.55), 0.0, 1.0);
+  float thickness = clamp(density * (0.62 + coverage * 0.38), 0.0, 1.0);
   float selfShadow = mix(1.0, 0.54 + 0.46 * exp(-thickness * 1.15), u_selfShadow);
   float silver = pow(max(0.0, solarElevation), 0.35) * (0.16 + (1.0 - thickness) * 0.84) * 0.38;
-  float internalLight = mix(0.78, 1.10, structure) * (0.86 + 0.14 * towerCore);
   vec3 lowCloud = vec3(0.70, 0.73, 0.76);
   vec3 middleCloud = vec3(0.78, 0.79, 0.81);
   vec3 highCloud = vec3(0.84, 0.87, 0.91);
   vec3 baseColour = u_layerKind < 0.5 ? lowCloud : (u_layerKind < 1.5 ? middleCloud : highCloud);
-  vec3 dayColour = baseColour * (0.45 + daylight * 0.65) * selfShadow * internalLight + vec3(0.25) * silver;
+  vec3 dayColour = accumulatedColour * (0.45 + daylight * 0.65) * selfShadow + vec3(0.25) * silver;
   vec3 duskColour = vec3(0.38, 0.26, 0.19) * twilight * (0.28 + (1.0 - thickness) * 0.44);
   vec3 nightColour = baseColour * 0.075;
   vec3 colour = mix(nightColour, dayColour + duskColour, daylight + twilight * 0.58);
-  float layerOpticalDepth = u_layerKind < 0.5 ? 0.46 : (u_layerKind < 1.5 ? 0.31 : 0.20);
   float atmosphericFade = 1.0 - smoothstep(15000.0, 24000.0, v_layerHeight);
-  float opticalDepth = density * layerOpticalDepth * u_opacity * (0.52 + daylight * 0.48) * atmosphericFade;
-  float alpha = 1.0 - exp(-opticalDepth / max(1.0, u_sliceCount));
+  float alpha = density * (0.58 + daylight * 0.42) * atmosphericFade;
   if (u_debugMode == 1) {
     fragColor = vec4(vec3(coverage), max(alpha, 0.72));
     return;
@@ -598,7 +609,7 @@ void main() {
       selfShadow: gl.getUniformLocation(program, "u_selfShadow"),
       enhancedPresentation: gl.getUniformLocation(program, "u_enhancedPresentation"),
       layerKind: gl.getUniformLocation(program, "u_layerKind"),
-      sliceCount: gl.getUniformLocation(program, "u_sliceCount"),
+      raymarchSteps: gl.getUniformLocation(program, "u_raymarchSteps"),
       debugMode: gl.getUniformLocation(program, "u_debugMode"),
       meshStep: gl.getUniformLocation(program, "u_meshStep"),
       solarTime: gl.getUniformLocation(program, "u_solarTime"),

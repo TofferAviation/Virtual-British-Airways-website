@@ -78,7 +78,7 @@ const initialAuroraSettings: AuroraSettings = { activity: 1.1, animationSpeed: 1
 // The globe is the home for the atmospheric view.  The source remains the
 // latest available GFS analysis (not a satellite observation), while the
 // modest relief makes the model's measured cloud columns readable in 3D.
-const initialCloudSettings: CloudSettings = { realWorld: true, opacity: 0.58, quality: "auto", low: true, middle: true, high: true, selfShadows: true, enhancedPresentation: true, debugMode: "lit" };
+const initialCloudSettings: CloudSettings = { realWorld: true, opacity: 0.48, quality: "auto", low: true, middle: true, high: true, selfShadows: true, enhancedPresentation: true, debugMode: "lit" };
 
 function bytesFromBase64(value: string) {
   const binary = window.atob(value);
