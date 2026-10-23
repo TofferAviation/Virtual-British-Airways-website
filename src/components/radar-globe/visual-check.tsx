@@ -4,6 +4,9 @@ import { BaRadarThreeGlobe } from "@/components/BaRadarThreeGlobe";
 import type { RadarCloudData, RadarAuroraData } from "@/lib/radar-external";
 import type { GlobeQualityRequest } from "@/lib/radar-globe-quality";
 import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
+import { LocalReferenceVideo } from "./reference-video";
+import { DEFAULT_AURORA_SETTINGS } from "@/lib/radar-aurora-settings";
+import { AuroraCreativeControls } from "@/components/AuroraCreativeControls";
 
 const views = {
   day: {
@@ -93,6 +96,7 @@ export function GlobeVisualCheck() {
     [hemisphere,setHemisphere]=useState<AuroraSettings["hemisphere"]>("both"),
     [auroraCase,setAuroraCase]=useState("live"),
     [paused,setPaused]=useState(false),
+    [auroraAppearance,setAuroraAppearance]=useState<AuroraSettings>(DEFAULT_AURORA_SETTINGS),
     [recording,setRecording]=useState(false),
     [captureSeconds,setCaptureSeconds]=useState(6),
     [captureUrl,setCaptureUrl]=useState(""),
@@ -188,9 +192,8 @@ export function GlobeVisualCheck() {
           auroraEnabled
           aurora={displayAurora}
           auroraSettings={{
-            activity: 1,
-            animationSpeed: paused?0:1,
-            brightness: 1,
+            ...auroraAppearance,
+            animationSpeed: paused?0:auroraAppearance.animationSpeed,
             quality: "high",
             enhancedPresentation: false,
             hemisphere,debug:auroraDebug,
@@ -248,9 +251,14 @@ export function GlobeVisualCheck() {
         <button onClick={record} disabled={recording}>{recording?"Recording…":`Record ${captureSeconds} s`}</button>
         {captureUrl?<a href={captureUrl} download={`globe-${view}-${auroraCase}.webm`} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
-          {auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
+          {auroraAppearance.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
         </span>
       </nav>
+      <LocalReferenceVideo />
+      <details style={{position:"absolute",left:12,top:152,zIndex:4,width:280,maxHeight:"calc(100% - 250px)",overflowY:"auto",background:"#0a1929ed",border:"1px solid #35516c",borderRadius:5,padding:10}}>
+        <summary>Aurora motion &amp; screenshot colours</summary>
+        <div style={{paddingTop:12}}><AuroraCreativeControls settings={auroraAppearance} onChange={setAuroraAppearance}/></div>
+      </details>
       <output
         style={{
           position: "absolute",

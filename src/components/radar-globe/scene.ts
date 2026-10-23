@@ -7,6 +7,7 @@ import type {
 import type { PublicRadarFlight } from "@/lib/radar-live";
 import type { CloudSettings } from "@/components/BaRadarCloudLayer";
 import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
+import { auroraAppearance, advanceAuroraTime } from "@/lib/radar-aurora-settings";
 import {
   WGS84_A_KM,
   WGS84_B_KM,
@@ -305,7 +306,8 @@ export function createGlobeScene(
   const auroraMaterial = material(auroraVertex, auroraFragment, {
     uBrightness: { value: 1 },
     uActivity: { value: 1 },
-    uSpeed: { value: 1 },
+    uVortex: { value: .65 },
+    uColourGains: { value: new THREE.Vector4(1,1,1,1) },
     uAuroraTime:{value:0},
     uAuroraPrevious:{value:fallback},uAuroraCurrent:{value:fallback},uAuroraBlend:{value:1},uAuroraDebug:{value:0},uHemisphere:{value:0},
   });
@@ -554,7 +556,9 @@ export function createGlobeScene(
     shared.uShadowSamples.value = profile.shadowSamples;
     auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness*(state.auroraSettings.enhancedPresentation?1.8:1);
     auroraMaterial.uniforms.uActivity.value = state.auroraSettings.activity;
-    auroraMaterial.uniforms.uSpeed.value = state.auroraSettings.animationSpeed;
+    const appearance=auroraAppearance(state.auroraSettings);
+    auroraMaterial.uniforms.uVortex.value = appearance.vortex;
+    auroraMaterial.uniforms.uColourGains.value.set(...appearance.gains);
   };
   const remember = () =>
     read().onCameraChange({
@@ -833,7 +837,7 @@ export function createGlobeScene(
     camera.up.set(Math.sin(yaw) * Math.cos(tilt), Math.cos(yaw) * Math.cos(tilt), Math.sin(tilt));
     camera.lookAt(Math.sin(yaw) * Math.sin(tilt) * 1000, Math.cos(yaw) * Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
     sync();
-    auroraMaterial.uniforms.uAuroraTime.value+=deltaSeconds*read().auroraSettings.animationSpeed;
+    auroraMaterial.uniforms.uAuroraTime.value=advanceAuroraTime(auroraMaterial.uniforms.uAuroraTime.value,deltaSeconds,read().auroraSettings.animationSpeed);
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
       shared.uSun.value.set(
@@ -954,6 +958,11 @@ export function createGlobeScene(
         auroraTransition:Math.round(auroraMaterial.uniforms.uAuroraBlend.value*100)/100,
         auroraMeshes:curtains.children.length,
         auroraArcs:curtains.children.reduce((n,mesh)=>n+(mesh.userData.arcs?.length??0),0),
+        auroraTime:Math.round(auroraMaterial.uniforms.uAuroraTime.value*1000)/1000,
+        auroraSpeed:auroraAppearance(read().auroraSettings).speed,
+        auroraVortex:auroraMaterial.uniforms.uVortex.value,
+        auroraPhotoOverride:Boolean(read().auroraSettings.photoMode),
+        auroraColourGains:auroraMaterial.uniforms.uColourGains.value.toArray(),
         sun: shared.uSun.value.toArray(),
         cameraKm: Math.round(surfaceRadius+height),
         altitudeKm: Math.round(height * 1000) / 1000,

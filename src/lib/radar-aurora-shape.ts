@@ -36,6 +36,23 @@ export function auroraFold(s: number, seed: number, time: number) {
     east: Math.cos(wave + curl * 1.4) * 28 + (auroraNoise(s * .003 - time * .025, seed + 8) - .5) * 40,
   };
 }
+/** Bounded, smoothly blended altitude-level curls in km. These are an artistic
+ * deformation about the WMM-aligned ray, not a fluid/plasma simulation. Upper
+ * and lower structures counter-turn; no whole-oval spin or hard layer seams. */
+export function auroraVortex(s: number, h: number, seed: number, time: number, strength: number) {
+  const step=(a:number,b:number,x:number)=>{const q=Math.max(0,Math.min(1,(x-a)/(b-a)));return q*q*(3-2*q);};
+  const upper=step(220,340,h),lower=1-step(155,240,h),middle=1-lower;
+  const hand=auroraSeed(seed+81)>.5?1:-1;
+  const twist=(h-110)*.012*hand;
+  const a=s*.007+seed-time*.07+twist;
+  const b=s*.011+seed*1.7+time*.045-twist*.7;
+  const c=s*.005+seed*2.3-time*.025+twist*.5;
+  const radius=(6+10*auroraNoise(s*.003+seed,time*.02))*step(100,150,h)*(1-step(380,450,h))*Math.max(0,Math.min(1.5,strength));
+  return {
+    north:((Math.cos(a)*lower+Math.cos(b)*middle)*(1-upper)+Math.cos(c)*upper)*radius,
+    east:((Math.sin(a)*lower+Math.sin(b)*middle)*(1-upper)+Math.sin(c)*upper)*radius*.7,
+  };
+}
 /** Independent, overlapping ray packets. Every new event is born/dies at zero
  * amplitude, so changing its seed/height cannot cause a one-frame flash. */
 export function auroraRayState(s: number, seed: number, time: number) {
@@ -75,6 +92,13 @@ vec2 auroraFold(float s,float seed,float time){
   float curl=sin(wave+(broad-.5)*5.0);
   return vec2((broad-.5)*110.0+curl*(16.0+26.0*auroraNoise(vec2(s*.006+seed,time*.07))),
     cos(wave+curl*1.4)*28.0+(auroraNoise(vec2(s*.003-time*.025,seed+8.0))-.5)*40.0);
+}
+vec2 auroraVortex(float s,float h,float seed,float time,float strength){
+  float upper=smoothstep(220.0,340.0,h),lower=1.0-smoothstep(155.0,240.0,h),middle=1.0-lower;
+  float hand=auroraHash(seed+81.0)>.5?1.0:-1.0,twist=(h-110.0)*.012*hand;
+  float a=s*.007+seed-time*.07+twist,b=s*.011+seed*1.7+time*.045-twist*.7,c=s*.005+seed*2.3-time*.025+twist*.5;
+  float radius=(6.0+10.0*auroraNoise(vec2(s*.003+seed,time*.02)))*smoothstep(100.0,150.0,h)*(1.0-smoothstep(380.0,450.0,h))*clamp(strength,0.0,1.5);
+  return vec2(mix(cos(a)*lower+cos(b)*middle,cos(c),upper),mix(sin(a)*lower+sin(b)*middle,sin(c),upper)*.7)*radius;
 }
 float auroraTaper(float u){return smoothstep(0.0,.16,u)*(1.0-smoothstep(.78,1.0,u));}
 `;

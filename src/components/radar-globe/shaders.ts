@@ -353,7 +353,7 @@ void main(){
 // in both horizontal directions. No global rings or camera-dependent pattern.
 export const auroraVertex = `
 in vec3 aNormal;in vec3 aField;in vec4 aArc;in vec3 aNextPosition;in vec3 aNextNormal;
-uniform float uAuroraTime;uniform float uSpeed;uniform float uAuroraBlend;
+uniform float uAuroraTime;uniform float uVortex;uniform float uAuroraBlend;
 #include <common>
 #include <logdepthbuf_pars_vertex>
 out vec3 vPosition;out vec3 vNormal;out vec3 vField;out vec4 vArc;
@@ -361,16 +361,17 @@ ${auroraShapeGLSL}
 void main(){
   float s=aField.x,seed=aField.z;
   vec2 fold=auroraFold(s,seed,uAuroraTime);
+  vec2 vortex=auroraVortex(s,aField.y,seed,uAuroraTime,uVortex);
   vec3 n=normalize(mix(aNormal,aNextNormal,uAuroraBlend));
   vec3 east=normalize(cross(vec3(0.0,1.0,0.0),n));vec3 north=normalize(cross(n,east));
   vec3 blended=mix(position,aNextPosition,uAuroraBlend),radii=vec3(6378.137,6356.752314245,6378.137);
   // Slight upper-curtain shear, while retaining the dominant WMM inclination.
   float shear=(aField.y-120.0)*.025*auroraNoise(vec2(s*.004+seed,uAuroraTime*.04));
-  blended+=north*(fold.x+shear)+east*fold.y;
+  blended+=north*(fold.x+shear+vortex.x)+east*(fold.y+vortex.y);
   vec3 heightNormal=normalize(blended/(radii*radii)),foot=radii*radii*heightNormal/length(radii*heightNormal);
   vPosition=blended+heightNormal*(aField.y-dot(blended-foot,heightNormal));
   // Sample NOAA at the displaced footprint, not a fixed source latitude.
-  vNormal=normalize(n+(north*fold.x+east*fold.y)/6371.0);vField=aField;vArc=aArc;
+  vNormal=normalize(n+(north*(fold.x+vortex.x)+east*(fold.y+vortex.y))/6371.0);vField=aField;vArc=aArc;
   gl_Position=projectionMatrix*modelViewMatrix*vec4(vPosition,1.0);
   #include <logdepthbuf_vertex>
 }
@@ -378,7 +379,7 @@ void main(){
 export const auroraFragment = `
 precision highp float;
 in vec3 vPosition;in vec3 vNormal;in vec3 vField;in vec4 vArc;out vec4 fragColor;
-uniform float uBrightness;uniform float uActivity;uniform float uSpeed;uniform float uAuroraTime;
+uniform float uBrightness;uniform float uActivity;uniform float uVortex;uniform float uAuroraTime;uniform vec4 uColourGains;
 uniform sampler2D uAuroraPrevious;uniform sampler2D uAuroraCurrent;uniform float uAuroraBlend;uniform float uAuroraDebug;uniform float uHemisphere;
 #include <logdepthbuf_pars_fragment>
 ${geoGLSL}
@@ -409,6 +410,9 @@ void main(){
   float lower=103.0+folds*31.0+packet.z;
   float rayCoord=s*.17+auroraNoise(vec2(s*.018+seed,t*.12))*3.0-t*.22;
   rayCoord+=(h-lower)*.018*(auroraNoise(vec2(s*.005,seed))-.5);
+  // Height-dependent fine torsion inside the deformed ribbon. The long rays
+  // remain field-aligned, rather than bending into horizontal smoke rings.
+  rayCoord+=sin(s*.008+seed-t*.05+(h-110.0)*.012)*uVortex*.8*smoothstep(120.0,250.0,h);
   float filament=pow(auroraNoise(vec2(rayCoord,(h-lower)*.006+seed)),1.7);
   // Band-limit fixed geographic filaments; zoom only integrates their detail.
   filament=mix(filament,.3,smoothstep(.3,1.5,fwidth(rayCoord)));
@@ -419,14 +423,18 @@ void main(){
   float body=bell(h,lower+26.0,23.0+folds*14.0)*(.10+packet.x*.55);
   body+=bell(h,lower+72.0,47.0)*rays*.85;
   body+=bell(h,packet.w,15.0)*max(0.0,packet.x-.12)*.16*(1.0-smoothstep(270.0,310.0,h));
-  float hem=bell(h,lower+7.0,5.5)*(.08+sqrt(packet.x)*.65);
+  float hem=bell(h,lower+7.0,5.5)*(.035+sqrt(packet.x)*.65);
   // High oxygen glow evolves much more slowly than the prompt lower border.
-  float red=bell(h,338.0+folds*30.0,55.0)*(.04+.12*auroraNoise(vec2(s*.003+seed,t*.005)))*smoothstep(280.0,315.0,h);
+  float red=bell(h,338.0+folds*30.0,55.0)*(.04+.12*auroraNoise(vec2(s*.003+seed,t*.005)))*smoothstep(300.0,325.0,h);
   float nitrogen=bell(h,lower+2.0,4.0)*.13*strength*packet.x;
+  float blue=bell(h,lower+5.0,8.0)*.035*strength*strength*packet.x;
   float vertical=smoothstep(95.0,108.0,h)*(1.0-smoothstep(400.0,450.0,h));
   float night=1.0-smoothstep(-0.18,0.08,dot(vNormal,uSun));
   float envelope=strength*uActivity*taper*vArc.y*life*gaps*(.35+knots)*night*uBrightness*vertical;
-  vec3 emission=(vec3(.19,.85,.39)*body+vec3(.35,1.0,.57)*hem+vec3(.85,.035,.055)*red+vec3(.46,.10,.8)*nitrogen)*envelope*.48;
+  // Independent physical-profile gains, not an RGB filter over the whole sky.
+  // Neutral unless the explicitly labelled screenshot override is enabled.
+  vec3 greenEmission=(vec3(.16,.9,.29)*body+vec3(.30,1.0,.46)*hem)*uColourGains.x;
+  vec3 emission=(greenEmission+vec3(.85,.025,.045)*red*uColourGains.y+vec3(.55,.065,.72)*nitrogen*uColourGains.z+vec3(.075,.23,1.0)*blue*uColourGains.w)*envelope*.48;
   // Attenuate emitted light only; sky in-scattering is already in the atmosphere pass.
   vec3 rd=normalize(vPosition-uCamera);vec2 air=intersectEllipsoid(uCamera,rd,RADII+vec3(80.0));
   float begin=max(0.0,air.x),end=min(length(vPosition-uCamera),air.y),optical=0.0;

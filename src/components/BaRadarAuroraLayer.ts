@@ -1,26 +1,9 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarAuroraData, RadarAuroraSample } from "@/lib/radar-external";
-
-export type AuroraQuality = "auto" | "high" | "balanced" | "low";
-
-export type AuroraSettings = {
-  activity: number;
-  animationSpeed: number;
-  brightness: number;
-  quality: AuroraQuality;
-  /** A presentation-only multiplier for full-globe curtain relief. */
-  enhancedPresentation: boolean;
-  hemisphere?: "both" | "north" | "south";
-  debug?: "off" | "field" | "altitude";
-};
-
-export const DEFAULT_AURORA_SETTINGS: AuroraSettings = {
-  activity: 1,
-  animationSpeed: 1,
-  brightness: 1,
-  quality: "auto",
-  enhancedPresentation: false,
-};
+import type { AuroraQuality, AuroraSettings } from "@/lib/radar-aurora-settings";
+import { DEFAULT_AURORA_SETTINGS } from "@/lib/radar-aurora-settings";
+export type { AuroraQuality, AuroraSettings } from "@/lib/radar-aurora-settings";
+export { DEFAULT_AURORA_SETTINGS } from "@/lib/radar-aurora-settings";
 
 type Hemisphere = "north" | "south";
 
