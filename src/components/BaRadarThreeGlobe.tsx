@@ -13,7 +13,9 @@ const TAU = Math.PI * 2;
 const EARTH_RADIUS_METRES = 6_371_000;
 const CLOUD_INNER_RADIUS = 1.00025;
 const CLOUD_OUTER_RADIUS = 1.0045;
-const EARTH_TEXTURE = "https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.200411.3x5400x2700.jpg";
+// Keep the surface clear. A baked cloud photograph on the diffuse Earth map
+// makes it impossible to tell the live atmospheric volume from the ground.
+const EARTH_TEXTURE = "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg";
 
 function clamp(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)); }
 function validPoint(latitude: number, longitude: number) { return Number.isFinite(latitude) && Number.isFinite(longitude); }
@@ -106,12 +108,18 @@ const cloudFragmentShader = `
     float centre = base + (top - base) * 0.5;
     float spread = max(220.0, (top - base) * 0.5 * uRelief);
     float heightMask = 1.0 - smoothstep(spread * 0.72, spread, abs(altitude - centre));
-    vec3 drift = vec3(uv.x * 4.0 + uTime * 0.003 + seed, uv.y * 3.0 - uTime * 0.0017, altitude / 17000.0);
+    // Forecast cells decide where clouds may occur. The procedural field
+    // creates formations inside that weather footprint at cloud, not
+    // continent, scale: banks, broken stratocumulus and denser cores.
+    vec3 drift = vec3(uv.x * 17.0 + uTime * 0.004 + seed, uv.y * 10.0 - uTime * 0.0021, altitude / 7800.0);
     float shape = texture(uBaseNoise, fract(drift)).r;
     float erosion = texture(uDetailNoise, fract(drift * 2.7 + vec3(0.13, 0.71, 0.31))).r;
-    float threshold = mix(0.76, 0.37, coverage);
-    float body = smoothstep(threshold - 0.12, threshold + 0.13, shape - erosion * 0.24);
-    return body * heightMask * smoothstep(0.03, 0.28, coverage);
+    float threshold = mix(0.70, 0.24, coverage);
+    float body = smoothstep(threshold - 0.16, threshold + 0.14, shape - erosion * 0.18);
+    // Preserve overcast fields as continuous textured decks while allowing
+    // lower forecast cover to resolve into individual cloud formations.
+    body = mix(body, max(body, coverage * 0.72), smoothstep(0.70, 1.0, coverage));
+    return body * heightMask * smoothstep(0.015, 0.20, coverage);
   }
   void main() {
     vec3 rayOrigin = uCameraLocal;
@@ -137,7 +145,7 @@ const cloudFragmentShader = `
       if (density < 0.003) continue;
       float phase = 0.55 + 0.45 * max(0.0, dot(normalize(position), normalize(vec3(-0.55, 0.62, 0.44))));
       float shade = mix(1.0, 0.52 + 0.48 * exp(-density * 4.0), uSelfShadow);
-      float opticalDepth = density * delta * 650.0 * uOpacity;
+      float opticalDepth = density * delta * 1120.0 * uOpacity;
       float alpha = 1.0 - exp(-opticalDepth);
       vec3 cloudColour = mix(vec3(0.29, 0.33, 0.39), vec3(0.93, 0.96, 1.0), phase) * shade;
       scattered += transmittance * cloudColour * alpha;
@@ -314,24 +322,33 @@ export function BaRadarThreeGlobe(props: {
           marker.position.copy(latLonVector(three, controller.latitude, controller.longitude, 1.016)); traffic.add(marker); pointHits.push({ object: marker, kind: "controller", id: controller.callsign });
         }
         if (current.auroraEnabled && current.aurora) {
-          const positions: number[] = []; const colours: number[] = [];
+          const positions: number[] = []; const colours: number[] = []; const indices: number[] = [];
           for (const sample of current.aurora.samples) {
-            if (sample.probability < 4) continue;
+            if (sample.probability < 12) continue;
             const probability = clamp(sample.probability / 100, 0, 1);
-            const floor = latLonVector(three, sample.latitude, sample.longitude, 1.012);
-            const height = probability * (current.auroraSettings.enhancedPresentation ? 0.095 : 0.036);
-            const crown = latLonVector(three, sample.latitude, sample.longitude, 1.012 + height);
-            // Paired radial vertices form a curtain rather than a glowing
-            // flat oval. The input probability still determines every beam.
-            positions.push(floor.x, floor.y, floor.z, crown.x, crown.y, crown.z);
+            const baseRadius = 1.014;
+            const height = (0.014 + probability * (current.auroraSettings.enhancedPresentation ? 0.10 : 0.046)) * current.auroraSettings.activity;
+            // Each NOAA cell becomes an overlapping, east-west ribbon. The
+            // overlaps erase the dotted-grid appearance and read as connected
+            // curtains when viewed from space or close to the horizon.
+            const halfSpan = 0.72 + probability * 0.34;
+            const floorLeft = latLonVector(three, sample.latitude, sample.longitude - halfSpan, baseRadius);
+            const floorRight = latLonVector(three, sample.latitude, sample.longitude + halfSpan, baseRadius);
+            const crownLeft = latLonVector(three, sample.latitude, sample.longitude - halfSpan, baseRadius + height);
+            const crownRight = latLonVector(three, sample.latitude, sample.longitude + halfSpan, baseRadius + height);
+            const offset = positions.length / 3;
+            positions.push(floorLeft.x, floorLeft.y, floorLeft.z, floorRight.x, floorRight.y, floorRight.z, crownLeft.x, crownLeft.y, crownLeft.z, crownRight.x, crownRight.y, crownRight.z);
+            indices.push(offset, offset + 1, offset + 3, offset, offset + 3, offset + 2);
             const r = 0.05 + probability * 0.16;
             const g = 0.48 + probability * 0.48;
             const b = 0.30 + probability * 0.62;
-            colours.push(r, g, b, r * 0.45, g, b);
+            // The low edge is deliberately subdued; the brighter crown gives
+            // each ribbon a vertical luminous gradient rather than a neon bar.
+            colours.push(r * 0.18, g * 0.28, b * 0.20, r * 0.18, g * 0.28, b * 0.20, r, g, b, r, g, b);
           }
           if (positions.length) {
-            const geometry = new three.BufferGeometry(); geometry.setAttribute("position", new three.Float32BufferAttribute(positions, 3)); geometry.setAttribute("color", new three.Float32BufferAttribute(colours, 3));
-            auroraGroup.add(new three.LineSegments(geometry, new three.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: clamp(current.auroraSettings.brightness * 0.8, 0, 1), blending: three.AdditiveBlending, depthWrite: false })));
+            const geometry = new three.BufferGeometry(); geometry.setAttribute("position", new three.Float32BufferAttribute(positions, 3)); geometry.setAttribute("color", new three.Float32BufferAttribute(colours, 3)); geometry.setIndex(indices);
+            auroraGroup.add(new three.Mesh(geometry, new three.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: clamp(current.auroraSettings.brightness * 0.62, 0, 1), blending: three.AdditiveBlending, depthWrite: false, side: three.DoubleSide })));
           }
         }
       };
