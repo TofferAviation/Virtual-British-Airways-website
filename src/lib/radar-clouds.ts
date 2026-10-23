@@ -8,16 +8,14 @@ type Cached<T> = { value: T; expiresAt: number };
 type MessageMap = Map<string, GribMessage | null>;
 
 const GFS_BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com";
-// Keep the operational 0.25° analysis at its native grid. The original
-// 0.5° presentation grid looked blocky as pilots approached the globe and
-// threw away real model detail before the volumetric renderer saw it.
-// This remains a weather-model grid, not imagery or invented coverage.
+// Keep a 0.5° presentation grid for the global first load. The native 0.25°
+// data is intentionally sampled rather than blurred; a full six-texture
+// global response exceeded the production host's response budget and resulted
+// in no clouds at all. Close-range detail comes from the volume shader.
 const GFS_RESOLUTION_DEGREES = 0.25;
-const DISPLAY_STRIDE = 1;
+const DISPLAY_STRIDE = 2;
 const CACHE_FOR_MS = 25 * 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
-const WIND_RANGE_METRES_PER_SECOND = 80;
-const CONDENSATE_SCALE_KG_PER_KG = 0.0035;
 
 let cloudCache: Cached<RadarCloudData> | null = null;
 
@@ -81,14 +79,6 @@ function pressureLevel(hPa: number) {
   return `${hPa} mb`;
 }
 
-function quantise(value: number, scale: number, minimum = 0, maximum = 255) {
-  return clampCloudValue(Math.round(value / scale), minimum, maximum);
-}
-
-function normaliseWind(value: number) {
-  return clampCloudValue(Math.round((value + WIND_RANGE_METRES_PER_SECOND) / (WIND_RANGE_METRES_PER_SECOND * 2) * 255), 0, 255);
-}
-
 function valuesFor(message: GribMessage | null | undefined) {
   return message ? message.dataAdjusted(true, true) : null;
 }
@@ -110,16 +100,10 @@ function encodeCloudLayer(profile: CloudProfile, fields: MessageMap): { layer: R
   const { rows, cols } = coverage.gridShape;
   const outputRows = cloudGridDimension(rows, DISPLAY_STRIDE);
   const outputCols = cloudGridDimension(cols, DISPLAY_STRIDE);
-  const weather = new Uint8Array(outputRows * outputCols * 4);
-  const geometry = new Uint8Array(outputRows * outputCols * 4);
+  const volume = new Uint8Array(outputRows * outputCols * 4);
   const coverageValues = valuesFor(coverage)!;
   const baseValues = valuesFor(base)!;
   const topValues = valuesFor(top)!;
-  const humidityValues = valuesFor(fields.get(fieldKey("RH", pressureLevel(profile.representativePressureHpa))));
-  const liquidValues = valuesFor(fields.get(fieldKey("CLWMR", pressureLevel(profile.representativePressureHpa))));
-  const iceValues = valuesFor(fields.get(fieldKey("ICMR", pressureLevel(profile.representativePressureHpa))));
-  const windUValues = valuesFor(fields.get(fieldKey("UGRD", pressureLevel(profile.representativePressureHpa))));
-  const windVValues = valuesFor(fields.get(fieldKey("VGRD", pressureLevel(profile.representativePressureHpa))));
 
   let output = 0;
   for (let row = 0; row < rows; row += DISPLAY_STRIDE) {
@@ -133,18 +117,10 @@ function encodeCloudLayer(profile: CloudProfile, fields: MessageMap): { layer: R
       // than the display grid, so retain them as model-referenced metres and
       // never advertise them as terrain-clearance measurements.
       const valid = isValidCloudColumn(cover, baseHeight, topHeight);
-      const humidity = humidityValues?.[input] ?? 0;
-      const condensate = Math.max(0, (liquidValues?.[input] ?? 0) + (iceValues?.[input] ?? 0));
-      const windU = windUValues?.[input] ?? 0;
-      const windV = windVValues?.[input] ?? 0;
-      weather[output] = Number.isFinite(cover) ? clampCloudValue(Math.round(cover / 100 * 255), 0, 255) : 0;
-      weather[output + 1] = Number.isFinite(humidity) ? clampCloudValue(Math.round(humidity / 100 * 255), 0, 255) : 0;
-      weather[output + 2] = Number.isFinite(condensate) ? quantise(condensate, CONDENSATE_SCALE_KG_PER_KG / 255) : 0;
-      weather[output + 3] = valid ? 255 : 0;
-      geometry[output] = valid ? encodeCloudHeight(baseHeight) : 0;
-      geometry[output + 1] = valid ? encodeCloudHeight(topHeight) : 0;
-      geometry[output + 2] = Number.isFinite(windU) ? normaliseWind(windU) : 128;
-      geometry[output + 3] = Number.isFinite(windV) ? normaliseWind(windV) : 128;
+      volume[output] = Number.isFinite(cover) ? clampCloudValue(Math.round(cover / 100 * 255), 0, 255) : 0;
+      volume[output + 1] = valid ? encodeCloudHeight(baseHeight) : 0;
+      volume[output + 2] = valid ? encodeCloudHeight(topHeight) : 0;
+      volume[output + 3] = valid ? 255 : 0;
       output += 4;
     }
   }
@@ -157,8 +133,7 @@ function encodeCloudLayer(profile: CloudProfile, fields: MessageMap): { layer: R
       representativePressureHpa: profile.representativePressureHpa,
       basePressureHpa: profile.basePressureHpa,
       topPressureHpa: profile.topPressureHpa,
-      weather: Buffer.from(weather).toString("base64"),
-      geometry: Buffer.from(geometry).toString("base64"),
+      volume: Buffer.from(volume).toString("base64"),
     },
     width: outputCols,
     height: outputRows,
@@ -174,15 +149,11 @@ async function refreshClouds(): Promise<RadarCloudData> {
       if (!indexResponse.ok) throw new Error(`GFS cycle is not published (${indexResponse.status}).`);
       const entries = parseGribIndex(await indexResponse.text());
       const required = new Map<string, GribIndexEntry>();
-      const optional = new Map<string, GribIndexEntry>();
       for (const profile of CLOUD_PROFILES) {
         const requirements: Array<[string, string]> = [
           [profile.coverageField, profile.coverageLevel],
           ["HGT", pressureLevel(profile.basePressureHpa)],
           ["HGT", pressureLevel(profile.topPressureHpa)],
-          ["RH", pressureLevel(profile.representativePressureHpa)],
-          ["UGRD", pressureLevel(profile.representativePressureHpa)],
-          ["VGRD", pressureLevel(profile.representativePressureHpa)],
         ];
         for (const [variable, level] of requirements) {
           const key = fieldKey(variable, level);
@@ -192,23 +163,10 @@ async function refreshClouds(): Promise<RadarCloudData> {
           }
           if (entry) required.set(key, entry);
         }
-        for (const variable of ["CLWMR", "ICMR"]) {
-          const level = pressureLevel(profile.representativePressureHpa);
-          const entry = selectEntry(entries, variable, level);
-          if (entry) optional.set(fieldKey(variable, level), entry);
-        }
       }
       const uniqueRequired = [...required.entries()];
-      const uniqueOptional = [...optional.entries()];
       const fetchedRequired = await Promise.all(uniqueRequired.map(async ([key, entry]) => [key, await fetchMessage(baseUrl, entry)] as const));
-      const fetchedOptional = await Promise.all(uniqueOptional.map(async ([key, entry]) => {
-        try {
-          return [key, await fetchMessage(baseUrl, entry)] as const;
-        } catch {
-          return [key, null] as const;
-        }
-      }));
-      const fields: MessageMap = new Map([...fetchedRequired, ...fetchedOptional]);
+      const fields: MessageMap = new Map(fetchedRequired);
       const first = fetchedRequired[0]?.[1];
       if (!first) throw new Error("GFS did not provide a cloud grid.");
       const encodedLayers = CLOUD_PROFILES.map((profile) => encodeCloudLayer(profile, fields));

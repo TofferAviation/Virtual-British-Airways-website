@@ -64,8 +64,9 @@ export type RadarWindGrid = {
 /**
  * A compact, browser-safe subset of a decoded NOAA GFS model analysis.
  * Values remain model fields rather than satellite observations. The global
- * one-degree grid is deliberate: it keeps live globe interaction practical
- * while the renderer supplies only sub-grid visual structure.
+ * The grid can stay at the native model resolution because the API transports
+ * cloud textures in a compressed form. Values remain model fields rather than
+ * satellite observations or generated cloud coverage.
  */
 export type RadarCloudLayerId = "low" | "middle" | "high";
 
@@ -76,10 +77,8 @@ export type RadarCloudLayer = {
   representativePressureHpa: number;
   basePressureHpa: number;
   topPressureHpa: number;
-  /** R=coverage %, G=RH %, B=combined cloud liquid/ice mixing ratio, A=valid sample. */
-  weather: string;
-  /** R=base geopotential height / 100 m, G=top / 100 m, B=U wind, A=V wind. */
-  geometry: string;
+  /** R=coverage %, G=base geopotential height / 100 m, B=top / 100 m, A=valid sample. */
+  volume: string;
 };
 
 export type RadarCloudData = {
@@ -95,8 +94,9 @@ export type RadarCloudData = {
   west: number;
   north: number;
   stepDeg: number;
-  encoding: "rgba8-base64";
-  /** Present fields from the GFS run; optional microphysics can be unavailable. */
+  /** Gzip is used only while travelling over the API; the globe expands it before upload. */
+  encoding: "rgba8-base64" | "rgba8-gzip-base64";
+  /** GFS fields used to construct the compact cloud volume. */
   fields: string[];
   layers: RadarCloudLayer[];
 };

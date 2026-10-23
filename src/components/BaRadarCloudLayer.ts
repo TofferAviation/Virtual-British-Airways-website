@@ -32,7 +32,7 @@ export const DEFAULT_CLOUD_SETTINGS: CloudSettings = {
 };
 
 type QualityProfile = { stepDegrees: number; slices: number; repaintMs: number };
-type TexturePair = { weather: WebGLTexture; geometry: WebGLTexture };
+type VolumeTexture = { volume: WebGLTexture };
 type VolumeMesh = { vertices: Float32Array; verticesPerSlice: number; slices: number };
 type ProgramBundle = {
   program: WebGLProgram;
@@ -54,7 +54,6 @@ type ProgramBundle = {
   sliceCount: WebGLUniformLocation | null;
   debugMode: WebGLUniformLocation | null;
   meshStep: WebGLUniformLocation | null;
-  motionTime: WebGLUniformLocation | null;
   solarTime: WebGLUniformLocation | null;
   solarDeclination: WebGLUniformLocation | null;
 };
@@ -187,7 +186,7 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
   private gl: WebGL2RenderingContext | null = null;
   private buffer: WebGLBuffer | null = null;
   private programs = new Map<string, ProgramBundle>();
-  private textures = new Map<RadarCloudLayerId, TexturePair>();
+  private textures = new Map<RadarCloudLayerId, VolumeTexture>();
   private mesh: Float32Array<ArrayBufferLike> = new Float32Array();
   private vertexCount = 0;
   private verticesPerSlice = 0;
@@ -245,8 +244,7 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     if (this.repaintTimer !== null) window.clearTimeout(this.repaintTimer);
     if (this.gl && this.buffer) this.gl.deleteBuffer(this.buffer);
     for (const pair of this.textures.values()) {
-      this.gl?.deleteTexture(pair.weather);
-      this.gl?.deleteTexture(pair.geometry);
+      this.gl?.deleteTexture(pair.volume);
     }
     for (const bundle of this.programs.values()) this.gl?.deleteProgram(bundle.program);
     this.textures.clear();
@@ -283,26 +281,23 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
     gl.uniform1f(bundle.sliceCount, Math.max(1, this.meshSlices));
     gl.uniform1i(bundle.debugMode, this.settings.debugMode === "coverage" ? 1 : this.settings.debugMode === "density" ? 2 : this.settings.debugMode === "height" ? 3 : this.settings.debugMode === "lighting" ? 4 : this.settings.debugMode === "mesh" ? 5 : 0);
     gl.uniform1f(bundle.meshStep, QUALITY[this.resolvedQuality].stepDegrees);
-    // Animate only the procedural detail inside GFS-confirmed cloud columns.
-    // Coverage and the model cloud base/top never drift between data cycles.
-    gl.uniform1f(bundle.motionTime, performance.now() / 1_000);
     gl.uniform1f(bundle.solarTime, now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
     gl.uniform1f(bundle.solarDeclination, 0.409 * Math.sin(TAU * (dayOfYear - 81) / 365.25));
     // A tall convective column is supported only where all three GFS layers
     // report cloud. Binding those independent model fields lets the fragment
     // shader reveal real vertical co-location without fabricating storms.
-    const lowWeather = this.textures.get("low")?.weather;
-    const middleWeather = this.textures.get("middle")?.weather;
-    const highWeather = this.textures.get("high")?.weather;
-    if (!lowWeather || !middleWeather || !highWeather) return;
+    const lowVolume = this.textures.get("low")?.volume;
+    const middleVolume = this.textures.get("middle")?.volume;
+    const highVolume = this.textures.get("high")?.volume;
+    if (!lowVolume || !middleVolume || !highVolume) return;
     gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, lowWeather);
+    gl.bindTexture(gl.TEXTURE_2D, lowVolume);
     gl.uniform1i(bundle.weatherLow, 2);
     gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, middleWeather);
+    gl.bindTexture(gl.TEXTURE_2D, middleVolume);
     gl.uniform1i(bundle.weatherMiddle, 3);
     gl.activeTexture(gl.TEXTURE4);
-    gl.bindTexture(gl.TEXTURE_2D, highWeather);
+    gl.bindTexture(gl.TEXTURE_2D, highVolume);
     gl.uniform1i(bundle.weatherHigh, 4);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.enableVertexAttribArray(bundle.position);
@@ -319,10 +314,10 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
       const textures = this.textures.get(layer.id);
       if (!textures) continue;
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, textures.weather);
+      gl.bindTexture(gl.TEXTURE_2D, textures.volume);
       gl.uniform1i(bundle.weather, 0);
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, textures.geometry);
+      gl.bindTexture(gl.TEXTURE_2D, textures.volume);
       gl.uniform1i(bundle.geometry, 1);
       gl.uniform1f(bundle.layerKind, layer.id === "low" ? 0 : layer.id === "middle" ? 1 : 2);
       // The camera is outside the atmosphere, so descending radial shells are
@@ -351,24 +346,19 @@ export class BaRadarCloudLayer implements CustomLayerInterface {
   private uploadTextures() {
     if (!this.gl) return;
     for (const pair of this.textures.values()) {
-      this.gl.deleteTexture(pair.weather);
-      this.gl.deleteTexture(pair.geometry);
+      this.gl.deleteTexture(pair.volume);
     }
     this.textures.clear();
     if (!this.data) return;
     const expectedBytes = this.data.width * this.data.height * 4;
     try {
       for (const layer of this.data.layers) {
-        this.textures.set(layer.id, {
-          weather: createTexture(this.gl, this.data.width, this.data.height, decodeRgba(layer.weather, expectedBytes)),
-          geometry: createTexture(this.gl, this.data.width, this.data.height, decodeRgba(layer.geometry, expectedBytes)),
-        });
+        this.textures.set(layer.id, { volume: createTexture(this.gl, this.data.width, this.data.height, decodeRgba(layer.volume, expectedBytes)) });
       }
     } catch (error) {
       console.warn("BA-Radar GFS cloud data could not be uploaded.", error);
       for (const pair of this.textures.values()) {
-        this.gl.deleteTexture(pair.weather);
-        this.gl.deleteTexture(pair.geometry);
+        this.gl.deleteTexture(pair.volume);
       }
       this.textures.clear();
     }
@@ -407,8 +397,8 @@ void main() {
   // interpolate through half the planet before texture wrapping occurred.
   v_geo = vec2(a_position.x, clamp((90.0 - latitude) / 180.0, 0.0, 1.0));
   vec4 geometry = texture(u_geometry, v_geo);
-  float base = geometry.r * 255.0 * ${HEIGHT_SCALE_METRES.toFixed(1)};
-  float top = geometry.g * 255.0 * ${HEIGHT_SCALE_METRES.toFixed(1)};
+  float base = geometry.g * 255.0 * ${HEIGHT_SCALE_METRES.toFixed(1)};
+  float top = geometry.b * 255.0 * ${HEIGHT_SCALE_METRES.toFixed(1)};
   // Keep the cloud base at its model altitude. The optional presentation mode
   // only expands thickness above that true base by a restrained 45%, making
   // deep layers legible from a full-globe camera without changing the data.
@@ -416,7 +406,7 @@ void main() {
   float elevation = base + (modelElevation - base) * mix(1.0, 1.45, u_enhancedPresentation);
   gl_Position = projectTileFor3D(a_position.xy, elevation);
   v_densityHeight = a_position.z;
-  v_valid = step(1.25, top / max(1.0, base));
+  v_valid = geometry.a * step(1.25, top / max(1.0, base));
   v_layerHeight = elevation;
 }`);
     const fragment = compileShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
@@ -435,7 +425,6 @@ uniform float u_layerKind;
 uniform float u_sliceCount;
 uniform int u_debugMode;
 uniform float u_meshStep;
-uniform float u_motionTime;
 uniform float u_solarTime;
 uniform float u_solarDeclination;
 out vec4 fragColor;
@@ -469,25 +458,13 @@ float cloudNoise(vec3 point) {
 void main() {
   vec4 weather = texture(u_weather, v_geo);
   float coverage = weather.r;
-  float humidity = weather.g;
-  float condensate = weather.b;
   float valid = weather.a * v_valid;
   if (valid < 0.5 || coverage < 0.035 || u_opacity < 0.01) discard;
 
-  float moisture = clamp(0.68 + humidity * 0.22 + condensate * 0.22, 0.55, 1.08);
-  float modelCoverage = clamp(coverage * moisture, 0.0, 1.0);
+  float modelCoverage = clamp(coverage * 0.86, 0.0, 1.0);
   float density = smoothstep(0.075, 0.82, modelCoverage);
 
-  // The GFS winds advect only the sub-grid density field, never the reported
-  // cloud coverage. This lets a cloud body breathe and drift naturally while
-  // preserving the model's hard meteorological footprint between refreshes.
-  vec4 geometry = texture(u_geometry, v_geo);
-  vec2 windMetresPerSecond = (geometry.ba * 2.0 - 1.0) * 80.0;
-  float latitudeForWind = (0.5 - v_geo.y) * CLOUD_PI;
-  float longitudeMetresPerDegree = max(20_000.0, cos(latitudeForWind) * 111_320.0);
-  // Convert degrees to the 0–1 texture domain before applying the drift.
-  vec2 windDrift = vec2(windMetresPerSecond.x / (longitudeMetresPerDegree * 360.0), -windMetresPerSecond.y / (111_320.0 * 180.0)) * u_motionTime;
-  vec2 alignedGeo = vec2(v_geo.x * 1.35, v_geo.y) + windDrift;
+  vec2 alignedGeo = vec2(v_geo.x * 1.35, v_geo.y);
   float alongScale = u_layerKind < 0.5 ? 75.0 : (u_layerKind < 1.5 ? 58.0 : 34.0);
   float acrossScale = u_layerKind < 0.5 ? 48.0 : (u_layerKind < 1.5 ? 38.0 : 17.0);
   // Adjacent ordered samples must stay strongly correlated through height.
@@ -609,7 +586,6 @@ void main() {
       sliceCount: gl.getUniformLocation(program, "u_sliceCount"),
       debugMode: gl.getUniformLocation(program, "u_debugMode"),
       meshStep: gl.getUniformLocation(program, "u_meshStep"),
-      motionTime: gl.getUniformLocation(program, "u_motionTime"),
       solarTime: gl.getUniformLocation(program, "u_solarTime"),
       solarDeclination: gl.getUniformLocation(program, "u_solarDeclination"),
     };

@@ -80,6 +80,35 @@ const initialAuroraSettings: AuroraSettings = { activity: 1.1, animationSpeed: 1
 // modest relief makes the model's measured cloud columns readable in 3D.
 const initialCloudSettings: CloudSettings = { realWorld: true, opacity: 0.72, quality: "auto", low: true, middle: true, high: true, selfShadows: true, enhancedPresentation: true, debugMode: "lit" };
 
+function bytesFromBase64(value: string) {
+  const binary = window.atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function base64FromBytes(bytes: Uint8Array) {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += chunkSize) binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  return window.btoa(binary);
+}
+
+async function inflateGzipBase64(value: string) {
+  if (typeof DecompressionStream === "undefined") throw new Error("This browser cannot unpack the live cloud textures.");
+  const stream = new Blob([bytesFromBase64(value)]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return base64FromBytes(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+
+async function unpackCloudData(data: RadarCloudData): Promise<RadarCloudData> {
+  if (data.encoding === "rgba8-base64") return data;
+  const layers = await Promise.all(data.layers.map(async (layer) => ({
+    ...layer,
+    volume: await inflateGzipBase64(layer.volume),
+  })));
+  return { ...data, encoding: "rgba8-base64", layers };
+}
+
 function AuroraControls({ settings, onChange }: { settings: AuroraSettings; onChange: (settings: AuroraSettings) => void }) {
   const changeNumber = (key: "activity" | "animationSpeed" | "brightness") => (event: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...settings, [key]: Number(event.target.value) });
@@ -550,9 +579,9 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     const refresh = async () => {
       try {
         if (mounted) setCloudError(null);
-        const response = await fetch("/api/radar/clouds", { cache: "no-store" });
+        const response = await fetch("/api/radar/clouds");
         if (!response.ok) throw new Error("The GFS cloud model is currently unavailable.");
-        const payload = await response.json() as RadarCloudData;
+        const payload = await unpackCloudData(await response.json() as RadarCloudData);
         if (mounted) setCloudData(payload);
       } catch {
         if (mounted) setCloudError("NOAA GFS is temporarily unavailable. The last verified model, if any, remains in place.");
