@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { periodicGradientNoise, periodicCellularNoise, bakeCloudNoise } from "./radar-cloud-noise.ts";
 
 test("gradient and cellular volumes join across every wrapped axis", () => {
@@ -37,4 +38,11 @@ test("height changes alter the actual volume, not just an extruded 2D column", (
     for (let x = 0; x < 16; x++)
       if (Math.abs(data[((z * 16 + 2) * 16 + x) * 4] - data[((z * 16 + 10) * 16 + x) * 4]) > 10) changed++;
   assert.ok(changed > 100);
+});
+
+test("shipped noise assets exactly match the procedural cloud model", async () => {
+  for (const [name, size, detail] of [["mass-v1", 64, false], ["detail-v1", 32, true]]) {
+    const bytes = await readFile(new URL(`../../public/textures/clouds/${name}.rgba`, import.meta.url));
+    assert.deepEqual(new Uint8Array(bytes), bakeCloudNoise(size, detail));
+  }
 });

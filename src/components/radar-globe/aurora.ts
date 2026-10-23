@@ -6,7 +6,7 @@ import type { RadarAuroraData } from "@/lib/radar-external";
 export function buildAuroraCurtains(
   data: RadarAuroraData,
   material: THREE.ShaderMaterial,
-  highQuality: boolean,
+  quality: "low" | "balanced" | "high",
 ) {
   const group = new THREE.Group();
   for (const hemisphere of [1, -1] as const) {
@@ -16,8 +16,8 @@ export function buildAuroraCurtains(
         normals: number[] = [],
         fields: number[] = [],
         indices: number[] = [];
-      const columns = highQuality ? 1080 : 720,
-        rows = highQuality ? 32 : 20;
+      const columns = quality === "high" ? 1080 : quality === "low" ? 360 : 720,
+        rows = quality === "high" ? 32 : quality === "low" ? 12 : 20;
       for (let col = 0; col <= columns; col++) {
         const sector = (col / columns) * 360,
           index = Math.floor(sector) % 360,

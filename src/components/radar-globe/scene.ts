@@ -18,8 +18,9 @@ import {
   globeZoomStep,
 } from "@/lib/radar-globe-geodesy";
 import { GlobeSurface } from "./surface";
-import { cloudNoiseTexture } from "./noise";
 import { buildAuroraCurtains } from "./aurora";
+import { AdaptiveGlobeQuality, GLOBE_PROFILES, globeRenderSize, type GlobeQuality } from "@/lib/radar-globe-quality";
+import { GlobeGpuTimer } from "./gpu-timer";
 import {
   surfaceVertex,
   surfaceFragment,
@@ -28,6 +29,9 @@ import {
   atmosphereFragment,
   auroraVertex,
   auroraFragment,
+  groundShadowFragment,
+  compositeVertex,
+  cloudCompositeFragment,
 } from "./shaders";
 
 export type GlobeCamera = {
@@ -80,7 +84,7 @@ function clearGroup(group: THREE.Group) {
   }
 }
 function ellipsoidShell(heightKm: number) {
-  const geometry = new THREE.SphereGeometry(WGS84_A_KM + heightKm, 192, 128);
+  const geometry = new THREE.SphereGeometry(WGS84_A_KM + heightKm, 128, 96);
   geometry.scale(1, (WGS84_B_KM + heightKm) / (WGS84_A_KM + heightKm), 1);
   return geometry;
 }
@@ -106,6 +110,7 @@ function decodeTexture(data: RadarCloudData, encoded: string) {
 export function createGlobeScene(
   host: HTMLDivElement,
   read: () => GlobeSceneState,
+  noise: [THREE.Data3DTexture, THREE.Data3DTexture],
 ) {
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -115,6 +120,13 @@ export function createGlobeScene(
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
+  renderer.info.autoReset = false;
+  const device = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+  const adaptive = new AdaptiveGlobeQuality({ mobile: /Android|iPhone|iPad/i.test(navigator.userAgent), memoryGb: device.deviceMemory, cores: device.hardwareConcurrency, saveData: device.connection?.saveData });
+  let effectiveQuality: GlobeQuality = read().cloudSettings.quality === "auto" ? adaptive.quality : read().cloudSettings.quality as GlobeQuality;
+  let profile = GLOBE_PROFILES[effectiveQuality];
+  let lastRequestedQuality = read().cloudSettings.quality;
+  const gpuTimer = new GlobeGpuTimer(renderer.getContext() as WebGL2RenderingContext);
   if (process.env.NODE_ENV !== "production")
     renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
       const message = [
@@ -129,7 +141,6 @@ export function createGlobeScene(
       );
       console.error(message);
     };
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.domElement.className = "ba-radar-globe-three-canvas";
   renderer.domElement.setAttribute(
     "aria-label",
@@ -172,8 +183,7 @@ export function createGlobeScene(
   orbit();
   const fallback = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
   fallback.needsUpdate = true;
-  const base = cloudNoiseTexture(),
-    detail = cloudNoiseTexture(true);
+  const [base, detail] = noise;
   const shared = {
     uSun: {
       value: new THREE.Vector3(
@@ -194,6 +204,9 @@ export function createGlobeScene(
     uShadows: { value: 1 },
     uDebug: { value: 0 },
     uPixelAngle: { value: 0.001 },
+    uAirSamples: { value: profile.airSamples as number },
+    uShadowSamples: { value: profile.shadowSamples as number },
+    uGroundSize: { value: new THREE.Vector2(1, 1) },
   };
   const testProfile = process.env.NODE_ENV !== "production" ? read().testCloudProfile : undefined;
   const testCloudTexture = testProfile ? new THREE.DataTexture(
@@ -220,12 +233,14 @@ export function createGlobeScene(
       material(surfaceVertex, surfaceFragment, {
         uSurface: { value: texture },
         uNight: { value: night },
+        uGroundShadow: { value: null },
       }),
-    Math.min(8, renderer.capabilities.getMaxAnisotropy()),
+    renderer.capabilities.getMaxAnisotropy(),
   );
   earth.add(surface.group);
   const cloudMaterial = material(volumeVertex, cloudFragment, {
     uSteps: { value: 48 },
+    uLightSamples: { value: 6 },
   });
   cloudMaterial.transparent = true;
   cloudMaterial.depthWrite = false;
@@ -233,7 +248,21 @@ export function createGlobeScene(
   cloudMaterial.depthTest = false;
   const cloudMesh = new THREE.Mesh(ellipsoidShell(18), cloudMaterial);
   cloudMesh.renderOrder = 3;
+  cloudMesh.layers.set(1);
   earth.add(cloudMesh);
+  const shadowMaterial = material(volumeVertex, groundShadowFragment);
+  shadowMaterial.depthTest = shadowMaterial.depthWrite = false;
+  shadowMaterial.side = THREE.BackSide;
+  const shadowMesh = new THREE.Mesh(ellipsoidShell(80), shadowMaterial);
+  shadowMesh.layers.set(3);
+  earth.add(shadowMesh);
+  const cloudTarget = new THREE.WebGLRenderTarget(1, 1, { type: renderer.extensions.has("EXT_color_buffer_float") ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: false });
+  const shadowTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+  const compositeScene = new THREE.Scene(), compositeCamera = new THREE.Camera();
+  const compositeMaterial = new THREE.ShaderMaterial({ vertexShader: compositeVertex, fragmentShader: cloudCompositeFragment, glslVersion: THREE.GLSL3, uniforms: { uCloudImage: { value: cloudTarget.texture } }, transparent: true, depthWrite: false, depthTest: false });
+  const compositeQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compositeMaterial);
+  compositeQuad.frustumCulled = false;
+  compositeScene.add(compositeQuad);
   const atmosphereMaterial = material(volumeVertex, atmosphereFragment);
   atmosphereMaterial.transparent = true;
   atmosphereMaterial.depthWrite = false;
@@ -422,20 +451,21 @@ export function createGlobeScene(
     }
     if (
       state.aurora !== lastAurora ||
-      lastQuality !== state.auroraSettings.quality
+      lastQuality !== `${state.auroraSettings.quality}-${effectiveQuality}`
     ) {
       lastAurora = state.aurora;
-      lastQuality = state.auroraSettings.quality;
+      lastQuality = `${state.auroraSettings.quality}-${effectiveQuality}`;
       clearGroup(curtains);
       earth.remove(curtains);
       curtains = state.aurora
         ? buildAuroraCurtains(
             state.aurora,
             auroraMaterial,
-            state.auroraSettings.quality === "high",
+            effectiveQuality === "low" || state.auroraSettings.quality === "low" ? "low" : state.auroraSettings.quality === "high" && (effectiveQuality === "high" || effectiveQuality === "ultra") ? "high" : "balanced",
           )
         : new THREE.Group();
       earth.add(curtains);
+      curtains.traverse(object => object.layers.set(2));
     }
     curtains.visible = state.auroraEnabled;
     cloudMesh.visible =
@@ -461,13 +491,10 @@ export function createGlobeScene(
       for (const tile of surface.tiles.values())
         (tile.mesh.material as THREE.ShaderMaterial).wireframe =
           state.cloudSettings.debugMode === "mesh";
-    cloudMaterial.uniforms.uSteps.value = {
-      low: 20,
-      medium: 32,
-      high: 48,
-      ultra: 64,
-      auto: window.innerWidth < 850 ? 28 : 44,
-    }[state.cloudSettings.quality];
+    cloudMaterial.uniforms.uSteps.value = profile.steps;
+    cloudMaterial.uniforms.uLightSamples.value = profile.lightSamples;
+    shared.uAirSamples.value = profile.airSamples;
+    shared.uShadowSamples.value = profile.shadowSamples;
     auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness;
     auroraMaterial.uniforms.uActivity.value = state.auroraSettings.activity;
     auroraMaterial.uniforms.uSpeed.value = state.auroraSettings.animationSpeed;
@@ -571,15 +598,33 @@ export function createGlobeScene(
   const resize = () => {
     camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
     camera.updateProjectionMatrix();
+    const size = globeRenderSize(host.clientWidth, host.clientHeight, window.devicePixelRatio, effectiveQuality);
+    renderer.setPixelRatio(size.ratio);
     renderer.setSize(host.clientWidth, host.clientHeight, false);
+    cloudTarget.setSize(size.cloudWidth, size.cloudHeight);
+    shadowTarget.setSize(Math.max(1, Math.floor(size.cloudWidth / 2)), Math.max(1, Math.floor(size.cloudHeight / 2)));
+    shared.uGroundSize.value.set(size.groundWidth, size.groundHeight);
     shared.uPixelAngle.value =
       (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) /
-      (Math.max(1, host.clientHeight) * renderer.getPixelRatio());
+      Math.max(1, size.cloudHeight);
   };
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(host);
   resize();
   const started = performance.now();
+  adaptive.reset(started);
+  const localFrustum = new THREE.Frustum(), frustumMatrix = new THREE.Matrix4();
+  let visible = true, contextLost = false, lastDraw = 0, lastDiagnostics = 0;
+  let measuredFrames = 0, measuredSince = started, measuredFps = 0, renderCpuMs = 0;
+  const frameCosts: number[] = [];
+  const observer = new IntersectionObserver(entries => { visible = entries[0]?.isIntersecting ?? true; });
+  observer.observe(host);
+  const onVisibility = () => { previousFrame = performance.now(); lastDraw = 0; adaptive.reset(performance.now()); measuredFrames = 0; measuredSince = performance.now(); };
+  const onLost = (event: Event) => { event.preventDefault(); contextLost = true; gpuTimer.dispose(); host.dataset.globeStatus = "Graphics context lost — waiting for recovery"; };
+  const onRestored = () => { contextLost = false; delete host.dataset.globeStatus; onVisibility(); resize(); };
+  document.addEventListener("visibilitychange", onVisibility);
+  canvas.addEventListener("webglcontextlost", onLost);
+  canvas.addEventListener("webglcontextrestored", onRestored);
   let frame = 0,
     disposed = false,
     lastSunUpdate = 0,
@@ -587,6 +632,28 @@ export function createGlobeScene(
     previousFrame = started;
   const render = (now: number) => {
     if (disposed) return;
+    frame = requestAnimationFrame(render);
+    if (document.hidden || !visible || contextLost || !host.clientWidth || !host.clientHeight) { previousFrame = now; lastDraw = 0; return; }
+    // Limit battery/GPU use even on a fast display. Animated effects continue
+    // at real elapsed time; there is no 144/240 Hz busy-render loop.
+    const interval = 1000 / profile.fps;
+    if (lastDraw && now - lastDraw < interval - 0.1) return;
+    const elapsed = lastDraw ? now - lastDraw : interval;
+    // Do not carry missed-frame credit: otherwise repeated rounding near a
+    // deadline can exceed the cap, and a stall triggers a catch-up burst.
+    lastDraw = now;
+    const cpuStart = performance.now();
+    const gpuMs = gpuTimer.poll();
+    const requested = read().cloudSettings.quality;
+    if (lastRequestedQuality !== requested) { adaptive.reset(now); lastRequestedQuality = requested; }
+    const nextQuality = requested === "auto" ? adaptive.sample(Math.max(gpuMs ?? 0, renderCpuMs, elapsed - interval), now, now - started > 4000) : requested;
+    if (nextQuality !== effectiveQuality) {
+      effectiveQuality = nextQuality;
+      profile = GLOBE_PROFILES[effectiveQuality];
+      surface.setQuality(effectiveQuality);
+      resize(); lastLodUpdate = 0;
+      frameCosts.length = 0;
+    }
     const deltaSeconds = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
     distance = globeZoomStep(distance, targetDistance, deltaSeconds);
@@ -614,12 +681,60 @@ export function createGlobeScene(
     shared.uCamera.value.copy(camera.position);
     earth.worldToLocal(shared.uCamera.value);
     if (now - lastLodUpdate > 200) {
-      surface.update(shared.uCamera.value, host.clientHeight, camera.fov);
+      camera.updateMatrixWorld(true);
+      frustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(earth.matrixWorld);
+      localFrustum.setFromProjectionMatrix(frustumMatrix);
+      surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled);
       lastLodUpdate = now;
     }
+    renderer.info.reset();
+    gpuTimer.begin();
+    // Four small passes: cheap cached-resolution ground shadows, crisp terrain,
+    // independent cloud volume, then the high-altitude aurora over the result.
+    renderer.setRenderTarget(shadowTarget);
+    renderer.setClearColor(0xffffff, 1);
+    renderer.clear();
+    if (cloudMesh.visible && shared.uShadows.value) { camera.layers.set(3); renderer.render(scene, camera); }
+    for (const tile of surface.tiles.values()) (tile.mesh.material as THREE.ShaderMaterial).uniforms.uGroundShadow.value = shadowTarget.texture;
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(0x01040a, 1);
+    camera.layers.set(0);
     renderer.render(scene, camera);
-    if (process.env.NODE_ENV !== "production") {
+    if (cloudMesh.visible) {
+      renderer.setRenderTarget(cloudTarget);
+      renderer.setClearColor(0x000000, 0);
+      camera.layers.set(1);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      renderer.autoClear = false;
+      renderer.render(compositeScene, compositeCamera);
+      renderer.autoClear = true;
+    }
+    renderer.autoClear = false;
+    camera.layers.set(2);
+    renderer.render(scene, camera);
+    camera.layers.set(0);
+    renderer.autoClear = true;
+    renderer.setClearColor(0x01040a, 1);
+    gpuTimer.end();
+    renderCpuMs = performance.now() - cpuStart;
+    measuredFrames++;
+    if (gpuMs !== null) { frameCosts.push(gpuMs); if (frameCosts.length > 120) frameCosts.shift(); }
+    if (now - measuredSince >= 1000) { measuredFps = measuredFrames * 1000 / (now - measuredSince); measuredSince = now; measuredFrames = 0; }
+    if (now - lastDiagnostics > 1000) {
+      lastDiagnostics = now;
+      const costs = [...frameCosts].sort((a, b) => a - b);
       host.dataset.globeDiagnostics = JSON.stringify({
+        quality: effectiveQuality,
+        mode: requested,
+        fps: Math.round(measuredFps),
+        frameCap: profile.fps,
+        gpuMs: gpuTimer.latestMs === null ? null : Math.round(gpuTimer.latestMs * 10) / 10,
+        gpuP95: costs.length ? Math.round(costs[Math.floor(costs.length * 0.95)] * 10) / 10 : null,
+        cpuMs: Math.round(renderCpuMs * 10) / 10,
+        ground: shared.uGroundSize.value.toArray(),
+        cloud: [cloudTarget.width, cloudTarget.height],
+        terrain: surface.stats,
         tiles: surface.tiles.size,
         drawCalls: renderer.info.render.calls,
         textures: renderer.info.memory.textures,
@@ -634,14 +749,18 @@ export function createGlobeScene(
         clippingKm: [Math.round(camera.near), Math.round(camera.far)],
       });
     }
-    frame = requestAnimationFrame(render);
   };
+  surface.setQuality(effectiveQuality);
   frame = requestAnimationFrame(render);
   return () => {
     disposed = true;
     remember();
     cancelAnimationFrame(frame);
     resizeObserver.disconnect();
+    observer.disconnect();
+    document.removeEventListener("visibilitychange", onVisibility);
+    canvas.removeEventListener("webglcontextlost", onLost);
+    canvas.removeEventListener("webglcontextrestored", onRestored);
     canvas.removeEventListener("pointerdown", onDown);
     canvas.removeEventListener("pointermove", onMove);
     canvas.removeEventListener("pointerup", onUp);
@@ -656,6 +775,9 @@ export function createGlobeScene(
     routeMaterials.forEach((m) => m.dispose());
     cloudMaterial.dispose();
     cloudMesh.geometry.dispose();
+    shadowMesh.geometry.dispose(); shadowMaterial.dispose();
+    cloudTarget.dispose(); shadowTarget.dispose();
+    compositeQuad.geometry.dispose(); compositeMaterial.dispose(); gpuTimer.dispose();
     atmosphere.geometry.dispose();
     atmosphereMaterial.dispose();
     auroraMaterial.dispose();

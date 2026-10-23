@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { BaRadarThreeGlobe } from "@/components/BaRadarThreeGlobe";
 import type { RadarCloudData, RadarAuroraData } from "@/lib/radar-external";
+import type { GlobeQualityRequest } from "@/lib/radar-globe-quality";
 
 const views = {
   day: {
@@ -57,6 +58,14 @@ const views = {
     fov: 62,
     date: "2026-03-20T14:30:00Z",
   },
+  terrain: {
+    latitude: 51.5,
+    longitude: -0.12,
+    distanceKm: 6390.137,
+    pitch: 30,
+    fov: 55,
+    date: "2026-03-20T12:00:00Z",
+  },
   limb: {
     latitude: 10,
     longitude: 90,
@@ -70,6 +79,7 @@ export function GlobeVisualCheck() {
     [data, setData] = useState<RadarCloudData | null>(null),
     [aurora, setAurora] = useState<RadarAuroraData | null>(null),
     [clouds, setClouds] = useState(true),
+    [quality, setQuality] = useState<GlobeQualityRequest>("auto"),
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
   useEffect(() => {
@@ -149,7 +159,7 @@ export function GlobeVisualCheck() {
           cloudSettings={{
             realWorld: true,
             opacity: 0.65,
-            quality: "high",
+            quality,
             low: true,
             middle: true,
             high: true,
@@ -184,6 +194,7 @@ export function GlobeVisualCheck() {
         <button style={{font: "12px Arial", padding: "5px 9px"}} onClick={() => setClouds((v) => !v)}>
           Clouds {clouds ? "on" : "off"}
         </button>
+        <label style={{fontSize: 12}}>Globe quality {" "}<select aria-label="Globe quality" value={quality} onChange={e => setQuality(e.target.value as GlobeQualityRequest)}>{["auto", "low", "medium", "high", "ultra"].map(q => <option key={q} value={q}>{q}</option>)}</select></label>
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
           {view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS forecast: ${data?.validAt ?? "loading"} · NOAA: ${aurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
         </span>

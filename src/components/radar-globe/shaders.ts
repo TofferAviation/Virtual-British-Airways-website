@@ -8,6 +8,7 @@ uniform vec3 uSun;
 uniform vec3 uCamera;
 uniform float uTime;
 uniform float uDayNight;
+uniform float uAirSamples;
 vec3 ellipsoidNormal(vec3 p){return normalize(p/(RADII*RADII));}
 vec2 geographicUV(vec3 p){vec3 n=ellipsoidNormal(p);return vec2(atan(n.x,n.z)/(2.0*PI)+0.5,0.5-asin(clamp(n.y,-1.0,1.0))/PI);}
 float altitudeKm(vec3 p){vec3 n=ellipsoidNormal(p);vec3 rn=RADII*n;vec3 foot=RADII*RADII*n/length(rn);return dot(p-foot,n);}
@@ -17,8 +18,9 @@ vec3 aerialPerspective(vec3 colour,vec3 rd,float distanceKm){
   vec2 air=intersectEllipsoid(uCamera,rd,RADII+vec3(80.0));
   float begin=max(0.0,air.x),end=min(distanceKm,air.y);
   if(end<=begin)return colour;
-  float dt=(end-begin)/12.0,optical=0.0;
+  float dt=(end-begin)/uAirSamples,optical=0.0;
   for(int i=0;i<12;i++){
+    if(float(i)>=uAirSamples)break;
     vec3 p=uCamera+rd*(begin+(float(i)+0.5)*dt);
     optical+=exp(-max(0.0,altitudeKm(p))/8.0)*dt;
   }
@@ -47,6 +49,7 @@ uniform float uCloudOpacity;
 uniform float uShadows;
 uniform float uDebug;
 uniform float uPixelAngle;
+uniform float uShadowSamples;
 const float CLOUD_EXTINCTION=25.0;
 vec4 cloudNoise(sampler3D field,vec3 coordinates,float scale,vec3 p){
   // Explicit footprint filtering also works inside divergent raymarch loops.
@@ -95,14 +98,18 @@ float layerCloud(vec4 w,vec3 p,float h,float kind){
   return body*smoothstep(0.0,0.03,t)*sqrt(cover);
 }
 float densityAt(vec3 p){
+  if(uClouds<0.5)return 0.0;
   vec2 uv=geographicUV(p);float h=altitudeKm(p);
-  return uClouds*max(layerCloud(weatherAt(uLowWeather,uv),p,h,0.0)*uLayers.x,max(layerCloud(weatherAt(uMiddleWeather,uv),p,h,1.0)*uLayers.y,layerCloud(weatherAt(uHighWeather,uv),p,h,2.0)*uLayers.z));
+  float low=uLayers.x>0.5?layerCloud(weatherAt(uLowWeather,uv),p,h,0.0):0.0;
+  float middle=uLayers.y>0.5?layerCloud(weatherAt(uMiddleWeather,uv),p,h,1.0):0.0;
+  float high=uLayers.z>0.5?layerCloud(weatherAt(uHighWeather,uv),p,h,2.0):0.0;
+  return max(low,max(middle,high));
 }
 float shadowTransmittance(vec3 p){
   if(uShadows<0.5||uClouds<0.5)return 1.0;
   if(dot(ellipsoidNormal(p),uSun)<0.035)return 1.0;
   vec2 hit=intersectEllipsoid(p,uSun,RADII+vec3(18.0));
-  float count=altitudeKm(uCamera)<120.0?16.0:8.0;
+  float count=min(uShadowSamples,altitudeKm(uCamera)<120.0?16.0:8.0);
   float stepLength=max(0.0,hit.y)/count;
   float tau=0.0;
   for(int i=0;i<16;i++){if(float(i)>=count)break;tau+=densityAt(p+uSun*(float(i)+0.5)*stepLength)*stepLength*CLOUD_EXTINCTION;}
@@ -118,6 +125,7 @@ export const surfaceFragment = `
 precision highp float;
 in vec3 vPosition;in vec3 vNormal;in vec2 vUv;
 uniform sampler2D uSurface;uniform sampler2D uNight;
+uniform sampler2D uGroundShadow;uniform vec2 uGroundSize;uniform vec4 uNightTransform;
 out vec4 fragColor;
 ${geoGLSL}
 ${densityGLSL}
@@ -126,9 +134,9 @@ void main(){
   float solar=sunElevation(vPosition);
   float day=smoothstep(-0.08,0.10,solar);
   float light=max(0.0,solar);
-  float shadow=shadowTransmittance(vPosition+vNormal*0.04);
+  float shadow=texture(uGroundShadow,gl_FragCoord.xy/uGroundSize).r;
   vec3 diffuse=colour*(0.025+day*(0.24+1.50*sqrt(light))*mix(0.42,1.0,shadow));
-  vec3 night=texture(uNight,vUv).rgb;
+  vec3 night=texture(uNight,vUv*uNightTransform.xy+uNightTransform.zw).rgb;
   float nightMask=1.0-smoothstep(-0.18,0.02,solar);
   diffuse+=night*nightMask*0.85*mix(0.38,1.0,shadow);
   // Ocean reflectance is a modest view-dependent highlight, no blue tint.
@@ -150,6 +158,7 @@ export const cloudFragment = `
 precision highp float;
 in vec3 vPosition;out vec4 fragColor;
 uniform float uSteps;
+uniform float uLightSamples;
 ${geoGLSL}
 ${densityGLSL}
 float phaseHG(float mu,float g){return (1.0-g*g)/pow(max(0.01,1.0+g*g-2.0*g*mu),1.5);}
@@ -190,7 +199,12 @@ void main(){
     if(density<0.003)continue;
     float solar=sunElevation(p),day=smoothstep(-0.10,0.05,solar);
     float tau=0.0;
-    if(uShadows>0.5){tau=(densityAt(p+uSun*0.035)*0.07+densityAt(p+uSun*0.13)*0.12+densityAt(p+uSun*0.33)*0.28+densityAt(p+uSun*0.75)*0.56+densityAt(p+uSun*1.6)*1.14+densityAt(p+uSun*3.5)*2.66)*CLOUD_EXTINCTION;}
+    if(uShadows>0.5){
+      if(uLightSamples<3.5)tau=densityAt(p+uSun*0.08)*0.19+densityAt(p+uSun*0.60)*0.84+densityAt(p+uSun*2.4)*3.8;
+      else if(uLightSamples<4.5)tau=densityAt(p+uSun*0.05)*0.13+densityAt(p+uSun*0.25)*0.40+densityAt(p+uSun*1.0)*1.22+densityAt(p+uSun*3.0)*3.08;
+      else tau=densityAt(p+uSun*0.035)*0.07+densityAt(p+uSun*0.13)*0.12+densityAt(p+uSun*0.33)*0.28+densityAt(p+uSun*0.75)*0.56+densityAt(p+uSun*1.6)*1.14+densityAt(p+uSun*3.5)*2.66;
+      tau*=CLOUD_EXTINCTION;
+    }
     // Optical-depth lighting, not a solid-surface normal. Successively softer
     // scattering terms retain light in the body and blue light underneath.
     float scattering=exp(-tau)+0.16*exp(-tau*0.25)+0.035*exp(-tau*0.06);
@@ -218,6 +232,38 @@ void main(){
   }
   vec3 colour=aerialPerspective(radiance/max(0.001,alpha),rd,meanDistance/max(0.001,alpha));
   fragColor=vec4(colour,alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`;
+
+// Sun-to-ground integration is evaluated on a reduced-resolution screen grid,
+// not repeated at the full-resolution terrain for every texture fragment.
+export const groundShadowFragment = `
+precision highp float;
+in vec3 vPosition;out vec4 fragColor;
+${geoGLSL}
+${densityGLSL}
+void main(){
+  vec3 rd=normalize(vPosition-uCamera);
+  vec2 ground=intersectEllipsoid(uCamera,rd,RADII);
+  float shadow=1.0;
+  if(ground.x>0.0){vec3 p=uCamera+rd*ground.x;shadow=shadowTransmittance(p+ellipsoidNormal(p)*0.04);}
+  fragColor=vec4(vec3(shadow),1.0);
+}
+`;
+export const compositeVertex = `out vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}`;
+export const cloudCompositeFragment = `
+precision highp float;
+#define gl_FragColor fragColor
+uniform sampler2D uCloudImage;
+in vec2 vUv;out vec4 fragColor;
+void main(){
+  // Cloud RT stores premultiplied linear radiance. Interpolating that, rather
+  // than straight colour against black, avoids dark fringes on cloud edges.
+  vec4 cloud=texture(uCloudImage,vUv);
+  if(cloud.a<0.001)discard;
+  fragColor=vec4(cloud.rgb/max(0.001,cloud.a),cloud.a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

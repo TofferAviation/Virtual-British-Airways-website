@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 const layers = {
   surface: "BlueMarble_NextGeneration",
   night: "VIIRS_CityLights_2012",
+  detail: "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual",
 } as const;
 
 /** Fixed NASA allowlist: no client supplied host, URL, token or layer. */
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     !["z", "x", "y"].every((key) => query.has(key)) ||
     ![z, x, y].every(Number.isInteger) ||
     z < 0 ||
-    z > 7 ||
+    z > (kind === "night" ? 6 : 10) ||
     x < 0 ||
     x >= 2 ** (z + 1) ||
     y < 0 ||
@@ -35,7 +36,11 @@ export async function GET(request: NextRequest) {
     SERVICE: "WMS",
     VERSION: "1.1.1",
     REQUEST: "GetMap",
-    LAYERS: layers[kind],
+    // The annual Landsat mosaic is historical, not a live satellite feed.
+    // Blue Marble remains underneath its no-data/ocean/polar gaps. This date
+    // is explicitly listed in GIBS GetCapabilities for the annual layer.
+    LAYERS: kind === "surface" && z >= 7 ? `${layers.surface},${layers.detail}` : layers[kind],
+    ...(kind === "surface" && z >= 7 ? { TIME: "2000-12-01" } : {}),
     STYLES: "",
     FORMAT: "image/jpeg",
     SRS: "EPSG:4326",
@@ -58,7 +63,8 @@ export async function GET(request: NextRequest) {
         "Content-Type": "image/jpeg",
         "Cache-Control":
           "public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800",
-        "X-Imagery-Source": layers[kind],
+        "X-Imagery-Source": kind === "surface" && z >= 7 ? layers.detail : layers[kind],
+        "X-Imagery-Epoch": kind === "surface" && z >= 7 ? "2000-12-01" : "static",
       },
     });
   } catch {
