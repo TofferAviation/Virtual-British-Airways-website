@@ -546,7 +546,12 @@ void main() {
   vec3 middleCloud = vec3(0.78, 0.79, 0.81);
   vec3 highCloud = vec3(0.84, 0.87, 0.91);
   vec3 baseColour = u_layerKind < 0.5 ? lowCloud : (u_layerKind < 1.5 ? middleCloud : highCloud);
-  vec3 dayColour = accumulatedColour * (0.45 + daylight * 0.65) * selfShadow + vec3(0.25) * silver;
+  // Accumulated colour is transmittance-weighted (premultiplied) while the
+  // MapLibre blend state expects straight RGB plus a separate alpha. Divide
+  // once here so cloud light is not multiplied by opacity for a second time,
+  // which otherwise turns illuminated cloud bodies into dark smudges.
+  vec3 volumeColour = accumulatedColour / max(density, 0.001);
+  vec3 dayColour = volumeColour * (0.45 + daylight * 0.65) * selfShadow + vec3(0.25) * silver;
   vec3 duskColour = vec3(0.38, 0.26, 0.19) * twilight * (0.28 + (1.0 - thickness) * 0.44);
   vec3 nightColour = baseColour * 0.075;
   vec3 colour = mix(nightColour, dayColour + duskColour, daylight + twilight * 0.58);
