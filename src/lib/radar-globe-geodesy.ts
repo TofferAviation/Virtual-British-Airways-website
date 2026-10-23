@@ -118,7 +118,7 @@ export function geographicTileBounds(
 export function globeClipRange(distanceKm: number) {
   const height = Math.max(0, distanceKm - WGS84_A_KM);
   return {
-    near: Math.max(0.5, height * 0.25),
+    near: Math.max(0.0002, height * 0.25),
     far: distanceKm + WGS84_A_KM + 500,
   };
 }
@@ -129,6 +129,7 @@ export function globeZoomTarget(
   delta: number,
   mode: number,
   viewportHeight: number,
+  terrainKm = 0,
 ) {
   const pixels = Math.max(
     -160,
@@ -136,7 +137,7 @@ export function globeZoomTarget(
   );
   return (
     WGS84_A_KM +
-    Math.max(4, Math.min(40000, (distanceKm - WGS84_A_KM) * Math.exp(pixels * 0.0012)))
+    Math.min(40000,terrainKm+Math.max(0.005, (distanceKm - WGS84_A_KM-terrainKm) * Math.exp(pixels * 0.0012)))
   );
 }
 

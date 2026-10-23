@@ -10,6 +10,8 @@ export type AuroraSettings = {
   quality: AuroraQuality;
   /** A presentation-only multiplier for full-globe curtain relief. */
   enhancedPresentation: boolean;
+  hemisphere?: "both" | "north" | "south";
+  debug?: "off" | "field" | "altitude";
 };
 
 export const DEFAULT_AURORA_SETTINGS: AuroraSettings = {
@@ -17,7 +19,7 @@ export const DEFAULT_AURORA_SETTINGS: AuroraSettings = {
   animationSpeed: 1,
   brightness: 1,
   quality: "auto",
-  enhancedPresentation: true,
+  enhancedPresentation: false,
 };
 
 type Hemisphere = "north" | "south";

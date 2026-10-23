@@ -11,6 +11,7 @@ import {
   WGS84_A_KM,
   WGS84_B_KM,
   geodeticToWorld,
+  geodeticNormal,
   solarDirection,
   wrapLongitude,
   globeClipRange,
@@ -18,11 +19,13 @@ import {
   globeZoomStep,
 } from "@/lib/radar-globe-geodesy";
 import { GlobeSurface } from "./surface";
-import { buildAuroraCurtains } from "./aurora";
+import { buildAuroraCurtains, updateAuroraCurtains } from "./aurora";
+import { auroraField } from "@/lib/radar-aurora-field";
 import { AdaptiveGlobeQuality, GLOBE_PROFILES, globeRenderSize, type GlobeQuality } from "@/lib/radar-globe-quality";
 import { GlobeGpuTimer } from "./gpu-timer";
 import { globeDragMode, globeLookDrag, globePanDrag, globePanPosition, nextGlobeFrame, type GlobeDragMode } from "@/lib/radar-globe-navigation";
 import { GlobeCloudCache, movingCloudSize } from "@/lib/radar-globe-cloud-cache";
+import { TERRAIN_CLEARANCE_KM } from "@/lib/radar-globe-elevation";
 import {
   surfaceVertex,
   surfaceFragment,
@@ -34,6 +37,8 @@ import {
   groundShadowFragment,
   compositeVertex,
   cloudCompositeFragment,
+  auroraFieldVertex, auroraFieldFragment,
+  terrainDepthFragment,
 } from "./shaders";
 
 export type GlobeCamera = {
@@ -121,6 +126,7 @@ export function createGlobeScene(
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     powerPreference: "high-performance",
+    logarithmicDepthBuffer: true,
   });
   renderer.setClearColor("#01040a");
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -185,7 +191,7 @@ export function createGlobeScene(
       ...geodeticToWorld(latitude, longitude),
     );
     surfaceRadius = target.length();
-    const up = target.normalize();
+    const up = new THREE.Vector3(...geodeticNormal(latitude,longitude));
     const lambda = THREE.MathUtils.degToRad(longitude);
     const east = new THREE.Vector3(Math.cos(lambda), 0, -Math.sin(lambda));
     const north = new THREE.Vector3().crossVectors(up, east).normalize();
@@ -220,6 +226,7 @@ export function createGlobeScene(
     uShadowSamples: { value: profile.shadowSamples as number },
     uGroundSize: { value: new THREE.Vector2(1, 1) },
     uShadowRegion: { value: new THREE.Vector4(1, 1, 1, 1) },
+    uTerrainDepth:{value:null as THREE.Texture|null},uTerrainDepthSize:{value:new THREE.Vector2(1,1)},uTerrainDepthViewport:{value:new THREE.Vector2(1,1)},uShadowDrawSize:{value:new THREE.Vector2(1,1)},
   };
   const testProfile = process.env.NODE_ENV !== "production" ? read().testCloudProfile : undefined;
   const testCloudTexture = testProfile ? new THREE.DataTexture(
@@ -272,6 +279,9 @@ export function createGlobeScene(
   earth.add(shadowMesh);
   const cloudTarget = new THREE.WebGLRenderTarget(1, 1, { type: renderer.extensions.has("EXT_color_buffer_float") ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: false });
   const shadowTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+  const terrainDepthTarget=new THREE.WebGLRenderTarget(1,1,{depthBuffer:true,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter});
+  const terrainDepthMaterial=material(surfaceVertex,terrainDepthFragment,{uTileOrigin:{value:new THREE.Vector3()}});
+  shared.uTerrainDepth.value=terrainDepthTarget.texture;
   const cloudCache = new GlobeCloudCache();
   const compositeScene = new THREE.Scene(), compositeCamera = new THREE.Camera();
   const compositeMaterial = new THREE.ShaderMaterial({ vertexShader: compositeVertex, fragmentShader: cloudCompositeFragment, glslVersion: THREE.GLSL3, uniforms: { uCloudImage: { value: cloudTarget.texture }, uCloudRegion: { value: new THREE.Vector4(1, 1, 1, 1) } }, transparent: true, depthWrite: false, depthTest: false });
@@ -284,7 +294,7 @@ export function createGlobeScene(
   // A tilted close-up can enter the 80 km atmosphere. March the back face
   // in both cases; the analytic ground intersection clips the volume itself.
   atmosphereMaterial.side = THREE.BackSide;
-  atmosphereMaterial.depthTest = false;
+  atmosphereMaterial.depthTest = true;
   const atmosphere = new THREE.Mesh(ellipsoidShell(80), atmosphereMaterial);
   atmosphere.renderOrder = 2;
   earth.add(atmosphere);
@@ -292,6 +302,8 @@ export function createGlobeScene(
     uBrightness: { value: 1 },
     uActivity: { value: 1 },
     uSpeed: { value: 1 },
+    uAuroraTime:{value:0},
+    uAuroraPrevious:{value:fallback},uAuroraCurrent:{value:fallback},uAuroraBlend:{value:1},uAuroraDebug:{value:0},uHemisphere:{value:0},
   });
   auroraMaterial.transparent = true;
   auroraMaterial.depthWrite = false;
@@ -299,6 +311,14 @@ export function createGlobeScene(
   auroraMaterial.blending = THREE.AdditiveBlending;
   let curtains = new THREE.Group();
   earth.add(curtains);
+  const fieldMaterial=material(auroraFieldVertex,auroraFieldFragment,auroraMaterial.uniforms);
+  fieldMaterial.transparent=true;fieldMaterial.depthWrite=false;fieldMaterial.side=THREE.DoubleSide;
+  const fieldMesh=new THREE.Mesh(ellipsoidShell(120),fieldMaterial);fieldMesh.layers.set(2);fieldMesh.visible=false;earth.add(fieldMesh);
+  let auroraPrevious:THREE.DataTexture|null=null,auroraCurrent:THREE.DataTexture|null=null,auroraTransitionAt=-100000,appliedForecast:string|null=null,appliedObservation:string|null=null;
+  const fieldTexture=(values:Uint8Array)=>{
+    const texture=new THREE.DataTexture(values,360,181,THREE.RedFormat);
+    texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.wrapS=THREE.RepeatWrapping;texture.unpackAlignment=1;texture.needsUpdate=true;return texture;
+  };
   const routes = new THREE.Group(),
     traffic = new THREE.Group();
   earth.add(routes, traffic);
@@ -466,11 +486,21 @@ export function createGlobeScene(
         shared[key].value = texture;
       }
     }
-    if (
-      state.aurora !== lastAurora ||
-      lastQuality !== `${state.auroraSettings.quality}-${effectiveQuality}`
-    ) {
-      lastAurora = state.aurora;
+    const qualityChanged=lastQuality !== `${state.auroraSettings.quality}-${effectiveQuality}`;
+    const forecastChanged=Boolean(state.aurora?.forecastAt && (state.aurora.forecastAt!==appliedForecast||state.aurora.observedAt!==appliedObservation));
+    if (forecastChanged&&state.aurora) {
+      const blend=auroraMaterial.uniforms.uAuroraBlend.value as number;
+      const old=auroraCurrent?.image.data as Uint8Array|undefined,prev=auroraPrevious?.image.data as Uint8Array|undefined;
+      const source=old?Uint8Array.from(old,(v,i)=>Math.round((prev?.[i]??v)*(1-blend)+v*blend)):auroraField(state.aurora.samples);
+      auroraPrevious?.dispose();auroraCurrent?.dispose();
+      auroraPrevious=fieldTexture(source);auroraCurrent=fieldTexture(auroraField(state.aurora.samples));
+      auroraMaterial.uniforms.uAuroraPrevious.value=auroraPrevious;auroraMaterial.uniforms.uAuroraCurrent.value=auroraCurrent;
+      if(curtains.children.length&&!qualityChanged) updateAuroraCurtains(curtains,state.aurora,blend);
+      auroraTransitionAt=performance.now(); appliedForecast=state.aurora.forecastAt;appliedObservation=state.aurora.observedAt;
+      auroraMaterial.uniforms.uAuroraBlend.value=old?0:1;
+    }
+    if (qualityChanged || (!curtains.children.length&&state.aurora?.samples.length)) {
+      lastAurora=state.aurora;
       lastQuality = `${state.auroraSettings.quality}-${effectiveQuality}`;
       clearGroup(curtains);
       earth.remove(curtains);
@@ -484,7 +514,12 @@ export function createGlobeScene(
       earth.add(curtains);
       curtains.traverse(object => object.layers.set(2));
     }
-    curtains.visible = state.auroraEnabled;
+    if(state.aurora)lastAurora=state.aurora;
+    curtains.visible = state.auroraEnabled&&state.auroraSettings.debug!=="field";
+    fieldMesh.visible=state.auroraEnabled&&state.auroraSettings.debug==="field";
+    auroraMaterial.uniforms.uAuroraBlend.value=Math.min(1,(performance.now()-auroraTransitionAt)/12000);
+    auroraMaterial.uniforms.uAuroraDebug.value=state.auroraSettings.debug==="altitude"?2:0;
+    auroraMaterial.uniforms.uHemisphere.value=state.auroraSettings.hemisphere==="north"?1:state.auroraSettings.hemisphere==="south"?-1:0;
     cloudMesh.visible =
       state.cloudsEnabled && state.cloudSettings.realWorld && Boolean(lastData || testProfile);
     shared.uClouds.value = cloudMesh.visible ? 1 : 0;
@@ -513,7 +548,7 @@ export function createGlobeScene(
     cloudMaterial.uniforms.uLightStepKm.value = { low: 0.32, medium: 0.24, high: 0.16, ultra: 0.10 }[effectiveQuality];
     shared.uAirSamples.value = profile.airSamples;
     shared.uShadowSamples.value = profile.shadowSamples;
-    auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness;
+    auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness*(state.auroraSettings.enhancedPresentation?1.8:1);
     auroraMaterial.uniforms.uActivity.value = state.auroraSettings.activity;
     auroraMaterial.uniforms.uSpeed.value = state.auroraSettings.animationSpeed;
   };
@@ -540,6 +575,8 @@ export function createGlobeScene(
     orbit();
   };
   const resetView = () => { bearing = 0; pitch = 0; lastMotionAt = performance.now(); remember(); };
+  let groundRequested = false;
+  const groundView = () => { groundRequested=true; pitch=88; lastMotionAt=performance.now(); };
   const onDown = (event: PointerEvent) => {
     if (down) return;
     dragMode = globeDragMode(event.button, event.shiftKey);
@@ -612,11 +649,13 @@ export function createGlobeScene(
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
+    groundRequested=false;
     targetDistance = globeZoomTarget(
       targetDistance,
       event.deltaY,
       event.deltaMode,
       host.clientHeight,
+      surface.heightAt(latitude,longitude).heightKm,
     );
     remember();
     lastMotionAt = performance.now();
@@ -662,6 +701,7 @@ export function createGlobeScene(
   canvas.addEventListener("auxclick", onAux);
   canvas.addEventListener("contextmenu", onContext);
   canvas.addEventListener("globe-reset-view", resetView);
+  canvas.addEventListener("globe-ground-view", groundView);
   window.addEventListener("blur", stopInput);
   const resize = () => {
     camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
@@ -670,6 +710,8 @@ export function createGlobeScene(
     renderer.setPixelRatio(size.ratio);
     renderer.setSize(host.clientWidth, host.clientHeight, false);
     cloudTarget.setSize(size.cloudWidth, size.cloudHeight);
+    terrainDepthTarget.setSize(size.cloudWidth,size.cloudHeight);
+    shared.uTerrainDepthSize.value.set(size.cloudWidth,size.cloudHeight);
     shadowTarget.setSize(Math.max(1, Math.floor(size.cloudWidth / 2)), Math.max(1, Math.floor(size.cloudHeight / 2)));
     cloudCache.invalidate();
     shared.uGroundSize.value.set(size.groundWidth, size.groundHeight);
@@ -736,27 +778,40 @@ export function createGlobeScene(
     const deltaSeconds = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
     const testingMotion = process.env.NODE_ENV !== "production" && Boolean(read().testCameraMotion);
-    const speed = Math.max(0.25, (distance - WGS84_A_KM) * 0.35) * deltaSeconds * (keys.has("shift") ? 4 : 1);
+    const ground = surface.heightAt(latitude,longitude);
+    const clearance = distance-WGS84_A_KM-ground.heightKm;
+    const speed = Math.max(0.003, clearance * 0.35) * deltaSeconds * (keys.has("shift") ? 4 : 1);
     const sideways = Number(keys.has("d")) - Number(keys.has("a"));
     const forward = Number(keys.has("w")) - Number(keys.has("s"));
     if (sideways || forward || testingMotion) {
       const yaw = THREE.MathUtils.degToRad(bearing);
       const normalizer = Math.max(1, Math.hypot(sideways, forward));
-      translate((sideways * Math.cos(yaw) + forward * Math.sin(yaw)) * speed / normalizer + (testingMotion ? deltaSeconds * 0.8 : 0), (-sideways * Math.sin(yaw) + forward * Math.cos(yaw)) * speed / normalizer);
+      translate((sideways * Math.cos(yaw) + forward * Math.sin(yaw)) * speed / normalizer + (testingMotion ? deltaSeconds * Math.max(0.8,(distance-WGS84_A_KM)*0.012) : 0), (-sideways * Math.sin(yaw) + forward * Math.cos(yaw)) * speed / normalizer);
     }
     if (keys.has("q") || keys.has("e")) {
-      targetDistance = THREE.MathUtils.clamp(targetDistance + (Number(keys.has("e")) - Number(keys.has("q"))) * speed, WGS84_A_KM + 4, WGS84_A_KM + 40000);
+      groundRequested=false;
+      targetDistance=Math.max(targetDistance,WGS84_A_KM+ground.heightKm+TERRAIN_CLEARANCE_KM);
+      targetDistance = THREE.MathUtils.clamp(targetDistance + (Number(keys.has("e")) - Number(keys.has("q"))) * speed, WGS84_A_KM + TERRAIN_CLEARANCE_KM, WGS84_A_KM + 40000);
       lastMotionAt = now;
     }
-    distance = globeZoomStep(distance, targetDistance, deltaSeconds);
+    if(groundRequested) targetDistance=WGS84_A_KM+ground.heightKm+TERRAIN_CLEARANCE_KM;
+    // Descend only after a DEM is present at the camera. Unsupported polar
+    // caps and failed downloads remain explicitly above a conservative floor.
+    const floor=WGS84_A_KM+(ground.ready?ground.heightKm+TERRAIN_CLEARANCE_KM:Math.max(9.1,ground.heightKm+0.1));
+    const safeTarget=Math.max(targetDistance,floor);
+    distance = Math.max(floor,globeZoomStep(distance, safeTarget, deltaSeconds));
     const height = distance - WGS84_A_KM,
       tilt = THREE.MathUtils.degToRad(pitch), yaw = THREE.MathUtils.degToRad(bearing);
     // Height means actual altitude above the selected WGS84 surface, even at
     // the poles. Tilting changes the view direction, never the camera altitude.
-    camera.position.set(0, 0, surfaceRadius + height);
+    // Rebase the world around the eye. Tile vertices are local offsets, so
+    // GPU subtraction no longer loses metre-scale detail near Earth's radius.
+    camera.position.set(0, 0, 0);
+    earth.position.set(...geodeticToWorld(latitude,longitude,height*1000)).applyQuaternion(earth.quaternion).negate();
     camera.up.set(Math.sin(yaw) * Math.cos(tilt), Math.cos(yaw) * Math.cos(tilt), Math.sin(tilt));
     camera.lookAt(Math.sin(yaw) * Math.sin(tilt) * 1000, Math.cos(yaw) * Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
     sync();
+    auroraMaterial.uniforms.uAuroraTime.value+=deltaSeconds*read().auroraSettings.animationSpeed;
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
       shared.uSun.value.set(
@@ -767,7 +822,7 @@ export function createGlobeScene(
     earth.updateMatrixWorld(true);
     // Keep the depth buffer useful at every altitude. A fixed 0.5 km near
     // plane loses tens of kilometres of depth precision from orbit.
-    const clipping = globeClipRange(WGS84_A_KM + height);
+    const clipping = globeClipRange(WGS84_A_KM + Math.max(TERRAIN_CLEARANCE_KM,height-ground.heightKm));
     camera.near = clipping.near;
     camera.far = clipping.far;
     camera.updateProjectionMatrix();
@@ -777,7 +832,7 @@ export function createGlobeScene(
       camera.updateMatrixWorld(true);
       frustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(earth.matrixWorld);
       localFrustum.setFromProjectionMatrix(frustumMatrix);
-      surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled);
+      surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled, groundRequested||targetDistance-WGS84_A_KM<9.1);
       lastLodUpdate = now;
     }
     const moving = (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
@@ -785,18 +840,24 @@ export function createGlobeScene(
     const shadowWidth = Math.max(1, Math.floor(cloudSize.width / 2)), shadowHeight = Math.max(1, Math.floor(cloudSize.height / 2));
     cloudTarget.viewport.set(0, 0, cloudSize.width, cloudSize.height);
     cloudTarget.scissor.copy(cloudTarget.viewport); cloudTarget.scissorTest = true;
+    terrainDepthTarget.viewport.copy(cloudTarget.viewport);terrainDepthTarget.scissor.copy(cloudTarget.scissor);terrainDepthTarget.scissorTest=true;
+    shared.uTerrainDepthViewport.value.set(cloudSize.width,cloudSize.height);shared.uShadowDrawSize.value.set(shadowWidth,shadowHeight);
     shadowTarget.viewport.set(0, 0, shadowWidth, shadowHeight);
     shadowTarget.scissor.copy(shadowTarget.viewport); shadowTarget.scissorTest = true;
     compositeMaterial.uniforms.uCloudRegion.value.set(cloudSize.width / cloudTarget.width, cloudSize.height / cloudTarget.height, 1 / cloudTarget.width, 1 / cloudTarget.height);
     shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
     shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
     const settings = read().cloudSettings;
-    const signature = [distance.toFixed(5), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const signature = [distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
     const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
     const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();
     gpuTimer.begin(refreshClouds && cloudMesh.visible ? (moving ? "volume-moving" : "volume-full") : "reuse");
     if (refreshClouds) {
+      if(cloudMesh.visible) {
+        renderer.setRenderTarget(terrainDepthTarget);renderer.setClearColor(0xffffff,1);renderer.clear();
+        camera.layers.set(4);scene.overrideMaterial=terrainDepthMaterial;renderer.render(scene,camera);scene.overrideMaterial=null;
+      }
       renderer.setRenderTarget(shadowTarget);
       renderer.setClearColor(0xffffff, 1);
       renderer.clear();
@@ -815,6 +876,8 @@ export function createGlobeScene(
     renderer.setClearColor(0x01040a, 1);
     camera.layers.set(0);
     renderer.render(scene, camera);
+    const auroraBeforeClouds=height<18;
+    if(auroraBeforeClouds) { renderer.autoClear=false; camera.layers.set(2); renderer.render(scene,camera); camera.layers.set(0); renderer.autoClear=true; }
     if (cloudMesh.visible) {
       renderer.autoClear = false;
       renderer.render(compositeScene, compositeCamera);
@@ -822,7 +885,7 @@ export function createGlobeScene(
     }
     renderer.autoClear = false;
     camera.layers.set(2);
-    renderer.render(scene, camera);
+    if(!auroraBeforeClouds) renderer.render(scene, camera);
     camera.layers.set(0);
     renderer.autoClear = true;
     renderer.setClearColor(0x01040a, 1);
@@ -857,13 +920,22 @@ export function createGlobeScene(
         triangles: renderer.info.render.triangles,
         clouds: cloudMesh.visible,
         aurora: curtains.visible,
+        auroraForecast:appliedForecast,
+        auroraObserved:lastAurora?.observedAt,
+        auroraStale:Boolean(lastAurora?.stale),
+        auroraTransition:Math.round(auroraMaterial.uniforms.uAuroraBlend.value*100)/100,
+        auroraMeshes:curtains.children.length,
         sun: shared.uSun.value.toArray(),
-        cameraKm: Math.round(camera.position.length()),
-        altitudeKm: Math.round(height * 10) / 10,
+        cameraKm: Math.round(surfaceRadius+height),
+        altitudeKm: Math.round(height * 1000) / 1000,
+        groundMetres: Math.round(ground.heightKm*1000),
+        aboveGroundMetres: Math.round((height-ground.heightKm)*1000),
+        terrainReady: ground.ready,
+        groundRequested,
         pitch: Math.round(pitch),
         bearing: Math.round(bearing * 10) / 10,
         focus: [Number(longitude.toFixed(5)), Number(latitude.toFixed(5))],
-        clippingKm: [Math.round(camera.near), Math.round(camera.far)],
+        clippingKm: [camera.near, Math.round(camera.far)],
       });
     }
   };
@@ -889,6 +961,7 @@ export function createGlobeScene(
     canvas.removeEventListener("auxclick", onAux);
     canvas.removeEventListener("contextmenu", onContext);
     canvas.removeEventListener("globe-reset-view", resetView);
+    canvas.removeEventListener("globe-ground-view", groundView);
     window.removeEventListener("blur", stopInput);
     surface.dispose();
     clearGroup(curtains);
@@ -900,10 +973,12 @@ export function createGlobeScene(
     cloudMesh.geometry.dispose();
     shadowMesh.geometry.dispose(); shadowMaterial.dispose();
     cloudTarget.dispose(); shadowTarget.dispose();
+    terrainDepthTarget.dispose();terrainDepthMaterial.dispose();
     compositeQuad.geometry.dispose(); compositeMaterial.dispose(); gpuTimer.dispose();
     atmosphere.geometry.dispose();
     atmosphereMaterial.dispose();
     auroraMaterial.dispose();
+    auroraPrevious?.dispose();auroraCurrent?.dispose();fieldMaterial.dispose();fieldMesh.geometry.dispose();
     base.dispose();
     detail.dispose();
     fallback.dispose();

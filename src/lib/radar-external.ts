@@ -139,6 +139,10 @@ export type RadarAuroraData = {
   forecastAt: string | null;
   samples: RadarAuroraSample[];
   refreshedAt: string;
+  stale?: boolean;
+  error?: string;
+  gridWidth?: number;
+  gridHeight?: number;
 };
 
 type Cached<T> = { value: T; expiresAt: number };
@@ -377,33 +381,13 @@ export async function getRadarWeatherData() {
 }
 
 
-function ovationTimestamp(value: unknown) {
-  const timestamp = asString(value);
-  return timestamp && Number.isFinite(new Date(timestamp).getTime()) ? timestamp : null;
-}
-
-function normaliseAurora(value: unknown): RadarAuroraData {
-  const record = asRecord(value);
-  const coordinates = Array.isArray(record?.coordinates) ? record.coordinates : [];
-  // Verified live schema: [Longitude, Latitude, Aurora]. Reject a changed
-  // coordinate order instead of silently drawing a mislocated auroral oval.
-  const schema = asString(record?.["Data Format"]);
-  if (schema && !/^\[\s*Longitude\s*,\s*Latitude\s*,\s*Aurora\s*\]$/i.test(schema)) throw new Error("Unexpected NOAA OVATION coordinate schema.");
+async function normaliseAurora(value: unknown): Promise<RadarAuroraData> {
+  const {validateOvation}=await import("./radar-aurora-field");
+  const field=validateOvation(value);
   return {
     source: "NOAA SWPC OVATION Prime",
-    observedAt: ovationTimestamp(record?.["Observation Time"]),
-    forecastAt: ovationTimestamp(record?.["Forecast Time"]),
-    // Keep the meaningful part of both OVATION ovals. Cells at 5% and above
-    // preserve NOAA's live spatial coverage without sending the transparent
-    // zero-probability world grid to every pilot.
-    samples: coordinates.flatMap((entry) => {
-      if (!Array.isArray(entry) || entry.length < 3) return [];
-      const longitude = asNumber(entry[0]);
-      const latitude = asNumber(entry[1]);
-      const probability = asNumber(entry[2]);
-      if (longitude === null || latitude === null || probability === null || longitude < -180 || longitude > 360 || Math.abs(latitude) > 90 || Math.abs(latitude) < 45 || probability < 5) return [];
-      return [{ longitude, latitude, probability: Math.max(0, Math.min(100, probability)) }];
-    }),
+    observedAt:field.observedAt, forecastAt:field.forecastAt,
+    samples:field.samples,gridWidth:field.width,gridHeight:field.height,stale:false,
     refreshedAt: new Date().toISOString(),
   };
 }
@@ -411,16 +395,19 @@ function normaliseAurora(value: unknown): RadarAuroraData {
 export async function getRadarAuroraData() {
   if (auroraCache && auroraCache.expiresAt > Date.now()) return auroraCache.value;
   try {
-    const value = normaliseAurora(await fetchJson("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"));
+    const value = await normaliseAurora(await fetchJson("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"));
+    if(auroraCache?.value.observedAt && Date.parse(value.observedAt!)<Date.parse(auroraCache.value.observedAt)) throw new Error("Out-of-order NOAA snapshot");
     auroraCache = { value, expiresAt: Date.now() + 5 * 60_000 };
     return value;
   } catch {
-    return auroraCache?.value ?? {
+    if(auroraCache) { auroraCache.expiresAt=Date.now()+60000; auroraCache.value={...auroraCache.value,stale:true,error:"NOAA refresh failed; showing last verified forecast"}; return auroraCache.value; }
+    return {
       source: "NOAA SWPC OVATION Prime",
       observedAt: null,
       forecastAt: null,
       samples: [],
       refreshedAt: new Date().toISOString(),
+      stale:true,error:"NOAA unavailable — no aurora fabricated",
     };
   }
 }

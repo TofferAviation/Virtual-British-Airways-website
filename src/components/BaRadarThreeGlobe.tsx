@@ -35,7 +35,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
       if (host?.dataset.globeStatus) { setPerformanceLabel(host.dataset.globeStatus); return; }
       if (!host?.dataset.globeDiagnostics) return;
       const info = JSON.parse(host.dataset.globeDiagnostics);
-      setPerformanceLabel(`${info.mode === "auto" ? "Auto → " : ""}${info.quality} · ${info.fps} fps · ground LOD ${info.terrain.level}`);
+      setPerformanceLabel(`${info.mode === "auto" ? "Auto → " : ""}${info.quality} · ${info.fps} fps · LOD ${info.terrain.level} · ${info.aboveGroundMetres.toLocaleString()} m AGL${!info.terrainReady&&(info.groundRequested||info.altitudeKm<10) ? " · loading DEM / descent held" : ""}`);
     }, 2000);
     return () => {
       disposed = true;
@@ -52,12 +52,16 @@ export function BaRadarThreeGlobe(props: GlobeSceneState) {
         </span>
         <span>WASD: move · Q/E: down/up · Shift: faster · Home: reset view</span>
         <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA GFS / SWPC</span>
+        <a href="/globe-sources" target="_blank" rel="noreferrer" style={{pointerEvents:"auto",color:"#a8c6d9"}}>Terrain: Mapzen / USGS / NOAA and contributors · credits & limits</a>
         <span aria-live="off">{error ? "3D unavailable" : performanceLabel}</span>
         <button type="button" style={{ pointerEvents: "auto", justifySelf: "start", font: "10px Arial", padding: "4px 7px", color: "#d7ebff", background: "#12344b", border: "1px solid #4982a6", borderRadius: 3 }} onClick={() => {
           const canvas = container.current?.querySelector("canvas");
           canvas?.dispatchEvent(new Event("globe-reset-view"));
           canvas?.focus({ preventScroll: true });
         }}>Reset view</button>
+        <button type="button" style={{pointerEvents:"auto",font:"10px Arial",padding:"4px 7px",color:"#d7ebff",background:"#12344b",border:"1px solid #4982a6",borderRadius:3}} onClick={()=>{
+          const canvas=container.current?.querySelector("canvas"); canvas?.dispatchEvent(new Event("globe-ground-view")); canvas?.focus({preventScroll:true});
+        }}>Go to ground · 5 m</button>
       </div>
     </div>
   );

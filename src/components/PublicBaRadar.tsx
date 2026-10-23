@@ -110,15 +110,22 @@ async function unpackCloudData(data: RadarCloudData): Promise<RadarCloudData> {
 }
 
 function AuroraControls({ settings, onChange, data }: { settings: AuroraSettings; onChange: (settings: AuroraSettings) => void; data?: RadarAuroraData | null }) {
+  const [clock,setClock]=useState(0);
+  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer);},[]);
   const changeNumber = (key: "activity" | "animationSpeed" | "brightness") => (event: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...settings, [key]: Number(event.target.value) });
   };
   return <div className="ba-radar-aurora-controls" aria-label="Aurora appearance controls">
-    <label><span>Visual activity</span><output>{Math.round(settings.activity * 100)}%</output><input type="range" min="0.55" max="1.55" step="0.05" value={settings.activity} onChange={changeNumber("activity")} /></label>
+    <label><span>Emission intensity</span><output>{Math.round(settings.activity * 100)}%</output><input type="range" min="0.55" max="1.55" step="0.05" value={settings.activity} onChange={changeNumber("activity")} /></label>
     <label><span>Motion speed</span><output>{Math.round(settings.animationSpeed * 100)}%</output><input type="range" min="0" max="1.8" step="0.1" value={settings.animationSpeed} onChange={changeNumber("animationSpeed")} /></label>
     <label><span>Brightness</span><output>{Math.round(settings.brightness * 100)}%</output><input type="range" min="0.45" max="1.65" step="0.05" value={settings.brightness} onChange={changeNumber("brightness")} /></label>
-    <p className="ba-radar-cloud-status">{data?.forecastAt ? `NOAA forecast · ${new Date(data.forecastAt).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", timeZone:"UTC" })} UTC${Date.now()-new Date(data.forecastAt).getTime()>90*60_000 ? " · stale" : ""}` : "Waiting for NOAA forecast"}</p>
+    <p className="ba-radar-cloud-status">{data?.forecastAt ? `NOAA valid ${new Date(data.forecastAt).toISOString().replace("T"," ").slice(0,16)} UTC · observed ${data.observedAt?.slice(11,16)??"unknown"} UTC · fetched ${Math.max(0,Math.round((clock-Date.parse(data.refreshedAt))/60000))} min ago${data.stale||(clock-Date.parse(data.observedAt??data.refreshedAt))>90*60000?" · STALE":""}` : "Waiting for a verified NOAA forecast"}</p>
+    {data?.error?<p className="ba-radar-cloud-status error">{data.error}</p>:null}
+    <label className="ba-radar-aurora-quality"><span>Hemisphere</span><select value={settings.hemisphere??"both"} onChange={e=>onChange({...settings,hemisphere:e.target.value as AuroraSettings["hemisphere"]})}><option value="both">Both</option><option value="north">Northern</option><option value="south">Southern</option></select></label>
+    <label className="ba-radar-aurora-quality"><span>Presentation</span><select value={settings.enhancedPresentation?"photography":"realistic"} onChange={e=>onChange({...settings,enhancedPresentation:e.target.value==="photography"})}><option value="realistic">Realistic</option><option value="photography">Enhanced photography · exposure only</option></select></label>
     <label className="ba-radar-aurora-quality"><span>Quality</span><select value={settings.quality} onChange={(event) => onChange({ ...settings, quality: event.target.value as AuroraQuality })}><option value="auto">Auto</option><option value="high">High</option><option value="balanced">Balanced</option><option value="low">Performance</option></select></label>
+    <p className="ba-radar-layer-note">NOAA controls geographic activity. Individual curtains, rays, colour and motion are procedural—not observed fine structure or calibrated radiance.</p>
+    {process.env.NODE_ENV!=="production"?<label className="ba-radar-aurora-quality"><span>Aurora debug</span><select value={settings.debug??"off"} onChange={e=>onChange({...settings,debug:e.target.value as AuroraSettings["debug"]})}><option value="off">Emission</option><option value="field">Raw NOAA activity field</option><option value="altitude">95–450 km altitude</option></select></label>:null}
   </div>;
 }
 

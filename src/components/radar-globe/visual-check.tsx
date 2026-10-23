@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BaRadarThreeGlobe } from "@/components/BaRadarThreeGlobe";
 import type { RadarCloudData, RadarAuroraData } from "@/lib/radar-external";
 import type { GlobeQualityRequest } from "@/lib/radar-globe-quality";
+import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
 
 const views = {
   day: {
@@ -66,6 +67,10 @@ const views = {
     fov: 55,
     date: "2026-03-20T12:00:00Z",
   },
+  mountains: { latitude:46.57, longitude:7.98, distanceKm:6387.237, pitch:86, bearing:190, fov:60, date:"2026-03-20T10:00:00Z" },
+  ground: { latitude:69.65, longitude:18.96, distanceKm:6378.142, pitch:100, bearing:0, fov:65, date:"2026-03-20T22:00:00Z" },
+  norway: { latitude:67, longitude:20, distanceKm:6878.137, pitch:85, bearing:0, fov:60, date:"2026-03-20T22:00:00Z" },
+  aurora: {latitude:58,longitude:71,distanceKm:6878.137,pitch:68,bearing:0,fov:60,date:"2026-03-20T22:00:00Z"},
   limb: {
     latitude: 10,
     longitude: 90,
@@ -82,8 +87,26 @@ export function GlobeVisualCheck() {
     [quality, setQuality] = useState<GlobeQualityRequest>("auto"),
     [cache, setCache] = useState(true),
     [motion, setMotion] = useState(false),
+    [auroraDebug,setAuroraDebug]=useState<AuroraSettings["debug"]>("off"),
+    [hemisphere,setHemisphere]=useState<AuroraSettings["hemisphere"]>("both"),
+    [auroraCase,setAuroraCase]=useState("live"),
+    [paused,setPaused]=useState(false),
+    [recording,setRecording]=useState(false),
+    [captureUrl,setCaptureUrl]=useState(""),
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
+  const recordingRef=useRef<{recorder:MediaRecorder;stream:MediaStream;timer:ReturnType<typeof setTimeout>}|null>(null),captureRef=useRef("");
+  useEffect(()=>()=>{const active=recordingRef.current;if(active){clearTimeout(active.timer);if(active.recorder.state!=="inactive")active.recorder.stop();active.stream.getTracks().forEach(t=>t.stop());}if(captureRef.current)URL.revokeObjectURL(captureRef.current);},[]);
+  const record=()=>{
+    const canvas=document.querySelector<HTMLCanvasElement>(".ba-radar-globe-three-canvas");
+    if(!canvas||!canvas.captureStream||typeof MediaRecorder==="undefined"){setErrors(v=>[...v,"This browser does not support canvas recording"]);return;}
+    try{
+      const stream=canvas.captureStream(30),recorder=new MediaRecorder(stream),chunks:BlobPart[]=[];
+      recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+      recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());if(captureRef.current)URL.revokeObjectURL(captureRef.current);captureRef.current=URL.createObjectURL(new Blob(chunks,{type:recorder.mimeType}));setCaptureUrl(captureRef.current);setRecording(false);recordingRef.current=null;};
+      recorder.start();setRecording(true);const timer=setTimeout(()=>{if(recorder.state!=="inactive")recorder.stop();},6000);recordingRef.current={stream,recorder,timer};
+    }catch(e){setErrors(v=>[...v,String(e)]);}
+  };
   useEffect(() => {
     void fetch("/api/radar/clouds")
       .then((r) => r.json())
@@ -108,9 +131,8 @@ export function GlobeVisualCheck() {
         setData({ ...data, encoding: "rgba8-base64" });
       })
       .catch((e) => setErrors((v) => [...v, String(e)]));
-    void fetch("/api/radar/aurora")
-      .then((r) => r.json())
-      .then(setAurora);
+    const refreshAurora=()=>void fetch("/api/radar/aurora").then(r=>r.json()).then(setAurora).catch(()=>{});
+    refreshAurora();const auroraTimer=setInterval(refreshAurora,300000);
     const handler = (event: Event) =>
       setErrors((v) => [...v, (event as CustomEvent<string>).detail]);
     window.addEventListener("globe-shader-error", handler);
@@ -124,9 +146,22 @@ export function GlobeVisualCheck() {
     );
     return () => {
       clearInterval(timer);
+      clearInterval(auroraTimer);
       window.removeEventListener("globe-shader-error", handler);
     };
   }, []);
+  const displayAurora=useMemo(()=>{
+    if(auroraCase==="live")return aurora;
+    const shifted=auroraCase==="shift", minute=auroraCase==="quiet"?0:shifted?2:1;
+    const samples=Array.from({length:65160},(_,i)=>{
+      const longitude=Math.floor(i/181),latitude=i%181-90,p=longitude*Math.PI/180;
+      const north=67+5*Math.sin(p+0.3)+(shifted?2:0),south=-69+3*Math.cos(p-1.8)-(shifted?1:0);
+      const distance=Math.min(Math.abs(latitude-north),Math.abs(latitude-south));
+      const probability=Math.round((auroraCase==="quiet"?9:83)*Math.exp(-distance*distance/8)*(0.55+0.45*Math.sin(p*1.5)**2));
+      return {longitude,latitude,probability};
+    });
+    return {source:"NOAA SWPC OVATION Prime" as const,observedAt:`2026-03-20T22:0${minute}:00Z`,forecastAt:`2026-03-20T22:3${minute}:00Z`,refreshedAt:"2026-03-20T22:00:00Z",samples};
+  },[aurora,auroraCase]);
   const selected = views[view];
   return (
     <main
@@ -138,7 +173,7 @@ export function GlobeVisualCheck() {
         font: "13px Arial",
       }}
     >
-      <div style={{ position: "absolute", inset: "88px 0 80px" }}>
+      <div style={{ position: "absolute", inset: "112px 0 88px" }}>
         <BaRadarThreeGlobe
           key={`${view}-${revision}`}
           flights={[]}
@@ -148,13 +183,14 @@ export function GlobeVisualCheck() {
           onSelectController={() => {}}
           replay={null}
           auroraEnabled
-          aurora={aurora}
+          aurora={displayAurora}
           auroraSettings={{
             activity: 1,
-            animationSpeed: 1,
+            animationSpeed: paused?0:1,
             brightness: 1,
             quality: "high",
             enhancedPresentation: false,
+            hemisphere,debug:auroraDebug,
           }}
           cloudsEnabled={clouds}
           cloudData={data}
@@ -201,8 +237,14 @@ export function GlobeVisualCheck() {
         <label style={{fontSize: 12}}>Globe quality {" "}<select aria-label="Globe quality" value={quality} onChange={e => setQuality(e.target.value as GlobeQualityRequest)}>{["auto", "low", "medium", "high", "ultra"].map(q => <option key={q} value={q}>{q}</option>)}</select></label>
         <label style={{fontSize: 12}}><input type="checkbox" checked={cache} onChange={e => setCache(e.target.checked)} />Cloud cache</label>
         <label style={{fontSize: 12}}><input type="checkbox" checked={motion} onChange={e => setMotion(e.target.checked)} />Motion test</label>
+        <label>Aurora view <select aria-label="Aurora view" value={auroraDebug} onChange={e=>setAuroraDebug(e.target.value as AuroraSettings["debug"])}><option value="off">Curtains</option><option value="field">NOAA heatmap</option><option value="altitude">Altitude 95–450 km</option></select></label>
+        <label>Hemisphere <select aria-label="Aurora hemisphere" value={hemisphere} onChange={e=>setHemisphere(e.target.value as AuroraSettings["hemisphere"])}><option value="both">Both</option><option value="north">North</option><option value="south">South</option></select></label>
+        <label>Forecast <select aria-label="Aurora test forecast" value={auroraCase} onChange={e=>setAuroraCase(e.target.value)}><option value="live">Live NOAA</option><option value="quiet">Synthetic quiet</option><option value="storm">Synthetic active</option><option value="shift">Synthetic shifted · transition</option></select></label>
+        <label><input type="checkbox" checked={paused} onChange={e=>setPaused(e.target.checked)}/>Pause aurora</label>
+        <button onClick={record} disabled={recording}>{recording?"Recording…":"Record 6 s"}</button>
+        {captureUrl?<a href={captureUrl} download={`globe-${view}-${auroraCase}.webm`} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
-          {view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS forecast: ${data?.validAt ?? "loading"} · NOAA: ${aurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
+          {auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS: ${data?.validAt ?? "loading"} · NOAA valid: ${displayAurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
         </span>
       </nav>
       <output

@@ -4,7 +4,7 @@ import { WGS84_A_KM } from "./radar-globe-geodesy.ts";
 import { globeClipRange, globeZoomTarget, globeZoomStep } from "./radar-globe-geodesy.ts";
 
 test("depth precision resolves cloud/ground separation at every supported zoom", () => {
-  for (const height of [4, 6, 12, 90, 400, 2600, 16000, 40000]) {
+  for (const height of [0.005, 0.02, 4, 6, 12, 90, 400, 2600, 16000, 40000]) {
     const { near, far } = globeClipRange(WGS84_A_KM + height);
     assert.ok(near < height);
     assert.ok(far > height + WGS84_A_KM * 2);
@@ -14,7 +14,7 @@ test("depth precision resolves cloud/ground separation at every supported zoom",
   }
 });
 
-test("wheel modes agree and extreme deltas stop at safe flight altitude", () => {
+test("wheel modes agree and extreme deltas allow the ground collision floor", () => {
   const d = WGS84_A_KM + 400;
   assert.equal(globeZoomTarget(d, 16, 0, 800), globeZoomTarget(d, 1, 1, 800));
   assert.equal(globeZoomTarget(d, 80, 0, 800), globeZoomTarget(d, 0.1, 2, 800));
@@ -23,7 +23,7 @@ test("wheel modes agree and extreme deltas stop at safe flight altitude", () => 
     close = globeZoomTarget(close, -1e8, 0, 800);
     far = globeZoomTarget(far, 1e8, 0, 800);
   }
-  assert.equal(close, WGS84_A_KM + 4);
+  assert.equal(close, WGS84_A_KM + 0.005);
   assert.equal(far, WGS84_A_KM + 40000);
 });
 
@@ -34,4 +34,9 @@ test("zoom damping neither overshoots nor depends on frame rate", () => {
   assert.ok(Math.abs(a - b) < 1e-8);
   assert.ok(a > 7000 && a < 7001);
   assert.equal(globeZoomStep(a, 7000, 0), a);
+});
+test("ground zoom uses clearance, not mountain elevation as its dolly speed",()=>{
+  const sea=globeZoomTarget(WGS84_A_KM+.005,80,0,800),mountain=globeZoomTarget(WGS84_A_KM+3+.005,80,0,800,3);
+  assert.ok(Math.abs(mountain-sea-3)<1e-9);
+  assert.equal(globeZoomTarget(WGS84_A_KM+3,-160,0,800,3),WGS84_A_KM+3+.005);
 });

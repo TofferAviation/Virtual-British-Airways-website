@@ -11,7 +11,7 @@ import { geodeticToWorld, worldToGeodetic, geographicTileBounds, WGS84_A_KM, WGS
 const sourceUrl = new URL("../components/radar-globe/surface.ts", import.meta.url);
 let source = await readFile(sourceUrl, "utf8");
 source = source.replace('"three"', JSON.stringify(import.meta.resolve("three")));
-for (const name of ["radar-globe-geodesy", "radar-globe-quality"])
+for (const name of ["radar-globe-geodesy", "radar-globe-quality", "radar-globe-elevation"])
   source = source.replace(`"@/lib/${name}"`, JSON.stringify(new URL(`./${name}.ts`, import.meta.url).href));
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const { GlobeSurface } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
@@ -25,7 +25,7 @@ test("actual terrain scheduler bounds memory/requests, refines near terrain and 
     const finish = () => {
       if (!pending.delete(finish)) return;
       active--;
-      resolve(new Response(new Blob([String(url)]), { headers: { "Content-Type": "image/jpeg" } }));
+      resolve(String(url).includes("/elevation?")?new Response(new Float32Array(65*65).fill(100).buffer,{headers:{"X-Elevation-Grid":"65"}}):new Response(new Blob([String(url)]), { headers: { "Content-Type": "image/jpeg" } }));
     };
     pending.add(finish);
     signal.addEventListener("abort", () => {
@@ -33,18 +33,19 @@ test("actual terrain scheduler bounds memory/requests, refines near terrain and 
       active--; reject(new Error("aborted"));
     }, { once: true });
   });
-  globalThis.createImageBitmap = async blob => {
-    const size = (await blob.text()).includes("blue-marble") ? 1024 : 512;
+  globalThis.createImageBitmap = async (blob,options={}) => {
+    const size = options.resizeWidth??(blob instanceof Blob?(await blob.text()).includes("blue-marble")?1024:512:blob.width);
     return { width: size, height: size, close() { closed++; } };
   };
   const surface = new GlobeSurface((texture, night) => new THREE.ShaderMaterial({ uniforms: { uSurface: { value: texture }, uNight: { value: night } } }), 8);
   const camera = new THREE.PerspectiveCamera(55, 16 / 9, 1, 20000);
   const sun = new THREE.Vector3(0, 0, 1);
-  const update = (latitude = 51.5, longitude = -0.12) => {
-    camera.position.set(...geodeticToWorld(latitude, longitude, 12000));
+  const update = (latitude = 51.5, longitude = -0.12, heightMetres = 12000, groundIntent = false) => {
+    camera.near = 0.0002;camera.updateProjectionMatrix();
+    camera.position.set(...geodeticToWorld(latitude, longitude, heightMetres));
     camera.lookAt(0, 0, 0); camera.rotateX(Math.PI / 6); camera.updateMatrixWorld();
     const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    surface.update(camera.position, 1080, camera.fov, frustum, sun, false);
+    surface.update(camera.position, 1080, camera.fov, frustum, sun, false, groundIntent);
     for (const tile of surface.tiles.values()) if (tile.mesh.visible) {
       for (let parent = tile.parent; parent; parent = parent.parent) assert.equal(parent.mesh.visible, false, "overlapping ancestor");
     }
@@ -71,8 +72,14 @@ test("actual terrain scheduler bounds memory/requests, refines near terrain and 
     assert.ok(peak <= 2, `Low started ${peak} concurrent requests`);
     assert.ok(surface.stats.imageryMb <= GLOBE_PROFILES.low.cacheMb + 0.1, JSON.stringify(surface.stats));
     assert.ok(surface.tiles.size <= GLOBE_PROFILES.low.maxTiles);
-    assert.ok(surface.stats.level >= 6, `never reached useful close-up detail: ${JSON.stringify(surface.stats)}`);
+    assert.ok(surface.stats.level >= 6, `never reached useful close-up detail: ${JSON.stringify({...surface.stats,nodes:surface.tiles.size,levels:[...surface.tiles.values()].filter(t=>t.z>=5).map(t=>({id:`${t.z}/${t.x}/${t.y}`,ready:t.ready,borrowed:t.borrowed,dem:!!t.elevation,image:!!t.dayTexture,touched:t.touched,visible:t.mesh.visible,demRetry:t.elevationRetryAt,retry:t.retryAt}))})}`);
     checkCoverage();
+    for(let i=0;i<100;i++){await drain();update(51.5,-0.12,9100,true);}
+    const ground=surface.heightAt(51.5,-0.12);
+    assert.ok(ground.ready,`Low could not finish the ground DEM: ${JSON.stringify(surface.stats)}`);
+    assert.equal(ground.heightKm,0.1);
+    for(let i=0;i<50;i++){await drain();update(51.5,-0.12,105,true);}
+    assert.ok(surface.stats.imageryMb<=GLOBE_PROFILES.low.cacheMb+0.1);
     surface.setQuality("high");
     for (let i = 0; i < 80; i++) { await drain(); update(); }
     assert.ok(surface.stats.level >= 9, `HD terrain not reached: ${JSON.stringify(surface.stats)}`);

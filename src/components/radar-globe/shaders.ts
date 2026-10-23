@@ -135,22 +135,29 @@ float shadowTransmittance(vec3 p){
 `;
 
 export const surfaceVertex = `
+uniform vec3 uTileOrigin;
+#include <common>
+#include <logdepthbuf_pars_vertex>
 out vec3 vPosition;out vec3 vNormal;out vec2 vUv;
-void main(){vPosition=position;vNormal=normal;vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}
+void main(){vPosition=position+uTileOrigin;vNormal=normal;vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+#include <logdepthbuf_vertex>
+}
 `;
 export const surfaceFragment = `
 precision highp float;
 in vec3 vPosition;in vec3 vNormal;in vec2 vUv;
 uniform sampler2D uSurface;uniform sampler2D uNight;
-uniform sampler2D uGroundShadow;uniform vec2 uGroundSize;uniform vec4 uNightTransform;uniform vec4 uShadowRegion;
+uniform sampler2D uGroundShadow;uniform vec2 uGroundSize;uniform vec4 uNightTransform;uniform vec4 uDayTransform;uniform vec4 uShadowRegion;
+#include <logdepthbuf_pars_fragment>
 out vec4 fragColor;
 ${geoGLSL}
 ${densityGLSL}
 void main(){
-  vec3 colour=texture(uSurface,vUv).rgb;
+  #include <logdepthbuf_fragment>
+  vec3 colour=texture(uSurface,vUv*uDayTransform.xy+uDayTransform.zw).rgb;
   float solar=sunElevation(vPosition);
   float day=smoothstep(-0.08,0.10,solar);
-  float light=max(0.0,solar);
+  float light=max(0.0,dot(normalize(vNormal),uSun));
   vec2 shadowUV=clamp(gl_FragCoord.xy/uGroundSize*uShadowRegion.xy,uShadowRegion.zw*0.5,uShadowRegion.xy-uShadowRegion.zw*0.5);
   float shadow=texture(uGroundShadow,shadowUV).r;
   vec3 diffuse=colour*(0.025+day*(0.24+1.50*sqrt(light))*mix(0.42,1.0,shadow));
@@ -170,7 +177,12 @@ void main(){
   #include <colorspace_fragment>
 }
 `;
-export const volumeVertex = `out vec3 vPosition;void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+export const volumeVertex = `
+#include <common>
+#include <logdepthbuf_pars_vertex>
+out vec3 vPosition;void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+#include <logdepthbuf_vertex>
+}`;
 
 export const cloudFragment = `
 precision highp float;
@@ -178,6 +190,8 @@ in vec3 vPosition;out vec4 fragColor;
 uniform float uSteps;
 uniform float uLightSamples;
 uniform float uLightStepKm;
+uniform sampler2D uTerrainDepth;uniform vec2 uTerrainDepthSize;
+#include <packing>
 ${geoGLSL}
 ${densityGLSL}
 float phaseHG(float mu,float g){return (1.0-g*g)/pow(max(0.01,1.0+g*g-2.0*g*mu),1.5);}
@@ -188,6 +202,8 @@ void main(){
   float start=max(0.0,outer.x),end=outer.y;
   vec2 ground=intersectEllipsoid(uCamera,rd,RADII);
   if(ground.x>0.0)end=min(end,ground.x);
+  end=min(end,unpackRGBAToDepth(texture(uTerrainDepth,gl_FragCoord.xy/uTerrainDepthSize))*65536.0);
+  if(end<=start)discard;
   // A fixed orbital step leaves only 3-4 samples through a low cloud. At
   // close zoom that produces contour rings rather than a continuous volume.
   bool flightView=altitudeKm(uCamera)<120.0;
@@ -271,16 +287,29 @@ void main(){
 export const groundShadowFragment = `
 precision highp float;
 in vec3 vPosition;out vec4 fragColor;
+uniform sampler2D uTerrainDepth;uniform vec2 uTerrainDepthSize;uniform vec2 uTerrainDepthViewport;uniform vec2 uShadowDrawSize;
+#include <packing>
 ${geoGLSL}
 ${densityGLSL}
 void main(){
   vec3 rd=normalize(vPosition-uCamera);
   vec2 ground=intersectEllipsoid(uCamera,rd,RADII);
   float shadow=1.0;
-  if(ground.x>0.0){vec3 p=uCamera+rd*ground.x;shadow=shadowTransmittance(p+ellipsoidNormal(p)*0.04);}
+  float distanceKm=unpackRGBAToDepth(texture(uTerrainDepth,gl_FragCoord.xy/uShadowDrawSize*uTerrainDepthViewport/uTerrainDepthSize))*65536.0;
+  if(distanceKm<65000.0){vec3 p=uCamera+rd*distanceKm;shadow=shadowTransmittance(p+ellipsoidNormal(p)*0.04);}
+  else if(ground.x>0.0){vec3 p=uCamera+rd*ground.x;shadow=shadowTransmittance(p+ellipsoidNormal(p)*0.04);}
   fragColor=vec4(vec3(shadow),1.0);
 }
 `;
+export const terrainDepthFragment=`
+precision highp float;
+in vec3 vPosition;uniform vec3 uCamera;out vec4 fragColor;
+#include <logdepthbuf_pars_fragment>
+#include <packing>
+void main(){
+#include <logdepthbuf_fragment>
+fragColor=packDepthToRGBA(min(0.99999,length(vPosition-uCamera)/65536.0));
+}`;
 export const compositeVertex = `out vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}`;
 export const cloudCompositeFragment = `
 precision highp float;
@@ -303,8 +332,10 @@ void main(){
 export const atmosphereFragment = `
 precision highp float;
 in vec3 vPosition;out vec4 fragColor;
+#include <logdepthbuf_pars_fragment>
 ${geoGLSL}
 void main(){
+  #include <logdepthbuf_fragment>
   vec3 rd=normalize(vPosition-uCamera);vec2 bounds=intersectEllipsoid(uCamera,rd,RADII+vec3(80.0));if(bounds.y<0.0)discard;
   vec2 ground=intersectEllipsoid(uCamera,rd,RADII);
   // Terrain and clouds already apply air to their own true distance. Do not
@@ -319,37 +350,84 @@ void main(){
 // Curtain mesh coordinates are periodic phase along the forecast oval and altitude.
 // They never converge at the geographic pole, unlike longitude sine bands.
 export const auroraVertex = `
-in vec3 aNormal;in vec3 aField;
-uniform float uTime;uniform float uSpeed;
+in vec3 aNormal;in vec3 aField;in vec3 aNextPosition;in vec3 aNextNormal;
+uniform float uAuroraTime;uniform float uSpeed;uniform float uAuroraBlend;
+#include <common>
+#include <logdepthbuf_pars_vertex>
 out vec3 vPosition;out vec3 vNormal;out vec3 vField;
 void main(){
-  float fold=sin(aField.x*12.0+sin(aField.x*3.0+uTime*uSpeed*0.035)*1.8+uTime*uSpeed*0.08)*4.5;
-  vec3 tangent=normalize(cross(aNormal,vec3(0.0,1.0,0.0)));
-  vPosition=position+tangent*fold;vNormal=aNormal;vField=aField;
+  float phase=aField.x,seed=aField.z;
+  float fold=sin(phase*11.0+sin(phase*3.0+seed+uAuroraTime*0.025)*1.8+uAuroraTime*0.045)*2.4;
+  fold+=sin(phase*37.0+seed-uAuroraTime*0.08)*0.7;
+  vec3 n=normalize(mix(aNormal,aNextNormal,uAuroraBlend));
+  vec3 east=normalize(cross(vec3(0.0,1.0,0.0),n));vec3 north=normalize(cross(n,east));
+  vec3 blended=mix(position,aNextPosition,uAuroraBlend),radii=vec3(6378.137,6356.752314245,6378.137);
+  vec3 heightNormal=normalize(blended/(radii*radii)),foot=radii*radii*heightNormal/length(radii*heightNormal);
+  vPosition=blended+heightNormal*(aField.y-dot(blended-foot,heightNormal))+north*fold;vNormal=n;vField=aField;
   gl_Position=projectionMatrix*modelViewMatrix*vec4(vPosition,1.0);
+  #include <logdepthbuf_vertex>
 }
 `;
 export const auroraFragment = `
 precision highp float;
 in vec3 vPosition;in vec3 vNormal;in vec3 vField;out vec4 fragColor;
-uniform float uBrightness;uniform float uActivity;uniform float uSpeed;
+uniform float uBrightness;uniform float uActivity;uniform float uSpeed;uniform float uAuroraTime;
+uniform sampler2D uAuroraPrevious;uniform sampler2D uAuroraCurrent;uniform float uAuroraBlend;uniform float uAuroraDebug;uniform float uHemisphere;
+#include <logdepthbuf_pars_fragment>
 ${geoGLSL}
 float bell(float h,float centre,float width){float q=(h-centre)/width;return exp(-0.5*q*q);}
+float noise1(float x){float i=floor(x),f=fract(x);f=f*f*(3.0-2.0*f);return mix(fract(sin(i*127.1)*43758.5453),fract(sin((i+1.0)*127.1)*43758.5453),f);}
 void main(){
-  float phase=vField.x,h=vField.y,strength=vField.z;
-  float motion=uTime*uSpeed;
-  float fold=0.5+0.5*sin(phase*22.0+sin(phase*6.0-motion*0.05)*2.0-motion*0.1);
-  float rays=0.56+0.24*sin(phase*180.0+sin(phase*17.0)*2.0-motion*0.18)+0.13*sin(phase*345.0+motion*0.12);
-  float core=bell(h,125.0,22.0)+bell(h,165.0,38.0)*0.28;
-  float red=bell(h,265.0,48.0)*0.13*strength;
-  float nitrogen=bell(h,100.0,7.0)*0.09;
-  float night=1.0-smoothstep(-0.16,0.02,dot(vNormal,uSun));
-  float envelope=strength*uActivity*(0.22+0.78*fold)*rays*night;
-  float alpha=(core*0.40+red*0.15+nitrogen*0.20)*envelope*uBrightness;
-  vec3 colour=vec3(0.10,0.80,0.31)*core+vec3(0.72,0.07,0.12)*red+vec3(0.30,0.10,0.65)*nitrogen;
-  if(alpha<0.002)discard;
-  fragColor=vec4(colour,clamp(alpha,0.0,0.52));
+  #include <logdepthbuf_fragment>
+  if(uHemisphere*vNormal.y<0.0)discard;
+  vec2 geo=vec2(atan(vNormal.x,vNormal.z)/(2.0*PI)+0.5,0.5-asin(clamp(vNormal.y,-1.0,1.0))/PI);vec2 uv=vec2(geo.x+0.5/360.0,(geo.y*180.0+0.5)/181.0);
+  float probability=mix(texture(uAuroraPrevious,uv).r,texture(uAuroraCurrent,uv).r,uAuroraBlend);
+  float strength=pow(smoothstep(0.045,0.6,probability),1.3);
+  if(strength<0.001)discard;
+  float phase=vField.x,h=vField.y,seed=vField.z;
+  float motion=uAuroraTime;
+  float fold=noise1(phase*17.0+seed+motion*0.018),frequency=mix(2400.0,240.0,smoothstep(200.0,2000.0,length(vPosition-uCamera)));
+  float filament=pow(noise1(phase*frequency+noise1(phase*23.0+seed)*4.0-motion*0.05),3.0);
+  filament=mix(filament,0.25,smoothstep(0.35,1.4,fwidth(phase)*frequency));
+  float rays=0.35+filament*1.4;
+  float core=bell(h,135.0+fold*12.0,24.0)+bell(h,185.0,45.0)*0.18;
+  float red=bell(h,325.0+fold*25.0,57.0)*0.18*noise1(phase*9.0+seed+3.0);
+  float nitrogen=bell(h,108.0,7.0)*0.06*strength;
+  float night=1.0-smoothstep(-0.18,0.08,dot(vNormal,uSun));
+  float envelope=strength*uActivity*(0.3+0.7*fold)*rays*night*uBrightness;
+  vec3 emission=(vec3(0.12,0.85,0.29)*core+vec3(0.85,0.035,0.055)*red+vec3(0.38,0.10,0.8)*nitrogen)*envelope*0.65;
+  // Attenuate emitted light only; sky in-scattering is already in the atmosphere pass.
+  vec3 rd=normalize(vPosition-uCamera);vec2 air=intersectEllipsoid(uCamera,rd,RADII+vec3(80.0));
+  float begin=max(0.0,air.x),end=min(length(vPosition-uCamera),air.y),optical=0.0;
+  if(end>begin)for(int i=0;i<8;i++){vec3 p=uCamera+rd*mix(begin,end,(float(i)+0.5)/8.0);optical+=exp(-max(0.0,altitudeKm(p))/8.0)*(end-begin)/8.0;}
+  emission*=exp(-vec3(0.0058,0.0135,0.0331)*optical);
+  if(uAuroraDebug>1.5)emission=mix(vec3(0.08,0.3,1.0),vec3(1.0,0.12,0.05),(h-95.0)/355.0)*0.25;
+  fragColor=vec4(emission,1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
 `;
+
+export const auroraFieldVertex=`
+#include <common>
+#include <logdepthbuf_pars_vertex>
+out vec3 vPosition;
+void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+#include <logdepthbuf_vertex>
+}`;
+export const auroraFieldFragment=`
+precision highp float;
+in vec3 vPosition;out vec4 fragColor;
+uniform sampler2D uAuroraPrevious;uniform sampler2D uAuroraCurrent;uniform float uAuroraBlend;uniform float uHemisphere;
+#include <logdepthbuf_pars_fragment>
+${geoGLSL}
+void main(){
+  #include <logdepthbuf_fragment>
+  if(uHemisphere*vPosition.y<0.0)discard;
+  vec2 geo=geographicUV(vPosition);vec2 uv=vec2(geo.x+0.5/360.0,(geo.y*180.0+0.5)/181.0);
+  float p=mix(texture(uAuroraPrevious,uv).r,texture(uAuroraCurrent,uv).r,uAuroraBlend);
+  if(p<0.01)discard;
+  fragColor=vec4(mix(vec3(0.02,0.8,0.3),vec3(1.0,0.12,0.02),smoothstep(0.25,1.0,p)),sqrt(p)*0.65);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
