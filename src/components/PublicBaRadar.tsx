@@ -7,6 +7,7 @@ import type { AcarsCabinStatus, AcarsConnectivityStatus } from "@/lib/acars-cont
 import { RADAR_WIND_LAYERS, type RadarAuroraData, type RadarCloudData, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 import type { AuroraQuality, AuroraSettings } from "@/components/BaRadarAuroraLayer";
+import { AuroraPhotoControls } from "@/components/AuroraPhotoControls";
 import type { CloudDebugMode, CloudQuality, CloudSettings } from "@/components/BaRadarCloudLayer";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
@@ -119,6 +120,7 @@ function AuroraControls({ settings, onChange, data }: { settings: AuroraSettings
     <label><span>Emission intensity</span><output>{Math.round(settings.activity * 100)}%</output><input type="range" min="0.55" max="1.55" step="0.05" value={settings.activity} onChange={changeNumber("activity")} /></label>
     <label><span>Motion speed</span><output>{Math.round(settings.animationSpeed * 100)}%</output><input type="range" min="0" max="1.8" step="0.1" value={settings.animationSpeed} onChange={changeNumber("animationSpeed")} /></label>
     <label><span>Brightness</span><output>{Math.round(settings.brightness * 100)}%</output><input type="range" min="0.45" max="1.65" step="0.05" value={settings.brightness} onChange={changeNumber("brightness")} /></label>
+    <AuroraPhotoControls settings={settings} onChange={photo=>onChange({...settings,...photo})}/>
     <p className="ba-radar-cloud-status">{data?.forecastAt ? `NOAA valid ${new Date(data.forecastAt).toISOString().replace("T"," ").slice(0,16)} UTC · observed ${data.observedAt?.slice(11,16)??"unknown"} UTC · fetched ${Math.max(0,Math.round((clock-Date.parse(data.refreshedAt))/60000))} min ago${data.stale||(clock-Date.parse(data.observedAt??data.refreshedAt))>90*60000?" · STALE":""}` : "Waiting for a verified NOAA forecast"}</p>
     {data?.error?<p className="ba-radar-cloud-status error">{data.error}</p>:null}
     <label className="ba-radar-aurora-quality"><span>Hemisphere</span><select value={settings.hemisphere??"both"} onChange={e=>onChange({...settings,hemisphere:e.target.value as AuroraSettings["hemisphere"]})}><option value="both">Both</option><option value="north">Northern</option><option value="south">Southern</option></select></label>

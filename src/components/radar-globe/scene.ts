@@ -7,6 +7,7 @@ import type {
 import type { PublicRadarFlight } from "@/lib/radar-live";
 import type { CloudSettings } from "@/components/BaRadarCloudLayer";
 import type { AuroraSettings } from "@/components/BaRadarAuroraLayer";
+import { auroraPhotoUniforms } from "@/lib/radar-aurora-photo";
 import {
   WGS84_A_KM,
   WGS84_B_KM,
@@ -305,6 +306,7 @@ export function createGlobeScene(
   const auroraMaterial = material(auroraVertex, auroraFragment, {
     uBrightness: { value: 1 },
     uActivity: { value: 1 },
+    uPhotoOverride:{value:0},uColourGains:{value:new THREE.Vector4(1,1,1,1)},
     uSpeed: { value: 1 },
     uAuroraTime:{value:0},
     uAuroraPrevious:{value:fallback},uAuroraCurrent:{value:fallback},uAuroraBlend:{value:1},uAuroraDebug:{value:0},uHemisphere:{value:0},
@@ -555,6 +557,9 @@ export function createGlobeScene(
     auroraMaterial.uniforms.uBrightness.value = state.auroraSettings.brightness*(state.auroraSettings.enhancedPresentation?1.8:1);
     auroraMaterial.uniforms.uActivity.value = state.auroraSettings.activity;
     auroraMaterial.uniforms.uSpeed.value = state.auroraSettings.animationSpeed;
+    const photo=auroraPhotoUniforms(state.auroraSettings);
+    auroraMaterial.uniforms.uPhotoOverride.value=Number(photo.enabled);
+    auroraMaterial.uniforms.uColourGains.value.set(...photo.gains);
   };
   const remember = () =>
     read().onCameraChange({
@@ -954,6 +959,9 @@ export function createGlobeScene(
         auroraTransition:Math.round(auroraMaterial.uniforms.uAuroraBlend.value*100)/100,
         auroraMeshes:curtains.children.length,
         auroraArcs:curtains.children.reduce((n,mesh)=>n+(mesh.userData.arcs?.length??0),0),
+        auroraSpeed:read().auroraSettings.animationSpeed,
+        auroraPhotoOverride:Boolean(auroraMaterial.uniforms.uPhotoOverride.value),
+        auroraColourGains:auroraMaterial.uniforms.uColourGains.value.toArray(),
         sun: shared.uSun.value.toArray(),
         cameraKm: Math.round(surfaceRadius+height),
         altitudeKm: Math.round(height * 1000) / 1000,

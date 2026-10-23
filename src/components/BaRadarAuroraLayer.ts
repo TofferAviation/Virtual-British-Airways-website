@@ -1,9 +1,10 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 import type { RadarAuroraData, RadarAuroraSample } from "@/lib/radar-external";
+import type { AuroraPhotoSettings } from "@/lib/radar-aurora-photo";
 
 export type AuroraQuality = "auto" | "high" | "balanced" | "low";
 
-export type AuroraSettings = {
+export type AuroraSettings = AuroraPhotoSettings & {
   activity: number;
   animationSpeed: number;
   brightness: number;

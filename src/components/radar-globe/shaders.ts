@@ -1,4 +1,5 @@
 import { auroraShapeGLSL, auroraRayGLSL } from "@/lib/radar-aurora-shape";
+import { auroraPhotoGLSL } from "@/lib/radar-aurora-photo";
 
 // All positions are Earth-fixed kilometres. Weather uses north-first rows,
 // -180°..180° columns. Density and shadows call the SAME function.
@@ -379,10 +380,12 @@ export const auroraFragment = `
 precision highp float;
 in vec3 vPosition;in vec3 vNormal;in vec3 vField;in vec4 vArc;out vec4 fragColor;
 uniform float uBrightness;uniform float uActivity;uniform float uSpeed;uniform float uAuroraTime;
+uniform float uPhotoOverride;uniform vec4 uColourGains;
 uniform sampler2D uAuroraPrevious;uniform sampler2D uAuroraCurrent;uniform float uAuroraBlend;uniform float uAuroraDebug;uniform float uHemisphere;
 #include <logdepthbuf_pars_fragment>
 ${geoGLSL}
 float bell(float h,float centre,float width){float q=(h-centre)/width;return exp(-0.5*q*q);}
+${auroraPhotoGLSL}
 ${auroraShapeGLSL}
 ${auroraRayGLSL}
 void main(){
@@ -427,6 +430,11 @@ void main(){
   float night=1.0-smoothstep(-0.18,0.08,dot(vNormal,uSun));
   float envelope=strength*uActivity*taper*vArc.y*life*gaps*(.35+knots)*night*uBrightness*vertical;
   vec3 emission=(vec3(.19,.85,.39)*body+vec3(.35,1.0,.57)*hem+vec3(.85,.035,.055)*red+vec3(.46,.10,.8)*nitrogen)*envelope*.48;
+  // Keep the original expression/path when disabled or at neutral gains.
+  // Only colour strengths change: shapes, animation and every envelope above
+  // remain the accepted pre-override version.
+  if(uPhotoOverride>.5&&any(notEqual(uColourGains,vec4(1.0))))
+    emission=auroraPhotoEmission(body,hem,red,nitrogen,uColourGains)*envelope*.48;
   // Attenuate emitted light only; sky in-scattering is already in the atmosphere pass.
   vec3 rd=normalize(vPosition-uCamera);vec2 air=intersectEllipsoid(uCamera,rd,RADII+vec3(80.0));
   float begin=max(0.0,air.x),end=min(length(vPosition-uCamera),air.y),optical=0.0;
