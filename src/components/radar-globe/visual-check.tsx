@@ -41,6 +41,22 @@ const views = {
     pitch: 55,
     date: "2026-03-20T18:00:00Z",
   },
+  flight: {
+    latitude: 46,
+    longitude: 0,
+    distanceKm: 6382.637,
+    pitch: 78,
+    fov: 58,
+    date: "2026-03-20T14:30:00Z",
+  },
+  cumulus: {
+    latitude: 46,
+    longitude: 0,
+    distanceKm: 6384.637,
+    pitch: 76,
+    fov: 62,
+    date: "2026-03-20T14:30:00Z",
+  },
   limb: {
     latitude: 10,
     longitude: 90,
@@ -110,7 +126,7 @@ export function GlobeVisualCheck() {
         font: "13px Arial",
       }}
     >
-      <div style={{ position: "absolute", inset: "52px 0 64px" }}>
+      <div style={{ position: "absolute", inset: "78px 0 48px" }}>
         <BaRadarThreeGlobe
           key={`${view}-${revision}`}
           flights={[]}
@@ -146,15 +162,17 @@ export function GlobeVisualCheck() {
           onCameraChange={() => {}}
           testDate={selected.date}
           testView={selected}
+          testCloudProfile={view === "cumulus" ? { coverage: 0.58, baseKm: 1.2, topKm: 5 } : undefined}
         />
       </div>
       <nav
-        style={{ position: "relative", display: "flex", gap: 12, padding: 12 }}
+        style={{ position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: 10 }}
       >
         <strong>Globe visual check</strong>
         {Object.keys(views).map((name) => (
           <button
             key={name}
+            style={{ font: "12px Arial", padding: "5px 9px", color: "white", border: "1px solid #3f5e79", borderRadius: 3, background: view === name ? "#12639c" : "#10283c" }}
             onClick={() => {
               setView(name as keyof typeof views);
               setRevision((value) => value + 1);
@@ -163,12 +181,11 @@ export function GlobeVisualCheck() {
             {name}
           </button>
         ))}
-        <button onClick={() => setClouds((v) => !v)}>
+        <button style={{font: "12px Arial", padding: "5px 9px"}} onClick={() => setClouds((v) => !v)}>
           Clouds {clouds ? "on" : "off"}
         </button>
-        <span>
-          GFS: {data?.validAt ?? "loading"} · NOAA:{" "}
-          {aurora?.forecastAt ?? "loading"}
+        <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
+          {view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `GFS forecast: ${data?.validAt ?? "loading"} · NOAA: ${aurora?.forecastAt ?? "loading"}`} · fixed test Sun: {selected.date}
         </span>
       </nav>
       <output
@@ -178,6 +195,7 @@ export function GlobeVisualCheck() {
           left: 12,
           right: 12,
           whiteSpace: "pre-wrap",
+          fontSize: 10,
         }}
       >
         {errors.length

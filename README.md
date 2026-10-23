@@ -26,15 +26,21 @@ No Google, licensed commercial imagery, paid API or provider credential is used.
 
 Cloud cover is the existing NOAA GFS 0.25-degree analysis. Its low/middle/high
 coverage and pressure-level geopotential heights constrain a Cartesian 3D
-value/Worley density field. The pressure levels are **not measured cloud
+gradient/cellular density field. The pressure levels are **not measured cloud
 base/top**: their heights approximate MSL and do not incorporate a local
 geoid/terrain clearance correction. Individual billows, opacity and vertical
 profiles are inferred. The cloud shader integrates extinction and a lighting
 approximation; ground shadows sample the same field along the Sun direction.
 Ray integration uses bounded, deterministic midpoint samples, not animated
 screen-space jitter. Mipmapped 3D noise is explicitly filtered to the pixel
-footprint. Variable-height column profiles round the cloud tops; solar optical
-depth and an exterior density-gradient approximation supply their shading.
+footprint. The former height-column/surface-normal approximation has been
+replaced by 64-cubed RGBA mass noise and 32-cubed multiscale erosion. Regional
+banks organise the 3D lobes; low, middle and high cloud have different profiles.
+Coverage-to-density calibration is nonlinear and approximate, not a guarantee
+that the rendered areal percentage exactly equals a GFS grid-cell percentage.
+Solar optical depth, dual-lobe phase and reduced-extinction scattering terms
+supply volumetric shading. Air extinction/scatter is evaluated to each cloud's
+weighted distance and to terrain, rather than tinting both under a blue shell.
 There is no fabricated observed hurricane, measured cloud liquid water or
 global satellite cloud-height reconstruction.
 
@@ -57,13 +63,19 @@ spectral Rayleigh/Mie multiple-scattering solution.
 
 Run `npm run test:globe`, `npm run test:clouds`, `npm run typecheck` and
 `npm run build`. `/dev/globe` is a development-only visual-check page, with
-fixed date/camera presets for day, north, south, night, cloud, close and limb views.
-The close preset is an oblique cloud view. Shift-drag tilts the live camera;
+fixed date/camera presets for day, north, south, night, cloud, close, flight,
+cumulus and limb views. The flight preset uses GFS above land. The cumulus
+preset is an explicitly labelled synthetic calibration (58% input coverage,
+1.2–5 km model band), never an observed cloud field or production fallback.
+The close preset is an oblique orbital view. Shift-drag tilts the live camera;
 wheel zoom uses bounded altitude targets and frame-rate-independent damping.
+The minimum altitude is 4 km; tilt changes view direction without lowering
+the camera. Back-face volume integration supports cameras inside the cloud
+and atmosphere shells. Close-range integration has a 300 km distance limit.
 Adaptive clipping and exclusive parent/child tile visibility prevent orbital
 depth fighting between terrain and the cloud volume.
-It returns 404 in production. Weather remains live, so these presets do not
-yet constitute deterministic weather-snapshot screenshot regressions.
+The page returns 404 in production. Apart from the labelled cumulus fixture,
+weather remains live, so these are not weather-snapshot screenshot regressions.
 Shader compilation failures and renderer diagnostics are shown on that page.
 For a second local server in PowerShell, use
 `$env:BAV_GLOBE_QA='1'; npm run dev -- --hostname 127.0.0.1 --port 3107`.
@@ -78,7 +90,9 @@ atmospheric scattering, bloom and measured desktop/mobile GPU performance
 remain unimplemented. Tile handoff currently waits for all child images; it
 does not cross-fade them. Ground imagery LOD is capped at level 6. No 60/30 FPS
 claim is made without profiling. Local GPU visual checks cover orbital and
-close-up cloud views, but the ISS-photo visual target is not yet accepted.
+close-up and flight-level cloud views, but the photographic visual target is
+not yet accepted. In particular, fine turbulent detail, local weather-type
+classification and cloud morphology still require visual development.
 
 ## Production login-session recovery
 

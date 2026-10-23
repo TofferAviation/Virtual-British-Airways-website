@@ -4,7 +4,7 @@ import { WGS84_A_KM } from "./radar-globe-geodesy.ts";
 import { globeClipRange, globeZoomTarget, globeZoomStep } from "./radar-globe-geodesy.ts";
 
 test("depth precision resolves cloud/ground separation at every supported zoom", () => {
-  for (const height of [90, 400, 2600, 16000, 40000]) {
+  for (const height of [4, 6, 12, 90, 400, 2600, 16000, 40000]) {
     const { near, far } = globeClipRange(WGS84_A_KM + height);
     assert.ok(near < height);
     assert.ok(far > height + WGS84_A_KM * 2);
@@ -14,7 +14,7 @@ test("depth precision resolves cloud/ground separation at every supported zoom",
   }
 });
 
-test("wheel modes agree and extreme deltas cannot enter the cloud shell", () => {
+test("wheel modes agree and extreme deltas stop at safe flight altitude", () => {
   const d = WGS84_A_KM + 400;
   assert.equal(globeZoomTarget(d, 16, 0, 800), globeZoomTarget(d, 1, 1, 800));
   assert.equal(globeZoomTarget(d, 80, 0, 800), globeZoomTarget(d, 0.1, 2, 800));
@@ -23,7 +23,7 @@ test("wheel modes agree and extreme deltas cannot enter the cloud shell", () => 
     close = globeZoomTarget(close, -1e8, 0, 800);
     far = globeZoomTarget(far, 1e8, 0, 800);
   }
-  assert.equal(close, WGS84_A_KM + 90);
+  assert.equal(close, WGS84_A_KM + 4);
   assert.equal(far, WGS84_A_KM + 40000);
 });
 

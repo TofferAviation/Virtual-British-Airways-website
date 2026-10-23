@@ -59,11 +59,14 @@ export type GlobeSceneState = {
   onCameraChange: (camera: GlobeCamera) => void;
   /** Used exclusively by the local visual regression page. */
   testDate?: string;
+  /** Explicitly labelled, development-only density calibration. Never a live fallback. */
+  testCloudProfile?: { coverage: number; baseKm: number; topKm: number };
   testView?: {
     latitude: number;
     longitude: number;
     distanceKm: number;
     pitch?: number;
+    fov?: number;
   };
 };
 
@@ -138,9 +141,9 @@ export function createGlobeScene(
     scene = new THREE.Scene(),
     earth = new THREE.Group();
   scene.add(earth);
-  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 120000);
   const initial = read().initialCamera,
     testView = read().testView;
+  const camera = new THREE.PerspectiveCamera(testView?.fov ?? 35, 1, 0.5, 120000);
   const zoomDistance = (zoom: number) =>
     WGS84_A_KM * (1 + 1.7 * Math.exp(-zoom * 0.38));
   camera.position.set(
@@ -151,15 +154,18 @@ export function createGlobeScene(
   camera.lookAt(0, 0, 0);
   let distance = camera.position.z,
     targetDistance = distance;
-  let pitch = THREE.MathUtils.clamp(testView?.pitch ?? initial?.pitch ?? 0, 0, 78);
+  let pitch = THREE.MathUtils.clamp(testView?.pitch ?? initial?.pitch ?? 0, 0, 88);
   let longitude = testView?.longitude ?? initial?.center[0] ?? -25,
     latitude = testView?.latitude ?? initial?.center[1] ?? 35;
   // For YXZ, rotations are applied X then Y. Use quaternion explicitly so the
   // chosen geographic centre is always in front of the camera, even at poles.
+  let surfaceRadius = WGS84_A_KM;
   const orbit = () => {
     const target = new THREE.Vector3(
       ...geodeticToWorld(latitude, longitude),
-    ).normalize();
+    );
+    surfaceRadius = target.length();
+    target.normalize();
     earth.quaternion.setFromUnitVectors(target, new THREE.Vector3(0, 0, 1));
     earth.updateMatrixWorld(true);
   };
@@ -189,6 +195,15 @@ export function createGlobeScene(
     uDebug: { value: 0 },
     uPixelAngle: { value: 0.001 },
   };
+  const testProfile = process.env.NODE_ENV !== "production" ? read().testCloudProfile : undefined;
+  const testCloudTexture = testProfile ? new THREE.DataTexture(
+    new Uint8Array([Math.round(testProfile.coverage * 255), Math.round(testProfile.baseKm * 10), Math.round(testProfile.topKm * 10), 255]),
+    1, 1, THREE.RGBAFormat,
+  ) : null;
+  if (testCloudTexture) {
+    testCloudTexture.needsUpdate = true;
+    shared.uLowWeather.value = testCloudTexture;
+  }
   const material = (
     vertexShader: string,
     fragmentShader: string,
@@ -214,7 +229,8 @@ export function createGlobeScene(
   });
   cloudMaterial.transparent = true;
   cloudMaterial.depthWrite = false;
-  cloudMaterial.side = THREE.FrontSide;
+  cloudMaterial.side = THREE.BackSide;
+  cloudMaterial.depthTest = false;
   const cloudMesh = new THREE.Mesh(ellipsoidShell(18), cloudMaterial);
   cloudMesh.renderOrder = 3;
   earth.add(cloudMesh);
@@ -226,7 +242,7 @@ export function createGlobeScene(
   atmosphereMaterial.side = THREE.BackSide;
   atmosphereMaterial.depthTest = false;
   const atmosphere = new THREE.Mesh(ellipsoidShell(80), atmosphereMaterial);
-  atmosphere.renderOrder = 4;
+  atmosphere.renderOrder = 2;
   earth.add(atmosphere);
   const auroraMaterial = material(auroraVertex, auroraFragment, {
     uBrightness: { value: 1 },
@@ -387,6 +403,7 @@ export function createGlobeScene(
     }
     if (
       state.cloudData !== lastData &&
+      !testProfile &&
       state.cloudData?.encoding === "rgba8-base64"
     ) {
       lastData = state.cloudData;
@@ -422,7 +439,7 @@ export function createGlobeScene(
     }
     curtains.visible = state.auroraEnabled;
     cloudMesh.visible =
-      state.cloudsEnabled && state.cloudSettings.realWorld && Boolean(lastData);
+      state.cloudsEnabled && state.cloudSettings.realWorld && Boolean(lastData || testProfile);
     shared.uClouds.value = cloudMesh.visible ? 1 : 0;
     shared.uCloudOpacity.value = state.cloudSettings.opacity * 1.7;
     shared.uShadows.value = state.cloudSettings.selfShadows ? 1 : 0;
@@ -484,7 +501,7 @@ export function createGlobeScene(
     moved += Math.abs(dx) + Math.abs(dy);
     const sensitivity =
       0.16 * Math.min(1, (distance - WGS84_A_KM) / 3500);
-    if (tilting) pitch = THREE.MathUtils.clamp(pitch + dy * 0.2, 0, 78);
+    if (tilting) pitch = THREE.MathUtils.clamp(pitch + dy * 0.2, 0, 88);
     else {
       longitude = wrapLongitude(longitude - dx * sensitivity);
       latitude = THREE.MathUtils.clamp(latitude + dy * sensitivity, -90, 90);
@@ -575,12 +592,10 @@ export function createGlobeScene(
     distance = globeZoomStep(distance, targetDistance, deltaSeconds);
     const height = distance - WGS84_A_KM,
       tilt = THREE.MathUtils.degToRad(pitch);
-    camera.position.set(
-      0,
-      height * Math.sin(tilt),
-      WGS84_A_KM + height * Math.cos(tilt),
-    );
-    camera.lookAt(0, 0, WGS84_A_KM);
+    // Height means actual altitude above the selected WGS84 surface, even at
+    // the poles. Tilting changes the view direction, never the camera altitude.
+    camera.position.set(0, 0, surfaceRadius + height);
+    camera.lookAt(0, Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
     sync();
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
@@ -592,7 +607,7 @@ export function createGlobeScene(
     earth.updateMatrixWorld(true);
     // Keep the depth buffer useful at every altitude. A fixed 0.5 km near
     // plane loses tens of kilometres of depth precision from orbit.
-    const clipping = globeClipRange(camera.position.length());
+    const clipping = globeClipRange(WGS84_A_KM + height);
     camera.near = clipping.near;
     camera.far = clipping.far;
     camera.updateProjectionMatrix();
@@ -613,6 +628,7 @@ export function createGlobeScene(
         aurora: curtains.visible,
         sun: shared.uSun.value.toArray(),
         cameraKm: Math.round(camera.position.length()),
+        altitudeKm: Math.round(height * 10) / 10,
         pitch: Math.round(pitch),
         focus: [Math.round(longitude), Math.round(latitude)],
         clippingKm: [Math.round(camera.near), Math.round(camera.far)],
@@ -646,6 +662,7 @@ export function createGlobeScene(
     base.dispose();
     detail.dispose();
     fallback.dispose();
+    testCloudTexture?.dispose();
     weatherTextures.forEach((t) => t.dispose());
     renderer.dispose();
     canvas.remove();

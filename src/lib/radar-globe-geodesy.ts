@@ -136,7 +136,7 @@ export function globeZoomTarget(
   );
   return (
     WGS84_A_KM +
-    Math.max(90, Math.min(40000, (distanceKm - WGS84_A_KM) * Math.exp(pixels * 0.0012)))
+    Math.max(4, Math.min(40000, (distanceKm - WGS84_A_KM) * Math.exp(pixels * 0.0012)))
   );
 }
 
