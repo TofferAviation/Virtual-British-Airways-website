@@ -7,8 +7,6 @@ import type { AcarsCabinStatus, AcarsConnectivityStatus } from "@/lib/acars-cont
 import { RADAR_WIND_LAYERS, type RadarAuroraData, type RadarCloudData, type RadarWeatherData, type RadarWindGrid, type RadarWindLayerId, type VatsimRadarData, type VatsimStation } from "@/lib/radar-external";
 import type { PublicRadarFlight, PublicRadarSnapshot } from "@/lib/radar-live";
 import type { AuroraQuality, AuroraSettings } from "@/components/BaRadarAuroraLayer";
-import { DEFAULT_AURORA_SETTINGS } from "@/lib/radar-aurora-settings";
-import { AuroraCreativeControls } from "@/components/AuroraCreativeControls";
 import type { CloudDebugMode, CloudQuality, CloudSettings } from "@/components/BaRadarCloudLayer";
 
 const BaRadarMap = dynamic(() => import("@/components/BaRadarMap").then((module) => module.BaRadarMap), {
@@ -76,7 +74,7 @@ export type RadarLayers = {
   seasonal: boolean;
 };
 
-const initialAuroraSettings: AuroraSettings = DEFAULT_AURORA_SETTINGS;
+const initialAuroraSettings: AuroraSettings = { activity: 1, animationSpeed: 1, brightness: 1, quality: "auto", enhancedPresentation: false };
 // The globe is the home for the atmospheric view.  The source remains the
 // latest available GFS analysis (not a satellite observation), while the
 // modest relief makes the model's measured cloud columns readable in 3D.
@@ -119,7 +117,8 @@ function AuroraControls({ settings, onChange, data }: { settings: AuroraSettings
   };
   return <div className="ba-radar-aurora-controls" aria-label="Aurora appearance controls">
     <label><span>Emission intensity</span><output>{Math.round(settings.activity * 100)}%</output><input type="range" min="0.55" max="1.55" step="0.05" value={settings.activity} onChange={changeNumber("activity")} /></label>
-    <AuroraCreativeControls settings={settings} onChange={onChange}/>
+    <label><span>Motion speed</span><output>{Math.round(settings.animationSpeed * 100)}%</output><input type="range" min="0" max="1.8" step="0.1" value={settings.animationSpeed} onChange={changeNumber("animationSpeed")} /></label>
+    <label><span>Brightness</span><output>{Math.round(settings.brightness * 100)}%</output><input type="range" min="0.45" max="1.65" step="0.05" value={settings.brightness} onChange={changeNumber("brightness")} /></label>
     <p className="ba-radar-cloud-status">{data?.forecastAt ? `NOAA valid ${new Date(data.forecastAt).toISOString().replace("T"," ").slice(0,16)} UTC · observed ${data.observedAt?.slice(11,16)??"unknown"} UTC · fetched ${Math.max(0,Math.round((clock-Date.parse(data.refreshedAt))/60000))} min ago${data.stale||(clock-Date.parse(data.observedAt??data.refreshedAt))>90*60000?" · STALE":""}` : "Waiting for a verified NOAA forecast"}</p>
     {data?.error?<p className="ba-radar-cloud-status error">{data.error}</p>:null}
     <label className="ba-radar-aurora-quality"><span>Hemisphere</span><select value={settings.hemisphere??"both"} onChange={e=>onChange({...settings,hemisphere:e.target.value as AuroraSettings["hemisphere"]})}><option value="both">Both</option><option value="north">Northern</option><option value="south">Southern</option></select></label>

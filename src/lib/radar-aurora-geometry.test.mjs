@@ -4,8 +4,7 @@ import {readFile} from "node:fs/promises";
 import ts from "typescript";
 import * as THREE from "three";
 import {worldToGeodetic} from "./radar-globe-geodesy.ts";
-import {AURORA_DETAIL,auroraArc,auroraFold,auroraNoise,auroraRayState,auroraSeed,auroraVortex} from "./radar-aurora-shape.ts";
-import {DEFAULT_AURORA_SETTINGS,auroraAppearance,advanceAuroraTime,resetAuroraAppearance} from "./radar-aurora-settings.ts";
+import {AURORA_DETAIL,auroraArc,auroraFold,auroraNoise,auroraRayState,auroraSeed} from "./radar-aurora-shape.ts";
 async function moduleUrl(relative,replace){let source=await readFile(new URL(relative,import.meta.url),"utf8");for(const [from,to] of Object.entries(replace))source=source.replace(JSON.stringify(from),JSON.stringify(to));return `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString("base64")}`;}
 const magnetic=await moduleUrl("./radar-aurora-magnetic.ts",{"./data/wmm2025":new URL("./data/wmm2025.ts",import.meta.url).href,"./radar-globe-geodesy":new URL("./radar-globe-geodesy.ts",import.meta.url).href});
 const url=await moduleUrl("../components/radar-globe/aurora.ts",{"three":import.meta.resolve("three"),"@/lib/radar-aurora-field":new URL("./radar-aurora-field.ts",import.meta.url).href,"@/lib/radar-aurora-shape":new URL("./radar-aurora-shape.ts",import.meta.url).href,"@/lib/radar-globe-geodesy":new URL("./radar-globe-geodesy.ts",import.meta.url).href,"@/lib/radar-aurora-magnetic":magnetic});
@@ -85,46 +84,4 @@ test("ray events and spatial cell crossings remain continuous, including event r
     const a=auroraRayState(s,seed,boundary-1e-6),b=auroraRayState(s,seed,boundary+1e-6);
     assert.ok(Math.abs(a.energy-b.energy)<1e-5&&Math.abs(a.top-b.top)<1e-3,"new event seed cannot pop its ray");
   }
-});
-
-test("slower shared default, pause and changing speed preserve the accumulated phase",()=>{
-  assert.equal(DEFAULT_AURORA_SETTINGS.animationSpeed,.25);
-  for(const fps of [30,45,60,144]){
-    let time=0;for(let frame=0;frame<20*fps;frame++)time=advanceAuroraTime(time,1/fps,.25);
-    assert.ok(Math.abs(time-5)<1e-9,"20 real seconds is five animation seconds at every frame cap");
-    const frozen=advanceAuroraTime(time,.1,0);assert.equal(frozen,time);
-    assert.equal(advanceAuroraTime(frozen,.1,.5),time+.05,"speed change does not restart phase");
-  }
-  assert.equal(advanceAuroraTime(12,20,.25),12.025,"a background-tab pause cannot fast-forward rays");
-  assert.equal(advanceAuroraTime(12,NaN,Infinity),12);
-});
-
-test("height-layer vortices counter-turn smoothly, independently and within existing culling padding",()=>{
-  let levelDifference=0;
-  for(const seed of [3.17,29.7,181.37])for(let s=0;s<3000;s+=71)for(let h=95;h<=450;h+=7){
-    const a=auroraVortex(s,h,seed,11,1.5),b=auroraVortex(s,h,seed,11+1/60,1.5),fold=auroraFold(s,seed,11);
-    assert.ok(Math.hypot(a.north,a.east)<=24.001);
-    assert.ok(Math.hypot(fold.north+a.north+9,fold.east+a.east)<150,"retain padded frustum bounds at maximum swirl");
-    assert.ok(Math.hypot(a.north-b.north,a.east-b.east)<.08,"no frame jumps");
-    assert.deepEqual(a,auroraVortex(s,h,seed,11,1.5));
-    const disabled=auroraVortex(s,h,seed,11,0);assert.ok(disabled.north===0&&disabled.east===0);
-    levelDifference+=Math.abs(a.north-auroraVortex(s,h+70,seed,11,1.5).north);
-  }
-  assert.ok(levelDifference>10000,"not a rigidly rotating whole sheet");
-  for(const boundary of [100,150,155,220,240,340,380,450]){
-    const a=auroraVortex(600,boundary-1e-6,3.17,20,1),b=auroraVortex(600,boundary+1e-6,3.17,20,1);
-    assert.ok(Math.hypot(a.north-b.north,a.east-b.east)<1e-5,"no hard altitude-level seam");
-  }
-  assert.notDeepEqual(auroraVortex(600,200,3.17,20,1),auroraVortex(600,200,181.37,20,1));
-});
-
-test("screenshot colours are opt-in, independently bounded, resettable and backward compatible",()=>{
-  const artistic={...DEFAULT_AURORA_SETTINGS,photoMode:true,animationSpeed:.12,vortexStrength:1.4,colourGains:{green:0,red:4,violet:2,blue:.35}};
-  assert.deepEqual(auroraAppearance(artistic),{speed:.12,vortex:1.4,gains:[0,4,2,.35]});
-  assert.deepEqual(auroraAppearance({...artistic,photoMode:false}).gains,[1,1,1,1],"disabling restores neutral palette without discarding chosen values");
-  assert.deepEqual(auroraAppearance({}),{speed:.25,vortex:.65,gains:[1,1,1,1]});
-  assert.deepEqual(auroraAppearance({animationSpeed:NaN,vortexStrength:Infinity,photoMode:true,colourGains:{green:-5,red:99,violet:NaN,blue:Infinity}}),{speed:.25,vortex:.65,gains:[0,4,1,1]});
-  const reset=resetAuroraAppearance({...artistic,quality:"low",hemisphere:"south"});
-  assert.deepEqual(auroraAppearance(reset),auroraAppearance(DEFAULT_AURORA_SETTINGS));
-  assert.equal(reset.photoMode,false);assert.equal(reset.quality,"low");assert.equal(reset.hemisphere,"south");
 });

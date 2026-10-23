@@ -4,13 +4,6 @@
 
 .ba-radar-mobile-layer-menu{display:none}
 
-/* Long weather/photography controls scroll independently of the renderer.
-   Otherwise focusing a slider below the map scrolls its overflow-hidden host
-   and moves the whole WebGL canvas out of view. */
-.ba-radar-layer-controls{max-height:calc(100% - 28px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.ba-radar-mobile-layer-menu{max-height:calc(100% - 20px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.ba-radar-mobile-layer-menu>summary{position:sticky;top:0;z-index:1;background:#091f31}
-
 /* Phone-first radar layout: put the interactive map before the long flight
    detail/list so a pilot can immediately inspect the airport or aircraft. */
 @media(max-width:800px){
