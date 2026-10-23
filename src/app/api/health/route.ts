@@ -132,6 +132,7 @@ export async function GET() {
     // value so the public health endpoint can confirm which authentication
     // release Render is actually serving, without exposing any secret.
     revision: "fleet-dependency-check-v1",
+    globeRevision: "satellite-live-v2-20261023",
     staffAuthConfigured: Boolean(
       process.env.BAV_STAFF_SESSION_SECRET &&
         process.env.BAV_STAFF_SESSION_SECRET.length >= 24,

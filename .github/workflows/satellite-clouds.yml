@@ -1,0 +1,53 @@
+name: Satellite cloud observations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/satellite-clouds.yml
+      - scripts/ingest-satellite-clouds.mjs
+      - scripts/publish-satellite-clouds.mjs
+      - src/lib/radar-satellite-*
+      - package-lock.json
+  workflow_dispatch:
+  schedule:
+    # ABI full-disk scans are ten minutes apart. Offset from the busy hour.
+    - cron: "7,17,27,37,47,57 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bav-satellite-observations
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'TofferAviation/Virtual-British-Airways-website' && github.ref == 'refs/heads/main' && github.event.repository.private == false
+    # Standard runner in the existing PUBLIC repository; no paid/larger runner.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      BAV_CLOUD_WIND_ORIGIN: https://virtualairline.co.uk
+      BAV_SATELLITE_STEP_DEG: "0.2"
+    steps:
+      - name: Check out trusted default-branch code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Validate satellite contracts
+        run: npm run test:satellite-clouds
+      - name: Prepare current and previous satellite observations
+        run: npm run clouds:ingest
+      - name: Replace the generated public observation asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-satellite-clouds.mjs

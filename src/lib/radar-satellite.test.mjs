@@ -5,6 +5,7 @@ import { gzipSync } from "node:zlib";
 import { abiScanAngles,abiPixel,satelliteMaskState,encodeSatelliteColumn,satelliteIsCloud,satelliteOpticalDepth,satelliteGridIndex,estimateSatelliteMotion,SATELLITE_MAX_AGE_MS } from "./radar-satellite-math.ts";
 import { validateSatelliteCloudData,unknownSatelliteCloudData } from "./radar-satellite-validation.ts";
 import { unpackCloudData } from "./radar-cloud-transport.ts";
+import { decodeSatelliteFeed,fetchSatelliteFeed,SATELLITE_FEED_MAX_BYTES } from "./radar-satellite-feed.ts";
 
 const projection={longitude:-75,height:35786023,semiMajor:6378137,semiMinor:6356752.31414,sweep:"x"};
 // Independent NOAA PUG scan-to-lat/lon equations test the inverse path used
@@ -65,6 +66,16 @@ test("compressed transport roundtrips current/history/motion, and rejects oversi
   const encoded=structuredClone(d),zip=x=>gzipSync(Buffer.from(x,"base64")).toString("base64");encoded.encoding="rgba8-gzip-base64";encoded.satellite.current.volume=zip(d.satellite.current.volume);encoded.satellite.previous.volume=zip(d.satellite.previous.volume);encoded.satellite.motion=zip(d.satellite.motion);
   assert.deepEqual(await unpackCloudData(encoded),d);
   encoded.satellite.motion=zip(Buffer.alloc(10000).toString("base64"));await assert.rejects(()=>unpackCloudData(encoded));
+});
+test("hosted observation feed is bounded, validated and never substitutes stale or forecast data",async()=>{
+  const data=field(),packed=gzipSync(Buffer.from(JSON.stringify(data)));
+  assert.deepEqual(decodeSatelliteFeed(packed,now),data);
+  assert.throws(()=>decodeSatelliteFeed(packed,Date.parse(iso)+SATELLITE_MAX_AGE_MS+1));
+  assert.throws(()=>decodeSatelliteFeed(Buffer.alloc(SATELLITE_FEED_MAX_BYTES+1),now));
+  assert.throws(()=>decodeSatelliteFeed(gzipSync(Buffer.from('{"source":"NOAA GFS"}')),now));
+  assert.deepEqual(await fetchSatelliteFeed(async()=>new Response(packed),now),data);
+  await assert.rejects(()=>fetchSatelliteFeed(async()=>new Response(null,{status:503}),now));
+  await assert.rejects(()=>fetchSatelliteFeed(async()=>new Response(packed,{headers:{'content-length':String(SATELLITE_FEED_MAX_BYTES+1)}}),now));
 });
 test("wind-assisted consecutive-frame tracking follows translated cloud features, not random noise",()=>{
   const width=720,height=360,previous=new Uint8Array(width*height*4),current=new Uint8Array(previous.length);

@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { RadarCloudData } from "@/lib/radar-external";
 import { validateSatelliteCloudData, unknownSatelliteCloudData } from "@/lib/radar-satellite-validation";
+import { getHostedSatelliteCloudData } from "@/lib/radar-satellite-feed";
 
 // Heavy NetCDF ingestion is an independent job, not a per-viewer web request.
 // The ingester atomically replaces this file. It is not a public upload path.
@@ -10,7 +11,10 @@ let cached: { data: RadarCloudData; mtime: number } | null = null;
 export async function getRadarCloudData(): Promise<RadarCloudData> {
   const now=Date.now();
   try {
-    const file=resolve(process.env.BAV_SATELLITE_CLOUD_FILE??".bav-data/satellite-clouds/latest.json");
+    // Standard GitHub Actions prepares the public observations separately.
+    // Render only reads the bounded compressed result, not native HDF5 arrays.
+    if(process.env.NODE_ENV==="production"&&!process.env.BAV_SATELLITE_CLOUD_FILE)return await getHostedSatelliteCloudData();
+    const file=resolve(/*turbopackIgnore: true*/ process.env.BAV_SATELLITE_CLOUD_FILE??".bav-data/satellite-clouds/latest.json");
     const info=await stat(/*turbopackIgnore: true*/ file);
     if(info.size>120*1024**2)throw Error("Oversized satellite observation artifact");
     let data:RadarCloudData;

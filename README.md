@@ -1,6 +1,8 @@
 
 # British Airways Virtual website
 
+Current globe implementation and operations: see [terrain/camera/aurora notes](docs/globe-terrain-aurora.md) and [satellite Live clouds and hosted ingestion](docs/satellite-clouds.md). Live mode uses observed GOES masks, never GFS cloud coverage. Missing geography or required retrievals is unknown. Production's heavy satellite processing runs in the repository's `Satellite cloud observations` workflow; Render reads its bounded public compressed result without new host credentials or a paid worker. Terrain descent, adaptive LOD, camera controls and manual aurora screenshot/Kp controls are implemented. The original renderer-stage notes below are historical; the linked guides supersede their old limits and remaining-work list.
+
 ## BA-Radar Earth renderer
 
 The globe uses WGS84 with one render unit per kilometre. See
