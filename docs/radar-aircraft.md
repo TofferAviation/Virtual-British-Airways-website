@@ -57,3 +57,9 @@ altitude; this is visualisation, not navigation-grade positioning.
   Zod 4.6.7. npm audit reports zero vulnerabilities after these updates.
   MapLibre's legacy fallback explicitly sets the new ESM worker URL. The live
   Three.js globe, BA database connection and login/session settings are retained.
+- The upgraded React lint rules also required lifecycle-only compatibility
+  fixes in the legacy radar, crew-room UI and finance/mentoring display code.
+  Camera snapshots are captured on view changes (not every animation frame),
+  replay completion is derived, and chat data is scoped to its room. No database
+  schema, authorisation, financial calculation or mentoring policy is changed.
+  Website CI now installs the exact lockfile and runs all 109 regression tests.

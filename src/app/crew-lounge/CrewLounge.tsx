@@ -31,9 +31,11 @@ export function CrewLounge({ pilot, initialRooms, canManageRooms }: Props) {
   const firstRoom = initialRooms.find((room) => room.status === "open") ?? initialRooms[0] ?? null;
   const [rooms, setRooms] = useState(initialRooms);
   const [selectedRoomId, setSelectedRoomId] = useState(firstRoom?.id ?? "");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [portraits, setPortraits] = useState<Record<string, string | null>>({});
-  const [chatStatus, setChatStatus] = useState("");
+  const [chatRoomId, setChatRoomId] = useState<string | null>(null);
+  const [loadedMessages, setMessages] = useState<ChatMessage[]>([]);
+  const [loadedPortraits, setPortraits] = useState<Record<string, string | null>>({});
+  const [chatStatusRoomId, setChatStatusRoomId] = useState<string | null>(null);
+  const [loadedChatStatus, setChatStatus] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [refreshingRooms, setRefreshingRooms] = useState(false);
@@ -42,6 +44,10 @@ export function CrewLounge({ pilot, initialRooms, canManageRooms }: Props) {
 
   const selectedRoom = useMemo(() => rooms.find((room) => room.id === selectedRoomId) ?? null, [rooms, selectedRoomId]);
   const roomIsOpen = selectedRoom?.status === "open";
+  const currentChat = roomIsOpen && chatRoomId === selectedRoomId;
+  const messages = currentChat ? loadedMessages : [];
+  const portraits = currentChat ? loadedPortraits : {};
+  const chatStatus = roomIsOpen && chatStatusRoomId === selectedRoomId ? loadedChatStatus : "";
 
   const applyRoomBoard = useCallback((nextRooms: VoiceRoom[]) => {
     setRooms(nextRooms);
@@ -51,26 +57,31 @@ export function CrewLounge({ pilot, initialRooms, canManageRooms }: Props) {
     });
   }, []);
 
-  const refreshRoomBoard = useCallback(async (quiet = false) => {
-    if (!quiet) setRefreshingRooms(true);
-    try {
-      const response = await fetch("/api/crew-lounge/rooms", { cache: "no-store" });
-      const data = await response.json().catch(() => null) as { error?: string; rooms?: VoiceRoom[] } | null;
-      if (!response.ok || !Array.isArray(data?.rooms)) throw new Error(data?.error || "The crew-room board could not be refreshed.");
-      applyRoomBoard(data.rooms);
-      if (!quiet) setRoomBoardStatus("The crew-room board is up to date.");
-    } catch (error) {
-      if (!quiet) setRoomBoardStatus(error instanceof Error ? error.message : "The crew-room board could not be refreshed.");
-    } finally {
-      if (!quiet) setRefreshingRooms(false);
-    }
+  const loadRoomBoard = useCallback(async () => {
+    const response = await fetch("/api/crew-lounge/rooms", { cache: "no-store" });
+    const data = await response.json().catch(() => null) as { error?: string; rooms?: VoiceRoom[] } | null;
+    if (!response.ok || !Array.isArray(data?.rooms)) throw new Error(data?.error || "The crew-room board could not be refreshed.");
+    applyRoomBoard(data.rooms);
   }, [applyRoomBoard]);
 
+  const refreshRoomBoard = useCallback(async () => {
+    setRefreshingRooms(true);
+    try {
+      await loadRoomBoard();
+      setRoomBoardStatus("The crew-room board is up to date.");
+    } catch (error) {
+      setRoomBoardStatus(error instanceof Error ? error.message : "The crew-room board could not be refreshed.");
+    } finally {
+      setRefreshingRooms(false);
+    }
+  }, [loadRoomBoard]);
+
   useEffect(() => {
-    void refreshRoomBoard(true);
-    const timer = window.setInterval(() => void refreshRoomBoard(true), 15_000);
+    const refresh = () => void loadRoomBoard().catch(() => {});
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
     return () => window.clearInterval(timer);
-  }, [refreshRoomBoard]);
+  }, [loadRoomBoard]);
 
   async function openSelectedRoom() {
     if (!selectedRoom || !canManageRooms) return;
@@ -94,12 +105,7 @@ export function CrewLounge({ pilot, initialRooms, canManageRooms }: Props) {
   }
 
   useEffect(() => {
-    if (!selectedRoom || !roomIsOpen) {
-      setMessages([]);
-      setPortraits({});
-      setChatStatus("");
-      return;
-    }
+    if (!selectedRoom || !roomIsOpen) return;
     let live = true;
     const load = async () => {
       try {
@@ -107,11 +113,16 @@ export function CrewLounge({ pilot, initialRooms, canManageRooms }: Props) {
         const data = await response.json().catch(() => null) as { error?: string; messages?: ChatMessage[]; portraits?: Portrait[] } | null;
         if (!live) return;
         if (!response.ok) throw new Error(data?.error || "The crew conversation is unavailable.");
+        setChatRoomId(selectedRoom.id);
+        setChatStatusRoomId(selectedRoom.id);
         setMessages(data?.messages ?? []);
         setPortraits(Object.fromEntries((data?.portraits ?? []).map((portrait) => [portrait.pilotId, portrait.profileImage])));
         setChatStatus("");
       } catch (error) {
-        if (live) setChatStatus(error instanceof Error ? error.message : "The crew conversation is unavailable.");
+        if (live) {
+          setChatStatusRoomId(selectedRoom.id);
+          setChatStatus(error instanceof Error ? error.message : "The crew conversation is unavailable.");
+        }
       }
     };
     void load();

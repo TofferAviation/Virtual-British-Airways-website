@@ -19,13 +19,16 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Type check
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
+
+      - name: Globe and satellite regression tests
+        run: node --test src/lib/*.test.mjs
 
       - name: Production build
         run: npm run build

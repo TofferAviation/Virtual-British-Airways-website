@@ -365,6 +365,11 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [filter, setFilter] = useState<FlightFilter>("all");
   const [viewMode, setViewMode] = useState<RadarViewMode>("map");
   const globeCameraRef = useRef<GlobeCamera | null>(null);
+  const [globeInitialCamera, setGlobeInitialCamera] = useState<GlobeCamera | null>(null);
+  const switchViewMode = (mode: RadarViewMode) => {
+    if (mode === "globe") setGlobeInitialCamera(globeCameraRef.current);
+    setViewMode(mode);
+  };
   const stageRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialFlights.find((flight) => flight.lastSnapshot)?.id ?? initialFlights[0]?.id ?? "");
@@ -403,7 +408,8 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   const [replayLibrary, setReplayLibrary] = useState<RadarReplaySummary[]>([]);
   const [replay, setReplay] = useState<RadarReplay | null>(null);
   const [replayIndex, setReplayIndex] = useState(0);
-  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replayPlayingRequested, setReplayPlaying] = useState(false);
+  const replayPlaying = replayPlayingRequested && Boolean(replay && replayIndex < replay.snapshots.length - 1);
   const [replayLoadingId, setReplayLoadingId] = useState("");
   const [onboardPulse, setOnboardPulse] = useState<PrivateOperationPulse | null>(null);
 
@@ -466,18 +472,23 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
   }, []);
 
   useEffect(() => {
-    try {
-      const flightIds = JSON.parse(window.localStorage.getItem("bav-radar-watch-flights") ?? "[]");
-      const stations = JSON.parse(window.localStorage.getItem("bav-radar-watch-stations") ?? "[]");
-      const alerts = window.localStorage.getItem("bav-radar-watch-alerts") === "enabled";
-      if (Array.isArray(flightIds)) setWatchedFlightIds(flightIds.filter((value): value is string => typeof value === "string").slice(0, 24));
-      if (Array.isArray(stations)) setWatchedStations(stations.filter((value): value is string => typeof value === "string").slice(0, 24));
-      setWatchAlertsEnabled(alerts && "Notification" in window && Notification.permission === "granted");
-    } catch {
-      // Watchlists are optional browser conveniences; a damaged local entry is ignored.
-    } finally {
-      setWatchHydrated(true);
-    }
+    // Read browser-owned preferences after the initial hydrated frame. Cancel
+    // the callback on unmount so it cannot update a discarded radar instance.
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const flightIds = JSON.parse(window.localStorage.getItem("bav-radar-watch-flights") ?? "[]");
+        const stations = JSON.parse(window.localStorage.getItem("bav-radar-watch-stations") ?? "[]");
+        const alerts = window.localStorage.getItem("bav-radar-watch-alerts") === "enabled";
+        if (Array.isArray(flightIds)) setWatchedFlightIds(flightIds.filter((value): value is string => typeof value === "string").slice(0, 24));
+        if (Array.isArray(stations)) setWatchedStations(stations.filter((value): value is string => typeof value === "string").slice(0, 24));
+        setWatchAlertsEnabled(alerts && "Notification" in window && Notification.permission === "granted");
+      } catch {
+        // Watchlists are optional browser conveniences; a damaged local entry is ignored.
+      } finally {
+        setWatchHydrated(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -712,10 +723,6 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     return () => window.clearInterval(interval);
   }, [replay, replayPlaying]);
 
-  useEffect(() => {
-    if (replay && replayIndex >= replay.snapshots.length - 1) setReplayPlaying(false);
-  }, [replay, replayIndex]);
-
   const openReplay = async (id: string) => {
     setReplayLoadingId(id);
     try {
@@ -760,10 +767,10 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
       </aside>
       <div className="ba-radar-map-wrap">
         <div className={`ba-radar-map ${viewMode === "globe" ? "ba-radar-map--globe" : ""}`}>
-          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe compactControls flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={globeVatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} auroraSettings={auroraSettings} cloudsEnabled={globeClouds} cloudData={cloudData} cloudSettings={cloudSettings} dayNightEnabled={globeDayNight} initialCamera={globeCameraRef.current} onCameraChange={(camera) => { globeCameraRef.current = camera; }} />}
+          {viewMode === "map" ? <BaRadarMap flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={vatsim?.controllers ?? []} weather={weather} aurora={aurora} windGrid={windGrid} onWindRendererStatus={setWindRendererStatus} layers={layers} selectedController={selectedController} onSelectController={selectController} replay={replayForMap} /> : <BaRadarGlobe compactControls flights={visibleFlights} selectedId={selected?.id ?? ""} onSelect={selectFlight} controllers={globeVatsim ? vatsim?.controllers ?? [] : []} onSelectController={selectController} replay={replayForMap} auroraEnabled={layers.seasonal} aurora={aurora} auroraSettings={auroraSettings} cloudsEnabled={globeClouds} cloudData={cloudData} cloudSettings={cloudSettings} dayNightEnabled={globeDayNight} initialCamera={globeInitialCamera} onCameraChange={(camera) => { globeCameraRef.current = camera; }} />}
           <div className="ba-radar-view-toggle" role="group" aria-label="Radar view">
-            <button type="button" className={viewMode === "map" ? "active" : ""} onClick={() => setViewMode("map")} aria-pressed={viewMode === "map"}>2D map</button>
-            <button type="button" className={viewMode === "globe" ? "active" : ""} onClick={() => setViewMode("globe")} aria-pressed={viewMode === "globe"}>3D globe</button>
+            <button type="button" className={viewMode === "map" ? "active" : ""} onClick={() => switchViewMode("map")} aria-pressed={viewMode === "map"}>2D map</button>
+            <button type="button" className={viewMode === "globe" ? "active" : ""} onClick={() => switchViewMode("globe")} aria-pressed={viewMode === "globe"}>3D globe</button>
           </div>
           <div className="ba-radar-layer-controls" role="group" aria-label="BA-Radar map layers">
             <strong>{viewMode === "map" ? "Map layers" : "3D globe"}</strong>
