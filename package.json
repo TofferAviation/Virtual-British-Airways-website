@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:clouds": "node --test src/lib/radar-cloud-math.test.mjs src/lib/radar-cloud-noise.test.mjs",
     "test:globe-integration": "node --test src/lib/radar-globe-integration.test.mjs",
-    "test:aircraft": "node --test src/lib/radar-aircraft.test.mjs",
+    "test:aircraft": "node --test src/lib/radar-aircraft.test.mjs src/lib/radar-aircraft-motion.test.mjs",
     "aircraft:import": "node scripts/import-radar-aircraft.mjs",
     "aircraft:lod": "node scripts/bake-aircraft-lods.mjs",
     "test:satellite-clouds": "node --test src/lib/radar-satellite.test.mjs",

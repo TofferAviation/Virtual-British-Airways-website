@@ -4,6 +4,39 @@
 `/api/health`: this update's `globeRevision` is `airframe-model-lods-v2-20261024` and
 `releaseCommit` reports the Render Git commit when available.
 
+## Continuous live aircraft motion
+
+The globe no longer assigns a new transform only on the five-second API poll.
+Each aircraft keeps at most 64 timestamped reports and interpolates position,
+reported altitude and shortest-path heading in the existing render loop. A
+15-second display buffer covers normal telemetry/poll jitter; this is a delayed
+visualisation, not a new live location measurement. Geographic interpolation
+preserves altitude above the WGS84 surface and takes the short dateline route.
+There is no per-packet ease-to-stop, dead reckoning or invented track data.
+If the buffer runs out, the marker holds at the last measurement. Late packets
+resume continuously, with a bounded ±10% playback correction to recover drift.
+Duplicates, selection-only refreshes and out-of-order packets do not rewind it.
+Long gaps / simulator relocations reset rather than inventing a flight path;
+background tabs resume at buffered time. Replay scrubbing stays immediate.
+
+The existing View aircraft control frames the displayed/interpolated pose so
+it does not aim several kilometres ahead of the visible model. Sidebar data,
+recorded tracks, storage and the public API remain authoritative and unchanged.
+No scene remounts, React per-frame updates or asset reloads are introduced.
+Moving visible world-scale models invalidate cloud depth to avoid a stale
+silhouette; distant overlay traffic retains the cached cloud pass. Close-up
+movement uses the existing cheaper moving-cloud resolution.
+
+Development-only `aircraft-motion` provides five-second synthetic observations
+of a ~430 kt circuit, with interpolated heading/climb. It never enters the live
+feed/database. Automated checks cover 30/60/144 fps, steady cadence with jitter,
+duplicates, north/dateline crossings, height, stale/invalid packets, ground
+holds, reconnects, replay, resource reuse and physical-only cloud invalidation.
+All 133 regression tests, TypeScript and changed-file ESLint pass. The production
+build passes with the same nine existing filesystem-tracing warnings. This
+follow-up was approved for release on 24 October 2026. Verify the deployed
+Git SHA through `/api/health` → `releaseCommit`.
+
 ## Selected aircraft close-up size
 
 The selected airframe now defaults to a 175% visual size nearby. A Close-up

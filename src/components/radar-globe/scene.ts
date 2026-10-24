@@ -491,7 +491,7 @@ export function createGlobeScene(
     const flightModels: Parameters<GlobeAircraft["sync"]>[0]=[...state.flights];
     if (state.replay) {
       const p = state.replay.points[state.replay.activeIndex];
-      if (p && typeof p.altitudeFt === "number") flightModels.push({id:`replay:${state.replay.id}`,aircraft:state.replay.aircraft??"",lastSnapshot:{...p,altitudeFt:p.altitudeFt}});
+      if (p && typeof p.altitudeFt === "number") flightModels.push({id:`replay:${state.replay.id}`,aircraft:state.replay.aircraft??"",lastSnapshot:{...p,altitudeFt:p.altitudeFt},motion:"instant"});
     }
     aircraft.sync(flightModels,state.replay?`replay:${state.replay.id}`:state.selectedId);
     pickable.push(...aircraft.pickable);
@@ -732,7 +732,8 @@ export function createGlobeScene(
   let groundRequested = false;
   const groundView = () => { initialDescent=false;groundRequested=true; groundPitchTarget=88;maxDescentFrameFraction=0;cameraTrace.length=0; lastMotionAt=performance.now(); };
   const aircraftView = () => {
-    const state=read(),p=state.replay?.points[state.replay.activeIndex]??state.flights.find(f=>f.id===state.selectedId)?.lastSnapshot;
+    const state=read(),id=state.replay?`replay:${state.replay.id}`:state.selectedId;
+    const p=aircraft.displayedPose(id)??state.replay?.points[state.replay.activeIndex]??state.flights.find(f=>f.id===state.selectedId)?.lastSnapshot;
     const metres=p?flightAltitudeMetres(p):null;
     if(!p||metres===null)return;
     const heading=Number.isFinite(p.headingDeg)?p.headingDeg:0;
@@ -1031,7 +1032,7 @@ export function createGlobeScene(
     aircraft.update(shared.uCamera.value,camera.fov,host.clientHeight,now,localFrustum,read().aircraftCloseScale);
     aircraftSun.position.copy(shared.uSun.value).multiplyScalar(10000);
     aircraftSun.intensity=read().dayNightEnabled?Math.max(.08,2.4*Math.max(0,shared.uSun.value.dot(shared.uCamera.value.clone().normalize()))):2.4;
-    const moving = (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
+    const moving = aircraft.physicalMoving || (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
     const cloudSize = movingCloudSize(cloudTarget.width, cloudTarget.height, moving, effectiveQuality === "low");
     const shadowWidth = Math.max(1, Math.floor(cloudSize.width / 2)), shadowHeight = Math.max(1, Math.floor(cloudSize.height / 2));
     cloudTarget.viewport.set(0, 0, cloudSize.width, cloudSize.height);
@@ -1044,7 +1045,7 @@ export function createGlobeScene(
     shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
     shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
     const settings = read().cloudSettings;
-    const signature = [trafficRevision,aircraft.stats.revision,aircraft.stats.detailed,read().aircraftCloseScale,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const signature = [trafficRevision,aircraft.stats.revision,aircraft.stats.detailed,aircraft.stats.depthRevision,read().aircraftCloseScale,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
     const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
     const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();

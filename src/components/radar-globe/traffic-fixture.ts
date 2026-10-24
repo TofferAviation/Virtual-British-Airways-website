@@ -24,3 +24,13 @@ for(const [id,aircraft,latitude,longitude,altitudeFt,headingDeg]of [
   const position={...base.lastSnapshot!,latitude,longitude,altitudeFt,headingDeg};
   TRAFFIC_FIXTURE.push({...base,id,callsign:`QA ${id.slice(3).toUpperCase()}`,aircraft,lastSnapshot:position,recentSnapshots:[position],trackSnapshots:[position],plannedRoute:null});
 }
+
+/** Sparse observations of a smooth ~430 kt circuit, for the development motion view only. */
+export function movingTrafficFixture(epochUtc:number,seconds:number):PublicRadarFlight[] {
+  const recentSnapshots=Array.from({length:7},(_,i)=>{
+    const t=seconds+(i-6)*5,angle=t*.04;
+    return {...base.lastSnapshot!,timestamp:new Date(epochUtc+t*1000).toISOString(),latitude:53.7+.05*Math.cos(angle),longitude:-3.1+.084*Math.sin(angle),headingDeg:(90+angle*180/Math.PI+360)%360,altitudeFt:36000+100*Math.sin(t/20)};
+  });
+  const lastSnapshot=recentSnapshots.at(-1)!;
+  return [{...base,lastSnapshot,recentSnapshots,trackSnapshots:recentSnapshots,updatedAt:lastSnapshot.timestamp}];
+}

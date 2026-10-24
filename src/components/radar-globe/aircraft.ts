@@ -3,10 +3,11 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { aircraftFrame, aircraftDisplay, aircraftAboveHorizon, flightAltitudeMetres, resolveAircraftModel, type AircraftModel } from "@/lib/radar-aircraft";
 import { geodeticToWorld } from "@/lib/radar-globe-geodesy";
+import { AircraftMotion, type AircraftMotionReport } from "@/lib/radar-aircraft-motion";
 
-type Entry = { root: THREE.Group; icon: THREE.Mesh; model: THREE.Group | null; lod: THREE.Group | null; spec: AircraftModel | null; selected: boolean; physical: boolean };
+type Entry = { root: THREE.Group; icon: THREE.Mesh; model: THREE.Group | null; lod: THREE.Group | null; spec: AircraftModel | null; selected: boolean; physical: boolean; motion:AircraftMotion };
 type Cached = { prototype: THREE.Group; used: number };
-type AircraftFlight = {id: string; aircraft: string; lastSnapshot: {latitude:number;longitude:number;altitudeFt:number;headingDeg:number} | null};
+type AircraftFlight = {id: string; aircraft: string; lastSnapshot: AircraftMotionReport | null; recentSnapshots?:readonly AircraftMotionReport[]; motion?:"instant"};
 
 /** Shared assets, bounded cache and distance LOD. No simulator assets or remote hotlinks. */
 export class GlobeAircraft {
@@ -23,9 +24,16 @@ export class GlobeAircraft {
   private clock = 0;
   private lastModelScan = -Infinity;
   private basis = new THREE.Matrix4();
+  private right=new THREE.Vector3();
+  private up=new THREE.Vector3();
+  private back=new THREE.Vector3();
+  private previousPosition=new THREE.Vector3();
+  private previousRotation=new THREE.Quaternion();
+  private depthRevision=0;
+  physicalMoving=false;
   private revision=0;
   constructor(private loader:Pick<GLTFLoader,"loadAsync">=new GLTFLoader()) {}
-  get stats() { return { aircraft: this.entries.size, loaded: this.cache.size, mapLoaded: this.mapCache.size, loading: this.pending.size, failed: [...this.failed], revision:this.revision, detailed: [...this.entries.values()].filter(e=>e.physical).length, highDetail:[...this.entries.values()].filter(e=>e.model?.visible).length, mapModels:[...this.entries.values()].filter(e=>e.lod?.visible&&!e.physical).length }; }
+  get stats() { return { aircraft: this.entries.size, loaded: this.cache.size, mapLoaded: this.mapCache.size, loading: this.pending.size, failed: [...this.failed], revision:this.revision, depthRevision:this.depthRevision, moving:this.physicalMoving, detailed: [...this.entries.values()].filter(e=>e.physical).length, highDetail:[...this.entries.values()].filter(e=>e.model?.visible).length, mapModels:[...this.entries.values()].filter(e=>e.lod?.visible&&!e.physical).length }; }
   get pickable() { return [...this.entries.values()].map(e => e.root); }
 
   private icon(spec: AircraftModel | null) {
@@ -43,7 +51,7 @@ export class GlobeAircraft {
     return geometry;
   }
 
-  sync(flights: AircraftFlight[], selectedId: string) {
+  sync(flights: AircraftFlight[], selectedId: string,now=performance.now(),utc=Date.now()) {
     const alive = new Set<string>();
     for (const flight of flights) {
       const p = flight.lastSnapshot, height = p ? flightAltitudeMetres(p) : null;
@@ -55,22 +63,25 @@ export class GlobeAircraft {
       if (!entry) {
         const root = new THREE.Group(), icon = new THREE.Mesh(this.icon(spec), this.normal);
         root.add(icon); root.userData = { kind: "flight", id: flight.id };
-        this.group.add(root); entry = { root, icon, model: null, lod:null, spec, selected: false, physical:false }; this.entries.set(flight.id, entry);
+        this.group.add(root); entry = { root, icon, model: null, lod:null, spec, selected: false, physical:false, motion:new AircraftMotion() }; this.entries.set(flight.id, entry);
       }
       entry.spec=spec; entry.selected = flight.id === selectedId; entry.icon.material = entry.selected ? this.selected : this.normal;
       entry.root.userData.aircraft = spec ? `${spec.label}${spec.match === "family" ? " · family substitute" : ""}` : `${flight.aircraft} · generic marker`;
-      entry.root.position.set(...geodeticToWorld(p.latitude, p.longitude, height));
-      const frame = aircraftFrame(p.latitude,p.longitude,p.headingDeg);
-      entry.root.quaternion.setFromRotationMatrix(this.basis.makeBasis(new THREE.Vector3(...frame.right), new THREE.Vector3(...frame.up), new THREE.Vector3(...frame.back)));
+      entry.motion.sync({...p,headingDeg:Number.isFinite(p.headingDeg)?p.headingDeg:0},flight.recentSnapshots??[],now,utc,flight.motion==="instant");
+      this.pose(entry,now);
     }
     for (const [id,entry] of this.entries) if (!alive.has(id)) { this.group.remove(entry.root); this.entries.delete(id); }
   }
 
   update(cameraLocal: THREE.Vector3, fov: number, pixelsHigh: number, now: number, frustum: THREE.Frustum,closeScale?:number) {
+    this.physicalMoving=false;
     const scan = now - this.lastModelScan > 350;
     if (scan) this.lastModelScan=now;
     const candidates: Array<{entry: Entry; range: number; highDetail:boolean}> = [];
     for (const entry of this.entries.values()) {
+      this.previousPosition.copy(entry.root.position);this.previousRotation.copy(entry.root.quaternion);
+      this.pose(entry,now);
+      const moved=this.previousPosition.distanceToSquared(entry.root.position)>1e-16||1-Math.abs(this.previousRotation.dot(entry.root.quaternion))>1e-12;
       const range = Math.max(.001,cameraLocal.distanceTo(entry.root.position));
       const display=aircraftDisplay(entry.spec?.lengthM??40,range,fov,pixelsHigh,entry.selected,closeScale);
       const visible=frustum.containsPoint(entry.root.position)&&aircraftAboveHorizon(cameraLocal.toArray(),entry.root.position.toArray());
@@ -83,6 +94,7 @@ export class GlobeAircraft {
       if(entry.spec&&!entry.lod&&this.mapCache.has(entry.spec.key)){entry.lod=this.mapCache.get(entry.spec.key)!.clone(true);entry.root.add(entry.lod);}
       const model=display.highDetail&&entry.model?entry.model:entry.lod;
       entry.physical=visible&&!!model&&!display.mapOverlay;
+      if(entry.physical&&moved)this.physicalMoving=true;
       for(const object of [entry.model,entry.lod])if(object){
         object.visible=visible&&object===model;object.scale.setScalar(display.scale);
         object.traverse(part=>{part.layers.set(object.visible?(display.mapOverlay?6:0):7);if(object.visible&&!display.mapOverlay)part.layers.enable(5);});
@@ -92,6 +104,9 @@ export class GlobeAircraft {
       entry.icon.layers.set(entry.icon.visible?6:7);
       entry.icon.scale.setScalar((entry.spec?.lengthM??40)*display.scale);
     }
+    // Only moving, visible world-scale aircraft invalidate cloud depth. Distant
+    // overlay traffic keeps the cheap cached cloud pass even while flying.
+    if(this.physicalMoving)this.depthRevision++;
     if (scan) {
       candidates.sort((a,b) => Number(b.entry.selected)-Number(a.entry.selected) || a.range-b.range);
       // Load tiny map LODs first. Only request detailed textures/geometry when
@@ -100,6 +115,15 @@ export class GlobeAircraft {
       for(const {entry,highDetail}of candidates.slice(0,4))if(entry.spec&&highDetail)this.request(entry.spec.key,false);
     }
   }
+
+  private pose(entry:Entry,now:number) {
+    const p=entry.motion.sample(now);
+    entry.root.position.set(...geodeticToWorld(p.latitude,p.longitude,p.altitudeFt*.3048));
+    const frame=aircraftFrame(p.latitude,p.longitude,p.headingDeg);
+    entry.root.quaternion.setFromRotationMatrix(this.basis.makeBasis(this.right.fromArray(frame.right),this.up.fromArray(frame.up),this.back.fromArray(frame.back)));
+  }
+
+  displayedPose(id:string,now=performance.now()) {return this.entries.get(id)?.motion.sample(now);}
 
   closestDistance(cameraLocal: THREE.Vector3) {
     let distance=Infinity;

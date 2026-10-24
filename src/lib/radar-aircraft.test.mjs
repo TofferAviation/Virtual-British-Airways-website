@@ -12,7 +12,7 @@ const read=path=>readFile(new URL(path,root),"utf8");
 async function component(path){
   let source=await read(path);
   for(const name of ["three","three/addons/loaders/GLTFLoader.js","three/addons/utils/BufferGeometryUtils.js"])source=source.replaceAll(JSON.stringify(name),JSON.stringify(import.meta.resolve(name)));
-  for(const name of ["radar-aircraft","radar-globe-geodesy"])source=source.replaceAll(JSON.stringify(`@/lib/${name}`),JSON.stringify(new URL(`./${name}.ts`,import.meta.url).href));
+  for(const name of ["radar-aircraft","radar-globe-geodesy","radar-aircraft-motion"])source=source.replaceAll(JSON.stringify(`@/lib/${name}`),JSON.stringify(new URL(`./${name}.ts`,import.meta.url).href));
   const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
   return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 }
@@ -154,6 +154,32 @@ test("normal map zoom loads matching 3D LODs, not full fleet textures; close-up 
   layer.update(camera.position,45,900,448,frustum,1);
   assert.equal(full.scale.x,.001,"100% restores true size without resetting the camera");
   layer.dispose();assert.equal(layer.group.children.length,0);
+});
+
+test("per-frame poses move meshes, preserve shared LODs and only invalidate nearby physical cloud depth",async()=>{
+  const layer=new GlobeAircraft({async loadAsync(){const scene=new THREE.Group();scene.add(new THREE.Mesh(new THREE.BoxGeometry(79,20,72),new THREE.MeshStandardMaterial()));return {scene};}});
+  const utc=Date.parse("2026-10-24T12:00:00Z");
+  const report=seconds=>({timestamp:new Date(utc+seconds*1000).toISOString(),latitude:53+seconds*.002,longitude:-3,altitudeFt:36000,headingDeg:45});
+  const flight={id:"one",aircraft:"A388",lastSnapshot:report(0),recentSnapshots:[-30,-25,-20,-15,-10,-5,0].map(report)};
+  layer.sync([flight],"one",0,utc);const root=layer.group.children[0],start=root.position.clone();
+  const camera=new THREE.PerspectiveCamera(45,1,.0001,40000),frustum=new THREE.Frustum();
+  const update=(range,time)=>{
+    const pose=layer.displayedPose("one",time),centre=new THREE.Vector3(...geodeticToWorld(pose.latitude,pose.longitude,pose.altitudeFt*.3048));
+    camera.position.copy(centre).addScaledVector(new THREE.Vector3(...aircraftFrame(pose.latitude,pose.longitude,0).up),range);
+    camera.lookAt(centre);camera.updateMatrixWorld(true);
+    frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    layer.update(camera.position,45,900,time,frustum,1);
+  };
+  update(400,0);await new Promise(setImmediate);update(400,16);
+  assert.ok(root.position.distanceTo(start)>0);assert.equal(layer.stats.depthRevision,0,"moving distant markers reuse clouds");
+  const lod=root.children.find(child=>child instanceof THREE.Group);
+  update(.3,400);await new Promise(setImmediate);update(.3,416);
+  assert.equal(layer.stats.detailed,1);assert.ok(layer.stats.depthRevision>0,"moving physical models refresh their cloud silhouette");
+  assert.equal(root.children.find(child=>child===lod),lod,"animation never reloads/rebuilds map geometry");
+  const before=root.position.clone();layer.sync([flight],"",416,utc+416);assert.ok(root.position.distanceTo(before)<1e-9,"selection doesn't rewind motion");
+  layer.sync([{...flight,id:"replay",motion:"instant",lastSnapshot:report(-20)}],"replay",500,utc+500);
+  assert.ok(layer.group.children[0].position.distanceTo(new THREE.Vector3(...geodeticToWorld(report(-20).latitude,-3,10972.8)))<1e-9);
+  layer.dispose();assert.equal(layer.pickable.length,0);
 });
 
 test("offscreen types do not download and shared map transfers are bounded to two",async()=>{
