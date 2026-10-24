@@ -1,5 +1,6 @@
 /** Observational cloud contract. Coordinates are cell centres, north-first,
  * west=-180, no duplicate dateline/polar row. Never interpolate categorical masks. */
+import { estimatedSatelliteThickness } from "./radar-satellite-render.ts";
 export const SATELLITE_MAX_AGE_MS = 35 * 60_000;
 export const SATELLITE_CLOUD_FLAGS = { unknown: 0, clear: 1, uncertain: 2, probablyCloudy: 3, cloudy: 4, opticalDepthMissing: 8, topMissing: 16, baseEstimated: 32 } as const;
 export type AbiProjection = { longitude: number; height: number; semiMajor: number; semiMinor: number; sweep: "x" };
@@ -55,7 +56,7 @@ export function encodeSatelliteColumn(state: number, opticalDepth: number | null
   const tau=opticalDepth!==null&&Number.isFinite(opticalDepth)&&opticalDepth>=0&&opticalDepth<=160?opticalDepth:(flags|=8,0);
   const top=topMetres!==null&&Number.isFinite(topMetres)&&topMetres>=200&&topMetres<=18000?topMetres:(flags|=16,0);
   if(flags&24)return [Math.round(Math.log1p(tau)/Math.log(161)*255),0,Math.round(top/100),flags];
-  const thickness=Math.min(top-100,Math.max(120,350+Math.sqrt(tau)*220+(top>8000?400:0)));
+  const thickness=estimatedSatelliteThickness(top,tau);
   return [Math.round(Math.log1p(tau)/Math.log(161)*255),Math.round((top-thickness)/100),Math.round(top/100),flags];
 }
 export function satelliteGridIndex(latitude: number, longitude: number, width: number, height: number) {

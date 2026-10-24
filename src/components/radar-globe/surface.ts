@@ -5,6 +5,7 @@ import {
   geodeticToWorld,
   WGS84_A_KM,
   WGS84_B_KM,
+  WGS84_E2,
   worldToGeodetic,
 } from "@/lib/radar-globe-geodesy";
 import { GLOBE_PROFILES, refineGlobeTile, type GlobeQuality } from "@/lib/radar-globe-quality";
@@ -38,6 +39,20 @@ type Tile = {
 };
 export type SurfaceUniforms = Record<string, THREE.IUniform>;
 
+/** Derive relief normals from height slopes, not from LOD-dependent triangles
+ * or vertical crack-hiding skirts. A flat ocean has the SAME normal at every LOD. */
+function terrainPatchNormal(elevation:Float32Array,size:number,row:number,col:number,latitude:number,longitude:number,latStep:number,lonStep:number) {
+  const phi=latitude*Math.PI/180,lambda=longitude*Math.PI/180;
+  const west=Math.max(0,col-1),east=Math.min(size-1,col+1),north=Math.max(0,row-1),south=Math.min(size-1,row+1);
+  const denominator=1-WGS84_E2*Math.sin(phi)**2;
+  const parallel=WGS84_A_KM*1000/Math.sqrt(denominator)*Math.cos(phi),meridian=WGS84_A_KM*1000*(1-WGS84_E2)/denominator**1.5;
+  const eastSlope=Math.abs(parallel)<1?0:(elevation[row*size+east]-elevation[row*size+west])/((east-west)*lonStep*Math.PI/180*parallel);
+  const northSlope=(elevation[north*size+col]-elevation[south*size+col])/((south-north)*latStep*Math.PI/180*meridian);
+  return new THREE.Vector3(...geodeticNormal(latitude,longitude))
+    .addScaledVector(new THREE.Vector3(Math.cos(lambda),0,-Math.sin(lambda)),-eastSlope)
+    .addScaledVector(new THREE.Vector3(-Math.sin(phi)*Math.sin(lambda),Math.cos(phi),-Math.sin(phi)*Math.cos(lambda)),-northSlope).normalize().toArray();
+}
+
 /** CPU geometry is geodetic, including both poles; images are geographic WMS. */
 export function geographicPatch(z: number, x: number, y: number, elevation?: Float32Array | null) {
   const bounds = geographicTileBounds(z, x, y);
@@ -55,7 +70,7 @@ export function geographicPatch(z: number, x: number, y: number, elevation?: Flo
         bounds.west + ((bounds.east - bounds.west) * col) / segments;
       const point = new THREE.Vector3(...geodeticToWorld(latitude, longitude, elevation?.[row * (segments + 1) + col] ?? 0)).sub(origin);
       positions.push(point.x, point.y, point.z);
-      normals.push(...geodeticNormal(latitude, longitude));
+      normals.push(...(elevation?terrainPatchNormal(elevation,segments+1,row,col,latitude,longitude,(bounds.north-bounds.south)/segments,(bounds.east-bounds.west)/segments):geodeticNormal(latitude, longitude)));
       uv.push(col / segments, 1 - row / segments);
     }
   for (let row = 0; row < segments; row++)
@@ -88,7 +103,7 @@ export function geographicPatch(z: number, x: number, y: number, elevation?: Flo
     geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
     geometry.setAttribute("normal",new THREE.Float32BufferAttribute(normals,3));
     geometry.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2)); geometry.setIndex(indices);
-    geometry.computeVertexNormals();
+    // Keep the slope normals above; skirt faces must not bend ocean lighting.
   }
   geometry.userData.origin = origin;
   geometry.computeBoundingSphere();

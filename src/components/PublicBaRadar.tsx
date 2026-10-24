@@ -651,7 +651,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     : [globeVatsim, globeDayNight, globeClouds, layers.seasonal].filter(Boolean).length;
   const hasExternalMapData = viewMode === "globe" || layers.vatsim || needsWeather || layers.winds || layers.lightning;
   const weatherStationKey = selected?.weatherStations.map((station) => station.icao).join(",") ?? "";
-  const replayForMap = replay ? { id: replay.id, points: replay.snapshots, activeIndex: replayIndex } : null;
+  const replayForMap = replay ? { id: replay.id, aircraft: replay.aircraft, points: replay.snapshots, activeIndex: replayIndex } : null;
   // Both desktop and phone controls operate on the same live-map state.
   // Quality remains accessible even when the costly cloud layer is disabled.
   const globeControls = <>
@@ -662,7 +662,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
     {globeClouds ? <details className="ba-radar-globe-settings"><summary>Cloud settings</summary><CloudControls settings={cloudSettings} data={cloudData} error={cloudError} onChange={setCloudSettings}/></details> : null}
     <button type="button" className={layers.seasonal ? "active" : ""} onClick={() => toggleLayer("seasonal")} aria-pressed={layers.seasonal}>NOAA aurora forecast</button>
     {layers.seasonal ? <details className="ba-radar-globe-settings"><summary>Aurora settings{auroraSettings.kpOverrideEnabled ? " · SIMULATION" : ""}</summary><AuroraControls data={aurora} settings={auroraSettings} onChange={setAuroraSettings}/></details> : null}
-    <p className="ba-radar-layer-note">Live clouds: satellite observations determine locations. GFS assists movement only; it never adds cloud cover. Clear stays clear; missing coverage is unknown. Auto adapts rendering within memory budgets.</p>
+    <p className="ba-radar-layer-note">Satellite observations anchor cloud locations. Curved edges may extend into a labelled uncertainty band of up to 10 km; those fringes are reconstructed, not directly observed. Beyond that band, clear stays clear and missing coverage stays unknown. GFS assists movement only. Auto adapts rendering within memory budgets.</p>
   </>;
 
   useEffect(() => {
@@ -779,7 +779,7 @@ export function PublicBaRadar({ initialFlights }: { initialFlights: PublicRadarF
                 {layers.lightning ? <p className="ba-radar-layer-note">Observed satellite flash coverage from EUMETSAT. Blank areas outside its field of view are not a “no lightning” guarantee.</p> : null}</> : globeControls}
             </div>
           </details>
-          <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{selected?.plannedRoute ? <span><i className="planned-route" /> Planned route</span> : null}{selected?.trackSnapshots.length ? <span><i className="recorded-track" /> {selected.trackSnapshots[0].onGround ? "Gate-to-gate track" : "Recorded track"}</span> : null}{replay ? <span><i className="replay-track" /> Private replay</span> : null}{(viewMode === "map" ? layers.vatsim : globeVatsim) ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
+          <div className="ba-radar-map-key"><span><i /> BAV connected</span><span><i className="stale" /> Delayed link</span>{selected?.plannedRoute ? <span><i className="planned-route" /> Planned route</span> : null}{selected?.trackSnapshots.length ? <span><i className="recorded-track" style={viewMode==="globe"?{background:"linear-gradient(90deg,#4df226,#2680ff,#b326ff)"}:undefined} /> {viewMode==="globe"?"Recorded altitude · green low → violet high":selected.trackSnapshots[0].onGround ? "Gate-to-gate track" : "Recorded track"}</span> : null}{replay ? <span><i className="replay-track" /> Private replay</span> : null}{(viewMode === "map" ? layers.vatsim : globeVatsim) ? <span><i className="vatsim" /> VATSIM ATC</span> : null}</div>
           {!positioned.length && !hasExternalMapData ? <div className="ba-radar-empty"><strong>Waiting for live flights</strong><span>Aircraft appear as soon as a pilot starts an active Ember ACARS session.</span></div> : null}
         </div>
         <footer className="ba-radar-map-footer"><span>{replay ? "Private replay active" : `${positioned.length} BAV positions live`}</span><span>{replay ? `${replayIndex + 1} / ${replay.snapshots.length} samples` : `${airborne} BAV airborne`}</span><span>{(viewMode === "map" ? layers.vatsim : globeVatsim) ? "VATSIM Data" : "BAV telemetry"}{needsWeather ? " · Weather layers active" : ""}</span></footer>

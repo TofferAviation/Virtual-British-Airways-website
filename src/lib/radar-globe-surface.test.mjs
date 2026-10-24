@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import ts from "typescript";
 import * as THREE from "three";
 import { GLOBE_PROFILES } from "./radar-globe-quality.ts";
-import { geodeticToWorld, worldToGeodetic, geographicTileBounds, WGS84_A_KM, WGS84_B_KM } from "./radar-globe-geodesy.ts";
+import { geodeticToWorld, geodeticNormal, worldToGeodetic, geographicTileBounds, WGS84_A_KM, WGS84_B_KM } from "./radar-globe-geodesy.ts";
 
 // Execute the actual tile scheduler with Three geometry/frustum math. Only
 // network/bitmap decoding is replaced; no WebGL context or GPU is simulated.
@@ -14,7 +14,23 @@ source = source.replace('"three"', JSON.stringify(import.meta.resolve("three")))
 for (const name of ["radar-globe-geodesy", "radar-globe-quality", "radar-globe-elevation"])
   source = source.replace(`"@/lib/${name}"`, JSON.stringify(new URL(`./${name}.ts`, import.meta.url).href));
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
-const { GlobeSurface } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+const { GlobeSurface, geographicPatch } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+
+test("ocean normals remain geodetic across DEM tile edges, skirts and LODs; relief retains slopes",()=>{
+  for(const z of [4,8,11]){
+    const x=2**z,y=2**(z-1),b=geographicTileBounds(z,x,y),geometry=geographicPatch(z,x,y,new Float32Array(65*65));
+    const normals=geometry.getAttribute("normal");
+    for(const [row,col]of [[0,0],[0,64],[32,32],[64,0],[64,64]]){
+      const expected=geodeticNormal(b.north-(b.north-b.south)*row/64,b.west+(b.east-b.west)*col/64);
+      assert.ok(new THREE.Vector3().fromBufferAttribute(normals,row*65+col).distanceTo(new THREE.Vector3(...expected))<1e-6);
+    }
+    geometry.dispose();
+  }
+  const slope=Float32Array.from({length:65*65},(_,i)=>(i%65)*20),geometry=geographicPatch(11,2048,1024,slope);
+  const b=geographicTileBounds(11,2048,1024),up=new THREE.Vector3(...geodeticNormal((b.north+b.south)/2,(b.west+b.east)/2));
+  const normal=new THREE.Vector3().fromBufferAttribute(geometry.getAttribute("normal"),32*65+32);
+  assert.ok(normal.distanceTo(up)>.05);assert.ok(Math.abs(normal.length()-1)<1e-6);geometry.dispose();
+});
 
 test("actual terrain scheduler bounds memory/requests, refines near terrain and never overlaps parent/child", async () => {
   const originalFetch = globalThis.fetch, originalBitmap = globalThis.createImageBitmap;

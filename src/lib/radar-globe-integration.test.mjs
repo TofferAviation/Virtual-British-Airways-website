@@ -49,3 +49,25 @@ test("production ships the cloud volumes and imagery/terrain/feed routes without
   for(const [asset,bytes]of [["mass-v1.rgba",64**3*4],["detail-v1.rgba",32**3*4]])assert.equal((await stat(new URL(`public/textures/clouds/${asset}`,root))).size,bytes);
   for(const route of ["aurora","clouds","elevation","imagery"])assert.ok((await stat(new URL(`src/app/api/radar/${route}/route.ts`,root))).isFile());
 });
+
+test("cloud graphics prepare asynchronously before volume/shadow draws are enabled",async()=>{
+  const scene=await read("src/components/radar-globe/scene.ts");
+  assert.match(scene,/compileAsync\(cloudMesh, camera, scene\)/);
+  assert.match(scene,/compileAsync\(shadowMesh, camera, scene\)/);
+  assert.match(scene,/compileAsync\(compositeScene, compositeCamera\)/);
+  assert.match(scene,/cloudMesh\.visible = cloudsRequested && cloudPrograms === "ready"/);
+  assert.match(scene,/revision === cloudCompileRevision/);
+  assert.match(scene,/renderer\.setRenderTarget\(previousTarget\)/);
+});
+
+test("release identifies the aircraft build and keeps production traffic on the BA store",async()=>{
+  const health=await read("src/app/api/health/route.ts");
+  assert.match(health,/globeRevision: "aircraft-altitude-v1-20261024"/);
+  assert.match(health,/releaseCommit: process\.env\.RENDER_GIT_COMMIT/);
+  const api=await read("src/app/api/radar/live/route.ts");
+  assert.match(api,/listPublicRadarFlights\(\)/);
+  assert.doesNotMatch(api,/TRAFFIC_FIXTURE|traffic-fixture|synthetic/i);
+  const store=await read("src/lib/radar-live.ts");
+  assert.match(store,/listLiveAcarsSessions\(\)/);
+  assert.match(store,/altitudeFt: snapshot\.altitudeFt/);
+});

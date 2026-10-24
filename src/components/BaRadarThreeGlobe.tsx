@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GlobeSceneState } from "@/components/radar-globe/scene";
 import { auroraKpOverride } from "@/lib/radar-aurora-kp";
+import { resolveAircraftModel } from "@/lib/radar-aircraft";
 export type { GlobeCamera } from "@/components/radar-globe/scene";
 
 export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: boolean }) {
@@ -11,6 +12,9 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
   const [error, setError] = useState<string | null>(null);
   const [performanceLabel, setPerformanceLabel] = useState("Loading globe assets…");
   const [cloudCoverageLabel,setCloudCoverageLabel]=useState("Cloud coverage below camera: unknown (not clear)");
+  const selectedFlight=props.flights.find(f=>f.id===props.selectedId);
+  const aircraftName=props.replay?.aircraft??selectedFlight?.aircraft;
+  const aircraftModel=aircraftName?resolveAircraftModel(aircraftName):null;
   useEffect(() => {
     current.current = props;
   }, [props]);
@@ -50,7 +54,9 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
     <div className="ba-radar-globe-map ba-radar-globe-three" ref={container}>
       <div className="ba-radar-globe-caption">
         <strong>Earth · WGS84</strong>
+        {aircraftName?<><span>{aircraftModel?`${aircraftModel.label}${aircraftModel.match==="family"?" · family substitute":""} · house livery`:`${aircraftName} · generic aircraft marker`}</span><button type="button" style={{pointerEvents:"auto",font:"10px Arial",padding:"4px 7px",color:"#d7ebff",background:"#12344b",border:"1px solid #4982a6",borderRadius:3}} onClick={()=>container.current?.querySelector("canvas")?.dispatchEvent(new Event("globe-aircraft-view"))}>View aircraft · reported altitude</button></>:null}
         {props.cloudsEnabled?<span>{cloudCoverageLabel}</span>:null}
+        {props.cloudsEnabled&&!props.testCloudProfile?<span style={{color:"#eacb8a"}}>Reconstructed cloud edges · uncertainty band ≤10 km</span>:null}
         {props.auroraEnabled&&auroraKpOverride(props.auroraSettings)!==null?<strong style={{color:"#ffcf83"}}>SIMULATION · manual Kp {auroraKpOverride(props.auroraSettings)} · not live NOAA</strong>:null}
         <details className="ba-radar-globe-help" open={!props.compactControls}>
         <summary>Camera controls &amp; sources</summary>
@@ -60,7 +66,8 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
         </span>
         <span>WASD: move · Q/E: down/up · Shift: faster · Home: reset view</span>
         <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA ABI / GFS winds / SWPC</span>
-        <a href="/globe-sources" target="_blank" rel="noreferrer" style={{pointerEvents:"auto",color:"#a8c6d9"}}>Terrain: Mapzen / USGS / NOAA and contributors · credits & limits</a>
+        <span>Aircraft: type-matched 3D nearby; enlarged silhouettes at map scale. Track colour: green low → violet high. Heights are reported, not exaggerated.</span>
+        <a href="/globe-sources" target="_blank" rel="noreferrer" style={{pointerEvents:"auto",color:"#a8c6d9"}}>Aircraft / terrain: authors, sources, licences &amp; limits</a>
         <button type="button" style={{ pointerEvents: "auto", justifySelf: "start", font: "10px Arial", padding: "4px 7px", color: "#d7ebff", background: "#12344b", border: "1px solid #4982a6", borderRadius: 3 }} onClick={() => {
           const canvas = container.current?.querySelector("canvas");
           canvas?.dispatchEvent(new Event("globe-reset-view"));

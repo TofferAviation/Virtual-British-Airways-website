@@ -11,9 +11,16 @@ import { createGlobeAuroraSettings, createGlobeCloudSettings } from "@/lib/radar
 import { AuroraKpControls } from "@/components/AuroraKpControls";
 import { auroraKpOverride,type AuroraKpSettings } from "@/lib/radar-aurora-kp";
 import { unpackCloudData } from "@/lib/radar-cloud-transport";
+import { TRAFFIC_FIXTURE } from "./traffic-fixture";
 
 const views = {
+  traffic: {latitude:53,longitude:-2,distanceKm:6778.137,pitch:30,fov:45,date:"2026-03-20T12:00:00Z"},
+  aircraft: {latitude:53.7482,longitude:-3.1,distanceKm:6389.3598,pitch:38.66,bearing:0,fov:45,date:"2026-03-20T12:00:00Z"},
   observed: {latitude:15,longitude:-100,distanceKm:23000,date:undefined},
+  "observed-flight": {latitude:41.77,longitude:-52.2,distanceKm:6387.237,pitch:78,fov:62,date:"2026-03-20T15:30:00Z"},
+  "observed-towers": {latitude:17.5,longitude:-35.3,distanceKm:6390.637,pitch:76,fov:62,date:"2026-03-20T16:30:00Z"},
+  "observed-corners": {latitude:18.91969,longitude:-36.56374,distanceKm:6390.807,pitch:77,bearing:-30.8,fov:62,date:"2026-03-20T16:30:00Z"},
+  "observed-overhead": {latitude:18.91969,longitude:-36.56374,distanceKm:6880,pitch:0,bearing:0,fov:35,date:"2026-03-20T16:30:00Z"},
   day: {
     latitude: 25,
     longitude: 15,
@@ -174,8 +181,8 @@ export function GlobeVisualCheck() {
       <div style={{ position: "absolute", inset: "112px 0 88px" }}>
         <BaRadarThreeGlobe
           key={`${view}-${revision}`}
-          flights={[]}
-          selectedId=""
+          flights={view==="traffic"||view==="aircraft"?TRAFFIC_FIXTURE:[]}
+          selectedId={view==="traffic"||view==="aircraft"?"qa-a380":""}
           onSelect={() => {}}
           controllers={[]}
           onSelectController={() => {}}
@@ -192,7 +199,7 @@ export function GlobeVisualCheck() {
             enhancedPresentation: false,
             hemisphere,debug:auroraDebug,
           }}
-          cloudsEnabled={clouds}
+          cloudsEnabled={clouds&&view!=="traffic"&&view!=="aircraft"}
           cloudData={data}
           cloudSettings={{
             ...createGlobeCloudSettings(),
@@ -212,6 +219,7 @@ export function GlobeVisualCheck() {
         style={{ position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: 10 }}
       >
         <strong>Globe visual check</strong>
+        {view==="traffic"||view==="aircraft"?<strong style={{color:"#ffc969"}}>SYNTHETIC AIRCRAFT / ALTITUDE TEST · not live traffic</strong>:null}
         {Object.keys(views).map((name) => (
           <button
             key={name}

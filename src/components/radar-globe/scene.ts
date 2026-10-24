@@ -11,6 +11,9 @@ import { auroraPhotoUniforms } from "@/lib/radar-aurora-photo";
 import { advanceAuroraTime, auroraMotionSpeed } from "@/lib/radar-aurora-motion";
 import { auroraKpOverride, auroraKpField } from "@/lib/radar-aurora-kp";
 import { SATELLITE_MAX_AGE_MS, satelliteGridIndex } from "@/lib/radar-satellite-math";
+import { buildSatelliteRenderTexture, observedCloudDistance } from "@/lib/radar-satellite-render";
+import { CLOUD_BOUNDARY_BAND_KM, sampleCloudFootprint, type CloudFootprint, type CloudFootprintResponse } from "@/lib/radar-cloud-footprint";
+import { ACCEPTED_CLOUD_REVISION } from "./cloud-appearance";
 import {
   WGS84_A_KM,
   WGS84_B_KM,
@@ -24,6 +27,9 @@ import {
   globeAltitudeStep, globeDescentFloor,
 } from "@/lib/radar-globe-geodesy";
 import { GlobeSurface } from "./surface";
+import { GlobeAircraft } from "./aircraft";
+import { flightTrackGeometry } from "./flight-track";
+import { flightAltitudeMetres, type FlightTrackPoint } from "@/lib/radar-aircraft";
 import { buildAuroraCurtains, updateAuroraCurtains } from "./aurora";
 import { auroraField } from "@/lib/radar-aurora-field";
 import { AdaptiveGlobeQuality, GLOBE_PROFILES, globeRenderSize, type GlobeQuality } from "@/lib/radar-globe-quality";
@@ -54,7 +60,8 @@ export type GlobeCamera = {
 };
 export type GlobeReplay = {
   id: string;
-  points: Array<{ latitude: number; longitude: number; headingDeg: number }>;
+  aircraft?: string;
+  points: Array<FlightTrackPoint & { headingDeg: number }>;
   activeIndex: number;
 } | null;
 export type GlobeSceneState = {
@@ -117,6 +124,14 @@ function decodeTexture(data: RadarCloudData, encoded: string, nearest=false) {
     THREE.RGBAFormat,
   );
   texture.minFilter = texture.magFilter = nearest?THREE.NearestFilter:THREE.LinearFilter;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.unpackAlignment = 1;
+  texture.needsUpdate = true;
+  return texture;
+}
+function satelliteShapeTexture(data: RadarCloudData, observed: THREE.DataTexture, reconstructSupport = true) {
+  const texture = new THREE.DataTexture(buildSatelliteRenderTexture(observed.image.data as Uint8Array, data.width, data.height, reconstructSupport), data.width, data.height, THREE.RGBAFormat);
+  texture.minFilter = texture.magFilter = THREE.LinearFilter;
   texture.wrapS = THREE.RepeatWrapping;
   texture.unpackAlignment = 1;
   texture.needsUpdate = true;
@@ -224,7 +239,9 @@ export function createGlobeScene(
     uMiddleWeather: { value: fallback },
     uHighWeather: { value: fallback },
     uSatelliteCurrent: {value:fallback},uSatellitePrevious:{value:fallback},uSatelliteMotion:{value:fallback},
-    uSatelliteMode:{value:1},uObservationBlend:{value:1},uObservationSeconds:{value:0},uObservationInterval:{value:0},
+    uSatelliteShapeCurrent:{value:fallback},uSatelliteShapePrevious:{value:fallback},
+    uSatelliteFootprint:{value:fallback},uSatelliteFootprintReady:{value:0},
+    uSatelliteMode:{value:1},uObservationBlend:{value:1},uObservationInterval:{value:0},
     uBaseNoise: { value: base },
     uDetailNoise: { value: detail },
     uLayers: { value: new THREE.Vector3(1, 1, 1) },
@@ -256,6 +273,9 @@ export function createGlobeScene(
   ) =>
     new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
+      // Live programs contain only observed reconstruction, not three unused
+      // forecast density trees at every lighting probe. Calibration is QA-only.
+      defines: testProfile ? { BAV_FORECAST_CALIBRATION: 1 } : {},
       uniforms: { ...shared, ...uniforms },
       vertexShader,
       fragmentShader,
@@ -300,6 +320,32 @@ export function createGlobeScene(
   const compositeQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compositeMaterial);
   compositeQuad.frustumCulled = false;
   compositeScene.add(compositeQuad);
+  let cloudPrograms: "idle" | "compiling" | "ready" | "failed" = "idle", cloudCompileRevision = 0;
+  const prepareCloudPrograms = () => {
+    if (cloudPrograms !== "idle") return;
+    cloudPrograms = "compiling";
+    const revision = ++cloudCompileRevision, previousTarget = renderer.getRenderTarget();
+    // Compile against each pass's actual output colour space. Compiling only
+    // the onscreen variant still stalls on the first offscreen volume draw.
+    const prepare = async () => {
+      try {
+        renderer.setRenderTarget(cloudTarget);
+        const volume = renderer.compileAsync(cloudMesh, camera, scene);
+        renderer.setRenderTarget(shadowTarget);
+        const shadow = renderer.compileAsync(shadowMesh, camera, scene);
+        renderer.setRenderTarget(null);
+        const composite = renderer.compileAsync(compositeScene, compositeCamera);
+        await Promise.all([volume, shadow, composite]);
+        if (!disposed && revision === cloudCompileRevision) { cloudPrograms = "ready"; cloudCache.invalidate(); }
+      } catch (error) {
+        if (!disposed && revision === cloudCompileRevision) { cloudPrograms = "failed"; console.error("Cloud graphics preparation failed", error); }
+      }
+    };
+    void prepare();
+    // compileAsync starts synchronously but polls readiness asynchronously;
+    // restore render state before the ordinary globe frame continues.
+    renderer.setRenderTarget(previousTarget);
+  };
   const atmosphereMaterial = material(volumeVertex, atmosphereFragment);
   atmosphereMaterial.transparent = true;
   atmosphereMaterial.depthWrite = false;
@@ -336,6 +382,21 @@ export function createGlobeScene(
   const routes = new THREE.Group(),
     traffic = new THREE.Group();
   earth.add(routes, traffic);
+  const aircraft = new GlobeAircraft();
+  earth.add(aircraft.group);
+  const aircraftDepthMaterial=material(`
+    uniform mat4 uWorldToEarth;
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    out vec3 vPosition;
+    void main(){
+      vPosition=(uWorldToEarth*modelMatrix*vec4(position,1.0)).xyz;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+      #include <logdepthbuf_vertex>
+    }`,terrainDepthFragment,{uWorldToEarth:{value:new THREE.Matrix4()}});
+  const aircraftSun=new THREE.DirectionalLight(0xfff5df,2.4);
+  earth.add(aircraftSun,aircraftSun.target,new THREE.HemisphereLight(0xeaf4ff,0x273244,1.6));
+  let trafficRevision=0;
   const markerMaterials = [
     new THREE.MeshBasicMaterial({ color: 0xf2c84b }),
     new THREE.MeshBasicMaterial({ color: 0xffffff }),
@@ -350,7 +411,14 @@ export function createGlobeScene(
     new THREE.LineBasicMaterial({ color: 0xf1c84c }),
     new THREE.LineBasicMaterial({ color: 0xed315f }),
   ];
-  const pickable: THREE.Mesh[] = [];
+  const trackLineMaterial=new THREE.LineBasicMaterial({vertexColors:true,toneMapped:false});
+  const trackCurtainMaterial=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.16,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+  const pickable: THREE.Object3D[] = [];
+  const addTrack = (points: FlightTrackPoint[]) => {
+    for(const {line,ribbon} of flightTrackGeometry(points)){
+      routes.add(new THREE.Line(line,trackLineMaterial),new THREE.Mesh(ribbon,trackCurtainMaterial));
+    }
+  };
   const addRoute = (
     points: Array<{ latitude: number; longitude: number }>,
     type: number,
@@ -364,10 +432,10 @@ export function createGlobeScene(
       if (i > 0) {
         const prev = points[i - 1],
           from = new THREE.Vector3(
-            ...geodeticToWorld(prev.latitude, prev.longitude, 3000),
+            ...geodeticToWorld(prev.latitude, prev.longitude, 200),
           ),
           to = new THREE.Vector3(
-            ...geodeticToWorld(point.latitude, point.longitude, 3000),
+            ...geodeticToWorld(point.latitude, point.longitude, 200),
           );
         const steps = Math.min(30, Math.ceil(from.distanceTo(to) / 80));
         for (let step = 1; step < steps; step++) {
@@ -385,7 +453,7 @@ export function createGlobeScene(
       }
       vertices.push(
         new THREE.Vector3(
-          ...geodeticToWorld(point.latitude, point.longitude, 3000),
+          ...geodeticToWorld(point.latitude, point.longitude, 200),
         ),
       );
     }
@@ -397,52 +465,25 @@ export function createGlobeScene(
     routes.add(line);
   };
   const syncTraffic = () => {
+    trafficRevision++;
     clearGroup(routes);
     clearGroup(traffic);
     pickable.length = 0;
     const state = read();
     const selected = state.flights.find((f) => f.id === state.selectedId);
     addRoute(selected?.plannedRoute?.points ?? [], 0);
-    addRoute(
-      selected?.trackSnapshots?.length
+    const history = selected?.trackSnapshots?.length
         ? selected.trackSnapshots
-        : (selected?.recentSnapshots ?? []),
-      1,
-    );
-    addRoute(state.replay?.points ?? [], 2);
-    for (const flight of state.flights) {
-      const p = flight.lastSnapshot;
-      if (!p) continue;
-      const marker = new THREE.Mesh(
-        new THREE.ConeGeometry(22, 65, 3),
-        markerMaterials[flight.id === state.selectedId ? 1 : 0],
-      );
-      marker.position.set(
-        ...geodeticToWorld(
-          p.latitude,
-          p.longitude,
-          Math.max(15000, p.altitudeFt * 0.3048),
-        ),
-      );
-      marker.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        marker.position.clone().normalize(),
-      );
-      marker.userData = { kind: "flight", id: flight.id };
-      traffic.add(marker);
-      pickable.push(marker);
-    }
+        : (selected?.recentSnapshots ?? []);
+    addTrack(selected?.lastSnapshot && history.at(-1)?.timestamp!==selected.lastSnapshot.timestamp ? [...history,selected.lastSnapshot] : history);
+    addTrack(state.replay?.points ?? []);
+    const flightModels: Parameters<GlobeAircraft["sync"]>[0]=[...state.flights];
     if (state.replay) {
       const p = state.replay.points[state.replay.activeIndex];
-      if (p) {
-        const marker = new THREE.Mesh(
-          new THREE.SphereGeometry(30, 12, 8),
-          markerMaterials[1],
-        );
-        marker.position.set(...geodeticToWorld(p.latitude, p.longitude, 16000));
-        traffic.add(marker);
-      }
+      if (p && typeof p.altitudeFt === "number") flightModels.push({id:`replay:${state.replay.id}`,aircraft:state.replay.aircraft??"",lastSnapshot:{...p,altitudeFt:p.altitudeFt}});
     }
+    aircraft.sync(flightModels,state.replay?`replay:${state.replay.id}`:state.selectedId);
+    pickable.push(...aircraft.pickable);
     for (const controller of state.controllers) {
       if (controller.latitude == null || controller.longitude == null) continue;
       const marker = new THREE.Mesh(
@@ -466,6 +507,40 @@ export function createGlobeScene(
     lastQuality = "";
   const weatherTextures: THREE.Texture[] = [];
   let weatherRevision = 0;
+  let footprintWorker: Worker | null = null, footprintPending = false, footprintError = "", footprintLobes = 0;
+  let footprintSize: [number,number] = [0,0];
+  let footprintField: CloudFootprint | null = null, footprintUsesCurrentHistory = false;
+  const requestFootprint = (pixels: Uint8Array, width: number, height: number) => {
+    footprintPending = true; footprintError = ""; footprintLobes = 0; footprintSize = [0,0];
+    try {
+      if (!footprintWorker) {
+        footprintWorker = new Worker(new URL("./cloud-footprint.worker.ts", import.meta.url), { type: "module" });
+        footprintWorker.onmessage = (event: MessageEvent<CloudFootprintResponse>) => {
+          const field = event.data;
+          if (disposed || field.id !== weatherRevision) return;
+          footprintPending = false;
+          if (field.error) { footprintError = field.error; return; }
+          const texture = new THREE.DataTexture(field.pixels,field.width,field.height,THREE.RedFormat);
+          texture.minFilter = texture.magFilter = THREE.LinearFilter;
+          texture.wrapS = THREE.RepeatWrapping; texture.unpackAlignment = 1; texture.needsUpdate = true;
+          weatherTextures.push(texture); shared.uSatelliteFootprint.value = texture; shared.uSatelliteFootprintReady.value = 1;
+          const properties = new THREE.DataTexture(field.properties,field.sourceWidth,field.sourceHeight,THREE.RGBAFormat);
+          properties.minFilter = properties.magFilter = THREE.LinearFilter;
+          properties.wrapS = THREE.RepeatWrapping; properties.unpackAlignment = 1; properties.needsUpdate = true;
+          weatherTextures.push(properties); shared.uSatelliteShapeCurrent.value = properties;
+          if (footprintUsesCurrentHistory) shared.uSatelliteShapePrevious.value = properties;
+          footprintField = field;
+          footprintSize = [field.width,field.height]; footprintLobes = field.lobes; cloudCache.invalidate();
+        };
+        footprintWorker.onerror = () => { footprintPending = false; footprintError = "Cloud formation reconstruction failed"; };
+      }
+      const memory = (navigator as Navigator & {deviceMemory?: number}).deviceMemory;
+      const preferred=effectiveQuality === "low" || (memory !== undefined && memory <= 4)?2:4;
+      const scale=[4,2,1].find(s=>s<=preferred&&width*s<=renderer.capabilities.maxTextureSize&&height*s<=renderer.capabilities.maxTextureSize)??1;
+      // Structured clone preserves the live categorical texture; never detach it.
+      footprintWorker.postMessage({ id: weatherRevision, pixels, width, height, scale });
+    } catch (error) { footprintPending = false; footprintError = String(error); }
+  };
   let satelliteReceivedAt=0,satelliteValidUntil=0,satellitePixels:Uint8Array|null=null,satelliteRevision="";
   const sync = () => {
     const state = read();
@@ -492,14 +567,23 @@ export function createGlobeScene(
       satelliteRevision=revision;
       weatherRevision++;
       shared.uSatelliteCurrent.value=shared.uSatellitePrevious.value=shared.uSatelliteMotion.value=fallback;
+      shared.uSatelliteShapeCurrent.value=shared.uSatelliteShapePrevious.value=fallback;
+      shared.uSatelliteFootprint.value=fallback;shared.uSatelliteFootprintReady.value=0;
+      footprintPending=false;footprintError="";footprintSize=[0,0];footprintLobes=0;
+      footprintField=null;footprintUsesCurrentHistory=false;
       satellitePixels=null;satelliteValidUntil=0;
       weatherTextures.splice(0).forEach((texture) => texture.dispose());
       if(d?.source==="NOAA GOES ABI"&&d.encoding==="rgba8-base64"&&s?.status==="ready") {
         const current=decodeTexture(d,s.current.volume,true),previous=s.previous?decodeTexture(d,s.previous.volume,true):current,motion=decodeTexture(d,s.motion,true);
+        // History supplies R/B properties only, never the current support.
+        const shapePrevious=previous===current?null:satelliteShapeTexture(d,previous,false);
         weatherTextures.push(current,motion);if(previous!==current)weatherTextures.push(previous);
+        if(shapePrevious)weatherTextures.push(shapePrevious);
         shared.uSatelliteCurrent.value=current;shared.uSatellitePrevious.value=previous;shared.uSatelliteMotion.value=motion;
+        shared.uSatelliteShapePrevious.value=shapePrevious??fallback;footprintUsesCurrentHistory=previous===current;
         shared.uObservationInterval.value=s.intervalSeconds;
         satellitePixels=current.image.data as Uint8Array;
+        requestFootprint(satellitePixels,d.width,d.height);
         satelliteReceivedAt=performance.now();
         satelliteValidUntil=Math.min(Date.parse(s.current.observedAt),...s.current.sources.map(source=>Date.parse(source.scanEndAt)))+SATELLITE_MAX_AGE_MS;
       }
@@ -544,10 +628,12 @@ export function createGlobeScene(
     auroraMaterial.uniforms.uAuroraBlend.value=Math.min(1,(performance.now()-auroraTransitionAt)/12000);
     auroraMaterial.uniforms.uAuroraDebug.value=state.auroraSettings.debug==="altitude"?2:0;
     auroraMaterial.uniforms.uHemisphere.value=state.auroraSettings.hemisphere==="north"?1:state.auroraSettings.hemisphere==="south"?-1:0;
-    cloudMesh.visible =
-      state.cloudsEnabled && state.cloudSettings.realWorld && (!!testProfile || (satellitePixels!==null&&Date.now()<satelliteValidUntil));
+    const cloudsRequested = state.cloudsEnabled && state.cloudSettings.realWorld && (!!testProfile || (satellitePixels!==null&&Date.now()<satelliteValidUntil));
+    if (cloudsRequested) prepareCloudPrograms();
+    cloudMesh.visible = cloudsRequested && cloudPrograms === "ready" && (!!testProfile || shared.uSatelliteFootprintReady.value > .5);
+    if (cloudsRequested && (cloudPrograms !== "ready" || footprintPending || footprintError)) host.dataset.globeStatus = footprintError ? "Cloud formations could not reconstruct — reload or switch to 2D" : cloudPrograms === "failed" ? "Cloud graphics could not start — reload or switch to 2D" : footprintPending ? "Reconstructing observed cloud formations…" : "Preparing cloud graphics…";
+    else if (!contextLost) delete host.dataset.globeStatus;
     shared.uObservationBlend.value=Math.min(1,Math.max(0,(performance.now()-satelliteReceivedAt)/12000));
-    shared.uObservationSeconds.value=state.cloudData?.satellite?.status==="ready"?Math.min(600,Math.max(0,(Date.now()-Date.parse(state.cloudData.satellite.current.observedAt))/1000)):0;
     shared.uClouds.value = cloudMesh.visible ? 1 : 0;
     shared.uCloudOpacity.value = state.cloudSettings.opacity * 1.7;
     shared.uShadows.value = state.cloudSettings.selfShadows ? 1 : 0;
@@ -606,6 +692,17 @@ export function createGlobeScene(
   const resetView = () => { bearing = 0; pitch = 0; groundPitchTarget=null; lastMotionAt = performance.now(); remember(); };
   let groundRequested = false;
   const groundView = () => { initialDescent=false;groundRequested=true; groundPitchTarget=88;maxDescentFrameFraction=0;cameraTrace.length=0; lastMotionAt=performance.now(); };
+  const aircraftView = () => {
+    const state=read(),p=state.replay?.points[state.replay.activeIndex]??state.flights.find(f=>f.id===state.selectedId)?.lastSnapshot;
+    const metres=p?flightAltitudeMetres(p):null;
+    if(!p||metres===null)return;
+    const heading=Number.isFinite(p.headingDeg)?p.headingDeg:0;
+    ({latitude,longitude}=globePanPosition(p.latitude,p.longitude,-.2*Math.sin(heading*Math.PI/180),-.2*Math.cos(heading*Math.PI/180)));
+    targetDistance=distance=WGS84_A_KM+metres/1000+.25;
+    verticalVelocity=0;initialDescent=false;groundRequested=false;groundPitchTarget=null;
+    pitch=Math.atan2(.2,.25)*180/Math.PI;bearing=heading;camera.fov=45;
+    lastMotionAt=performance.now();orbit();remember();
+  };
   const onDown = (event: PointerEvent) => {
     if (down) return;
     dragMode = globeDragMode(event.button, event.shiftKey);
@@ -673,9 +770,11 @@ export function createGlobeScene(
         hit.distance - 60
     )
       return;
-    if (hit.object.userData.kind === "flight")
-      read().onSelect(hit.object.userData.id);
-    else read().onSelectController(hit.object.userData.id);
+    let target: THREE.Object3D | null=hit.object;
+    while(target&&!target.userData.kind)target=target.parent;
+    if (target?.userData.kind === "flight") {
+      if(!target.userData.id.startsWith("replay:"))read().onSelect(target.userData.id);
+    } else if(target?.userData.kind==="controller")read().onSelectController(target.userData.id);
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
@@ -737,6 +836,7 @@ export function createGlobeScene(
   canvas.addEventListener("contextmenu", onContext);
   canvas.addEventListener("globe-reset-view", resetView);
   canvas.addEventListener("globe-ground-view", groundView);
+  canvas.addEventListener("globe-aircraft-view", aircraftView);
   window.addEventListener("blur", stopInput);
   const resize = () => {
     camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
@@ -768,7 +868,7 @@ export function createGlobeScene(
   const observer = new IntersectionObserver(entries => { visible = entries[0]?.isIntersecting ?? true; });
   observer.observe(host);
   const onVisibility = () => { stopInput(); previousFrame = performance.now(); lastDraw = 0; nextDrawAt = 0; cloudCache.invalidate(); adaptive.reset(performance.now()); measuredFrames = 0; measuredSince = performance.now(); };
-  const onLost = (event: Event) => { event.preventDefault(); contextLost = true; gpuTimer.dispose(); host.dataset.globeStatus = "Graphics context lost — waiting for recovery"; };
+  const onLost = (event: Event) => { event.preventDefault(); contextLost = true; cloudPrograms = "idle"; cloudCompileRevision++; gpuTimer.dispose(); host.dataset.globeStatus = "Graphics context lost — waiting for recovery"; };
   const onRestored = () => { contextLost = false; delete host.dataset.globeStatus; onVisibility(); resize(); };
   document.addEventListener("visibilitychange", onVisibility);
   canvas.addEventListener("webglcontextlost", onLost);
@@ -873,7 +973,9 @@ export function createGlobeScene(
     // The eye can be inside a luminous curtain. An orbit-style 25%-altitude
     // near plane visibly slices it into straight panes. Log depth preserves
     // terrain precision with a close near plane while traversing the aurora.
-    camera.near = clipping.near;
+    shared.uCamera.value.copy(camera.position);
+    earth.worldToLocal(shared.uCamera.value);
+    camera.near = Math.min(clipping.near,Math.max(.0002,aircraft.closestDistance(shared.uCamera.value)*.2));
     camera.far = clipping.far;
     camera.updateProjectionMatrix();
     shared.uCamera.value.copy(camera.position);
@@ -887,6 +989,9 @@ export function createGlobeScene(
       surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled, groundRequested||targetDistance-WGS84_A_KM<30||(!ground.ready&&height<80));
       lastLodUpdate = now;
     }
+    aircraft.update(shared.uCamera.value,camera.fov,host.clientHeight,now,localFrustum);
+    aircraftSun.position.copy(shared.uSun.value).multiplyScalar(10000);
+    aircraftSun.intensity=read().dayNightEnabled?Math.max(.08,2.4*Math.max(0,shared.uSun.value.dot(shared.uCamera.value.clone().normalize()))):2.4;
     const moving = (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
     const cloudSize = movingCloudSize(cloudTarget.width, cloudTarget.height, moving, effectiveQuality === "low");
     const shadowWidth = Math.max(1, Math.floor(cloudSize.width / 2)), shadowHeight = Math.max(1, Math.floor(cloudSize.height / 2));
@@ -900,7 +1005,7 @@ export function createGlobeScene(
     shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
     shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
     const settings = read().cloudSettings;
-    const signature = [distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),Math.floor(shared.uObservationSeconds.value),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const signature = [trafficRevision,aircraft.stats.loaded,aircraft.stats.detailed,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
     const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
     const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();
@@ -909,6 +1014,13 @@ export function createGlobeScene(
       if(cloudMesh.visible) {
         renderer.setRenderTarget(terrainDepthTarget);renderer.setClearColor(0xffffff,1);renderer.clear();
         camera.layers.set(4);scene.overrideMaterial=terrainDepthMaterial;renderer.render(scene,camera);scene.overrideMaterial=null;
+        if(aircraft.stats.detailed>0){
+          // Stop the cloud ray at the aircraft too: clouds in front occlude it;
+          // clouds behind/under it cannot be pasted over an above-cloud aircraft.
+          aircraftDepthMaterial.uniforms.uWorldToEarth.value.copy(earth.matrixWorld).invert();
+          renderer.autoClear=false;camera.layers.set(5);scene.overrideMaterial=aircraftDepthMaterial;
+          renderer.render(scene,camera);scene.overrideMaterial=null;renderer.autoClear=true;
+        }
       }
       renderer.setRenderTarget(shadowTarget);
       renderer.setClearColor(0xffffff, 1);
@@ -971,9 +1083,14 @@ export function createGlobeScene(
         drawCalls: renderer.info.render.calls,
         textures: renderer.info.memory.textures,
         triangles: renderer.info.render.triangles,
+        traffic: aircraft.stats,
         clouds: cloudMesh.visible,
+        cloudPrograms,
+        cloudRenderer: ACCEPTED_CLOUD_REVISION,
+        cloudSupport: "smooth-cloud-masses-v5.1-10km",
+        cloudFootprint: { pending: footprintPending, error: footprintError, size: footprintSize, lobes: footprintLobes, boundaryBandKm: CLOUD_BOUNDARY_BAND_KM },
         cloudSource: testProfile?"synthetic-calibration":satellitePixels&&Date.now()<satelliteValidUntil?"satellite-observed":"unknown",
-        cloudBelowCamera: testProfile?"synthetic":satellitePixels&&Date.now()<satelliteValidUntil&&read().cloudData?(()=>{const flag=satellitePixels![satelliteGridIndex(latitude,longitude,read().cloudData!.width,read().cloudData!.height)*4+3]??0;return (flag&7)>=3&&(flag&24)?"cloud detected; volume unknown (missing optical depth/top)":(["unknown","clear","uncertain","probably cloudy","observed cloudy"][flag&7]??"unknown");})():"unknown",
+        cloudBelowCamera: testProfile?"synthetic":satellitePixels&&Date.now()<satelliteValidUntil&&read().cloudData?(()=>{const data=read().cloudData!,u=(longitude+180)/360,v=(90-latitude)/180;const flag=satellitePixels![satelliteGridIndex(latitude,longitude,data.width,data.height)*4+3]??0;const usable=((flag&7)===3||(flag&7)===4)&&!(flag&24);if(!usable&&footprintField&&sampleCloudFootprint(footprintField,u,v)>128&&observedCloudDistance(satellitePixels!,data.width,data.height,u,v)<CLOUD_BOUNDARY_BAND_KM)return "estimated boundary fringe (≤10 km); not directly observed";return (flag&7)>=3&&(flag&24)?"cloud detected; volume unknown (missing optical depth/top)":(["unknown","clear","uncertain","probably cloudy","observed cloudy"][flag&7]??"unknown");})():"unknown",
         aurora: curtains.visible,
         auroraForecast:appliedForecast,
         auroraObserved:appliedObservation,
@@ -1009,6 +1126,8 @@ export function createGlobeScene(
   frame = requestAnimationFrame(render);
   return () => {
     disposed = true;
+    cloudCompileRevision++;
+    footprintWorker?.terminate();
     remember();
     cancelAnimationFrame(frame);
     resizeObserver.disconnect();
@@ -1028,13 +1147,17 @@ export function createGlobeScene(
     canvas.removeEventListener("contextmenu", onContext);
     canvas.removeEventListener("globe-reset-view", resetView);
     canvas.removeEventListener("globe-ground-view", groundView);
+    canvas.removeEventListener("globe-aircraft-view", aircraftView);
     window.removeEventListener("blur", stopInput);
     surface.dispose();
     clearGroup(curtains);
     clearGroup(routes);
     clearGroup(traffic);
+    aircraft.dispose();
+    aircraftDepthMaterial.dispose();
     markerMaterials.forEach((m) => m.dispose());
     routeMaterials.forEach((m) => m.dispose());
+    trackLineMaterial.dispose();trackCurtainMaterial.dispose();
     cloudMaterial.dispose();
     cloudMesh.geometry.dispose();
     shadowMesh.geometry.dispose(); shadowMaterial.dispose();

@@ -1,0 +1,148 @@
+{
+  "repository": "Flightradar24/fr24-3d-models",
+  "revision": "dd53267690c6a4ecbb290a3acf0284333a5d68a9",
+  "license": "GPL-2.0",
+  "convertedWith": "gltf-pipeline 4.3.1",
+  "models": [
+    {
+      "type": "a318",
+      "file": "a318.glb",
+      "bytes": 1111912,
+      "sourceFiles": [
+        "original.glb",
+        "a318.blend",
+        "a318.zip"
+      ]
+    },
+    {
+      "type": "a319",
+      "file": "a319.glb",
+      "bytes": 1136720,
+      "sourceFiles": [
+        "original.glb",
+        "a319.blend",
+        "a319.zip"
+      ]
+    },
+    {
+      "type": "a320",
+      "file": "a320.glb",
+      "bytes": 1180952,
+      "sourceFiles": [
+        "original.glb",
+        "a320.blend",
+        "a320.zip"
+      ]
+    },
+    {
+      "type": "a321",
+      "file": "a321.glb",
+      "bytes": 3117584,
+      "sourceFiles": [
+        "original.glb",
+        "320.blend",
+        "320.zip"
+      ]
+    },
+    {
+      "type": "a332",
+      "file": "a332.glb",
+      "bytes": 2932568,
+      "sourceFiles": [
+        "original.glb",
+        "330.zip",
+        "a330.blend"
+      ]
+    },
+    {
+      "type": "a333",
+      "file": "a333.glb",
+      "bytes": 1703952,
+      "sourceFiles": [
+        "original.glb",
+        "a330-300.blend",
+        "a333.zip"
+      ]
+    },
+    {
+      "type": "a359",
+      "file": "a359.glb",
+      "bytes": 5135472,
+      "sourceFiles": [
+        "original.glb",
+        "a350.blend",
+        "a350.zip"
+      ]
+    },
+    {
+      "type": "a380",
+      "file": "a380.glb",
+      "bytes": 6443120,
+      "sourceFiles": [
+        "original.glb",
+        "a380.blend",
+        "a380.zip"
+      ]
+    },
+    {
+      "type": "b738",
+      "file": "b738.glb",
+      "bytes": 2983176,
+      "sourceFiles": [
+        "original.glb",
+        "737.blend",
+        "737.zip"
+      ]
+    },
+    {
+      "type": "b744",
+      "file": "b744.glb",
+      "bytes": 3310400,
+      "sourceFiles": [
+        "original.glb",
+        "747.blend",
+        "747.zip"
+      ]
+    },
+    {
+      "type": "b772",
+      "file": "b772.glb",
+      "bytes": 1941296,
+      "sourceFiles": [
+        "original.glb",
+        "777.blend",
+        "777.zip"
+      ]
+    },
+    {
+      "type": "b773",
+      "file": "b773.glb",
+      "bytes": 1320000,
+      "sourceFiles": [
+        "original.glb",
+        "773.zip",
+        "777-300.blend"
+      ]
+    },
+    {
+      "type": "b788",
+      "file": "b788.glb",
+      "bytes": 2231496,
+      "sourceFiles": [
+        "original.glb",
+        "787.blend",
+        "787.zip"
+      ]
+    },
+    {
+      "type": "b789",
+      "file": "b789.glb",
+      "bytes": 1321456,
+      "sourceFiles": [
+        "original.glb",
+        "787-900.blend",
+        "789.zip"
+      ]
+    }
+  ]
+}

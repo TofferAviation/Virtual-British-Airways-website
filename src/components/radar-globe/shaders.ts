@@ -1,5 +1,7 @@
 import { auroraShapeGLSL, auroraRayGLSL } from "@/lib/radar-aurora-shape";
 import { auroraPhotoGLSL } from "@/lib/radar-aurora-photo";
+import { acceptedCloudAppearanceGLSL } from "./cloud-appearance";
+import { satelliteCloudAdapterGLSL } from "./satellite-cloud-adapter";
 
 // All positions are Earth-fixed kilometres. Weather uses north-first rows,
 // -180°..180° columns. Density and shadows call the SAME function.
@@ -47,9 +49,12 @@ uniform sampler2D uHighWeather;
 uniform sampler2D uSatelliteCurrent;
 uniform sampler2D uSatellitePrevious;
 uniform sampler2D uSatelliteMotion;
+uniform sampler2D uSatelliteShapeCurrent;
+uniform sampler2D uSatelliteShapePrevious;
+uniform sampler2D uSatelliteFootprint;
+uniform float uSatelliteFootprintReady;
 uniform float uSatelliteMode;
 uniform float uObservationBlend;
-uniform float uObservationSeconds;
 uniform float uObservationInterval;
 uniform sampler3D uBaseNoise;
 uniform sampler3D uDetailNoise;
@@ -61,108 +66,25 @@ uniform float uDebug;
 uniform float uPixelAngle;
 uniform float uShadowSamples;
 const float CLOUD_EXTINCTION=25.0;
-vec4 cloudNoise(sampler3D field,vec3 coordinates,float scale,vec3 p){
-  // Explicit footprint filtering also works inside divergent raymarch loops.
-  // Subpixel erosion must not turn into sparkling white grains when orbiting.
-  float footprint=max(0.015,length(p-uCamera)*uPixelAngle);
-  float lod=max(0.0,log2(float(textureSize(field,0).x)*footprint/scale));
-  return textureLod(field,coordinates,lod);
-}
-vec4 weatherAt(sampler2D field,vec2 uv){return textureLod(field,uv,0.0);}
-float layerCloud(vec4 w,vec3 p,float h,float kind,bool fineDetail){
-  if(w.a<0.5||w.r<0.025)return 0.0;
-  float base=w.g*25.5,top=w.b*25.5;
-  if(top<base+0.12||h<base||h>top)return 0.0;
-  float t=clamp((h-base)/(top-base),0.0,1.0);
-  float profile=smoothstep(0.0,0.04,t)*(1.0-smoothstep(0.76,1.0,t));
-  if(kind>0.5)profile=smoothstep(0.0,0.045,t)*(1.0-smoothstep(0.40,0.90,t));
-  if(profile<=0.0)return 0.0;
-  vec3 normal=ellipsoidNormal(p),foot=p-normal*h;
-  vec4 regional=cloudNoise(uBaseNoise,foot/360.0+kind*0.31,360.0,p);
-  float organisation=cloudNoise(uBaseNoise,foot/90.0+kind*0.71,90.0,p).r;
-  // GFS reports areal coverage, not a filled-volume fraction. The nonlinear
-  // threshold calibration prevents several vertical lobes from each counting
-  // that coverage again and turning broken cumulus into an overcast blanket.
-  float groupSignal=smoothstep(0.28,0.72,organisation);
-  float bank=smoothstep(1.0-w.r-0.18,1.0-w.r+0.18,groupSignal);
-  float cover=clamp(w.r*w.r+(bank-0.5)*0.85+(regional.r-0.5)*0.5,0.0,1.0);
-  float growth=smoothstep(0.30,0.70,regional.r);
-  float threshold=mix(0.81,0.30,cover);
-  // Cirrus does not use cumulus mass/erosion at all. Do not pay for three
-  // volume lookups only to overwrite their result with the fibre model.
-  if(kind>1.5){
-    float fibres=cloudNoise(uBaseNoise,(foot+normal*h*8.0)/vec3(240.0,50.0,75.0),50.0,p).r;
-    return smoothstep(threshold+0.015,threshold+0.18,fibres-(1.0-profile)*0.3)*0.003*smoothstep(0.0,0.03,t)*sqrt(cover);
-  }
-  // The mass field is genuinely 3D, not a height map extruded into columns.
-  // Regional organisation, kilometre-scale lobes and sub-km erosion are
-  // separate signals, so every weather cell does not become identical beads.
-  float scale=mix(6.4,28.0,min(1.0,kind));
-  // Cumulus rises vertically; do not compress its lobes into pancakes.
-  // Middle cloud is flatter; low cloud retains isotropic, upward-growing lobes.
-  vec3 volume=p+normal*(h-base)*mix(0.0,0.9,min(1.0,kind))+vec3(regional.g,regional.b,regional.a)*2.8;
-  vec4 mass=cloudNoise(uBaseNoise,volume/scale+kind*0.47,scale,p);
-  float shape=dot(mass,vec4(0.25,0.40,0.25,0.10))+0.15-t*t*mix(0.42,0.26,growth);
-  // Erosion only subtracts (0..0.185). These two tests are exact bounds:
-  // empty mass and saturated interior cannot be changed by fine erosion.
-  float margin=shape-threshold;
-  if(margin<=0.0)return 0.0;
-  float edgeErosion=0.0;
-  if(margin<0.245){
-    edgeErosion=0.105; // filtered erosion for distant secondary light probes
-    if(fineDetail){
-      vec4 erosion=cloudNoise(uDetailNoise,volume/1.2+kind*0.19,1.2,p);
-      float erosionFbm=dot(erosion.gba,vec3(0.625,0.25,0.125));
-      float wisps=cloudNoise(uDetailNoise,volume/0.28+kind*0.27,0.28,p).b;
-      edgeErosion=(1.0-erosionFbm)*0.15+(1.0-wisps)*0.035;
-    }
-  }
-  float body=pow(smoothstep(threshold,threshold+0.06,shape-edgeErosion),1.25)*profile*(0.35+0.65*t);
-  return body*smoothstep(0.0,0.03,t)*sqrt(cover);
-}
-float satelliteDensity(vec3 p,float h,bool fineDetail){
-  vec2 uv=geographicUV(p);
-  vec4 observed=textureLod(uSatelliteCurrent,uv,0.0);
-  float state=mod(floor(observed.a*255.0+0.5),8.0);
-  // Authoritative nearest-neighbour mask, BEFORE noise, optical depth, motion
-  // or blending. Confident clear and unknown have exactly zero extinction.
-  if(state<2.5||state>4.5)return 0.0;
-  float flags=floor(observed.a*255.0+0.5);
-  if(mod(floor(flags/8.0),4.0)>0.5)return 0.0; // missing COD/top: volume unknown
-  vec4 motion=textureLod(uSatelliteMotion,uv,0.0);
-  vec2 metresPerSecond=(motion.rg*255.0-128.0)*2.0;
-  float lat=(0.5-uv.y)*PI;
-  vec2 angular=metresPerSecond/vec2(40030228.0*max(0.1,cos(lat)),40030228.0);
-  vec2 beforeUV=uv-vec2(angular.x,-angular.y)*uObservationInterval;
-  vec4 before=textureLod(uSatellitePrevious,vec2(fract(beforeUV.x),clamp(beforeUV.y,0.0,1.0)),0.0);
-  float previousState=mod(floor(before.a*255.0+0.5),8.0);
-  vec3 properties=observed.rgb;
-  if(previousState>2.5&&previousState<4.5&&mod(floor(before.a*255.0/8.0),4.0)<0.5)properties=mix(before.rgb,properties,uObservationBlend);
-  float base=properties.g*25.5,top=properties.b*25.5;
-  if(h<base||h>top||top<=base)return 0.0;
-  float kind=top<3.0?0.0:top<8.0?1.0:2.0;
-  if((kind<0.5&&uLayers.x<0.5)||(kind>0.5&&kind<1.5&&uLayers.y<0.5)||(kind>1.5&&uLayers.z<0.5))return 0.0;
-  float opticalDepth=exp(properties.r*log(161.0))-1.0;
-  if(opticalDepth<=0.0)return 0.0;
-  vec3 n=ellipsoidNormal(p),east=normalize(vec3(n.z,0.0,-n.x)+vec3(1e-6,0.0,0.0)),north=cross(n,east);
-  // Wind/feature tracking transports detail only inside the detected mask.
-  // Never extrapolate a cloud into a currently clear/unknown observation.
-  vec3 advected=p-(east*metresPerSecond.x+north*metresPerSecond.y)*uObservationSeconds*0.001;
-  float shape=layerCloud(vec4(1.0,properties.g,properties.b,1.0),advected,h,kind,fineDetail);
-  float normalisation=kind>1.5?0.0015:0.25;
-  float growth=motion.a>0.9?mix(0.2,1.0,uObservationBlend):1.0;
-  return shape*opticalDepth/(max(0.1,top-base)*CLOUD_EXTINCTION*normalisation)*growth*(state<3.5?0.65:1.0);
-}
+// The accepted appearance kernel has no satellite-specific branches.
+${acceptedCloudAppearanceGLSL}
+#ifndef BAV_FORECAST_CALIBRATION
+${satelliteCloudAdapterGLSL}
+#endif
 float densityAtDetail(vec3 p,bool fineDetail){
   if(uClouds<0.5)return 0.0;
   float h=altitudeKm(p);
   if(h<0.0||h>18.0)return 0.0;
-  if(uSatelliteMode>0.5)return satelliteDensity(p,h,fineDetail);
+#ifdef BAV_FORECAST_CALIBRATION
+  // The explicit test fixture supplies only uLowWeather; the other fields
+  // are empty. Do not compile three unused density trees at every light probe.
   vec2 uv=geographicUV(p);
   float low=uLayers.x>0.5?layerCloud(weatherAt(uLowWeather,uv),p,h,0.0,fineDetail):0.0;
-  float middle=uLayers.y>0.5?layerCloud(weatherAt(uMiddleWeather,uv),p,h,1.0,fineDetail):0.0;
-  float high=uLayers.z>0.5?layerCloud(weatherAt(uHighWeather,uv),p,h,2.0,fineDetail):0.0;
-  return max(low,max(middle,high));
+  return low;
+#else
+  if(uSatelliteMode>0.5)return satelliteDensity(p,h,fineDetail);
+  return 0.0;
+#endif
 }
 float densityAt(vec3 p){return densityAtDetail(p,true);}
 float lightDensityAt(vec3 p){return densityAtDetail(p,false);}
@@ -314,7 +236,7 @@ void main(){
     vec3 p=uCamera+rd*((start+end)*0.5);vec2 uv=geographicUV(p);
     vec4 weather=uSatelliteMode>0.5?textureLod(uSatelliteCurrent,uv,0.0):texture(uLowWeather,uv);
     vec3 diagnostic=vec3(alpha);
-    if(uDebug>1.5&&uDebug<2.5){float state=mod(floor(weather.a*255.0+0.5),8.0);diagnostic=uSatelliteMode<0.5?vec3(weather.r):state<0.5?vec3(0.5,0.1,0.7):state<1.5?vec3(0.02,0.06,0.12):state<2.5?vec3(0.8,0.5,0.1):vec3(0.9);}
+    if(uDebug>1.5&&uDebug<2.5){float state=mod(floor(weather.a*255.0+0.5),8.0);diagnostic=uSatelliteMode<0.5?vec3(weather.r):state<0.5?vec3(0.5,0.1,0.7):state<1.5?vec3(0.02,0.06,0.12):state<2.5?vec3(0.8,0.5,0.1):vec3(0.9); }
     if(uDebug>2.5&&uDebug<3.5)diagnostic=vec3(weather.g,weather.b,0.1);
     if(uDebug>3.5&&uDebug<4.5)diagnostic=vec3(max(0.0,sunElevation(p)));
     fragColor=vec4(diagnostic,max(0.6,alpha));return;

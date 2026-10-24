@@ -120,15 +120,19 @@ export function BaRadarGlobe({
   const onSelectRef = useRef(onSelect);
   const onSelectControllerRef = useRef(onSelectController);
   const onCameraChangeRef = useRef(onCameraChange);
+  const initialCameraRef = useRef(initialCamera);
   const data = useMemo(() => globeData(flights, selectedId, replay), [flights, selectedId, replay]);
   const controllersGeoJson = useMemo(() => controllerData(controllers), [controllers]);
   const dataRef = useRef({ ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, satelliteCloudsEnabled, dayNightEnabled });
-  dataRef.current = { ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, satelliteCloudsEnabled, dayNightEnabled };
-  onSelectRef.current = onSelect;
-  onSelectControllerRef.current = onSelectController;
-  onCameraChangeRef.current = onCameraChange;
+  useEffect(() => {
+    dataRef.current = { ...data, controllers: controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, satelliteCloudsEnabled, dayNightEnabled };
+    onSelectRef.current = onSelect;
+    onSelectControllerRef.current = onSelectController;
+    onCameraChangeRef.current = onCameraChange;
+  }, [data, controllersGeoJson, aurora, auroraEnabled, auroraSettings, cloudsEnabled, cloudData, cloudSettings, satelliteCloudsEnabled, dayNightEnabled, onSelect, onSelectController, onCameraChange]);
 
   useEffect(() => {
+    const savedCamera = initialCameraRef.current;
     let resizeFrame = 0;
     let resizeObserver: ResizeObserver | null = null;
     let disposed = false;
@@ -163,6 +167,8 @@ export function BaRadarGlobe({
       if (!container.current) return;
       const maplibregl = await import("maplibre-gl");
       if (disposed || !container.current) return;
+      // MapLibre v6 is ESM-only and requires an explicit bundler worker URL.
+      maplibregl.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).toString());
       const map = new maplibregl.Map({
         container: container.current,
         style: {
@@ -229,13 +235,13 @@ export function BaRadarGlobe({
         // naturally over the horizon without pushing the Earth downward.
         // Begin over the North Atlantic rather than the equator, so the
         // globe is still centred but its auroral oval is naturally in view.
-        center: initialCamera?.center ?? [10, 67],
-        zoom: initialCamera?.zoom ?? 0.1,
+        center: savedCamera?.center ?? [10, 67],
+        zoom: savedCamera?.zoom ?? 0.1,
         minZoom: -1.3,
-        bearing: initialCamera?.bearing ?? 0,
+        bearing: savedCamera?.bearing ?? 0,
         // A shallow orbital angle lets the live aurora read as a suspended
         // curtain rather than a flat ring; a pilot's saved orbit still wins.
-        pitch: initialCamera?.pitch ?? 36,
+        pitch: savedCamera?.pitch ?? 36,
       });
       mapRef.current = map;
       map.on("load", () => {
@@ -316,7 +322,7 @@ export function BaRadarGlobe({
           }
         };
         window.requestAnimationFrame(() => {
-          fitGlobe(!initialCamera);
+          fitGlobe(!savedCamera);
           resizeObserver = new ResizeObserver(() => {
             window.cancelAnimationFrame(resizeFrame);
             resizeFrame = window.requestAnimationFrame(() => fitGlobe());
