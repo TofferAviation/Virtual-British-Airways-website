@@ -1,11 +1,53 @@
 # Globe aircraft and altitude tracks
 
-Release candidate, 24 October 2026. Confirm the deployed revision at
-`/api/health`: `globeRevision` is `aircraft-altitude-v1-20261024` and
+3D model release, 24 October 2026. Confirm the deployed revision at
+`/api/health`: this update's `globeRevision` is `airframe-model-lods-v2-20261024` and
 `releaseCommit` reports the Render Git commit when available.
 
-- The previous 22 km-radius / 65 km-tall cone is removed. Distant aircraft
-  use original type-proportioned silhouettes. Nearby aircraft load a matching
+## 3D airframes at map scale
+
+The previous model-only-when-close gate has been replaced. Every supported,
+loaded type now uses a matching 3D airframe at ordinary map zoom too. The 14
+map meshes derive from their corresponding detailed models, not a generic
+jet stretched to different sizes. They total approximately 2 MB, have baked
+vertex colours, one opaque material/draw per aircraft, and no texture/decoder
+dependencies. Most have approximately 2,400 triangles; the topology-heavy
+A380 has 10,399. Full textures/geometry load only at 64 natural screen pixels.
+Downloads remain visibility-driven, selected-first and bounded to two; the
+detailed six-type shared LRU cache is retained. No new dependency is added.
+
+Map models remain readable at 44 selected / 30 other CSS pixels. Their centres
+and true-heading frames still use actual telemetry. Only display size is
+enlarged, and it converges continuously to 1 metre = 0.001 render kilometres.
+At enlarged scale they render in a separate, centre-horizon-culled 3D marker
+pass after the world, rather than intersecting the Earth or falsely blocking
+volumetric clouds as giant physical aircraft. At true scale, aircraft rejoin
+world and cloud-depth passes. Hidden LODs are excluded from picking. Unsupported
+types or failed/pending assets retain a generic/temporary marker; dedicated
+assets are not claimed for every possible ICAO type. Existing family/livery
+limitations below remain explicit.
+
+`npm run aircraft:lod` regenerates `public/models/aircraft/lod/` offline from
+the unchanged detailed assets using Three.js's bundled meshoptimizer. The
+recipe and original corresponding editable sources are publicly available;
+these derived meshes retain the original GPLv2 asset licence. No FSLTL assets
+are used. The local `traffic` QA preset has five explicitly synthetic, mixed
+airframes; no test traffic is inserted into the website's live database/feed.
+
+New tests cover orbit-to-close-up scale continuity, horizon culling, lazy and
+bounded loading, actual map/detail switching, unchanged position, shared mesh
+reuse, disposal during loading, every generated GLB and the offline recipe.
+All 123 regression tests, typecheck, full ESLint (zero errors; 30 existing
+warnings) and production build pass (nine existing tracing warnings). Browser
+QA displayed five different map LODs, selected the A320 by clicking its mesh,
+and loaded its detailed close-up at the reported 29,000 ft. The A380 close-up
+also loaded correctly. No aircraft asset load failures were reported. The
+five-aircraft map snapshot held its 60 fps cap on this machine; this is not
+a low-end hardware or heavy-traffic guarantee. The user requested release of
+the models first, retaining house liveries while they work on BA paintwork.
+
+- The previous 22 km-radius / 65 km-tall cone is removed. Aircraft
+  use type-matched 3D LODs. Nearby aircraft load a matching
   metre-scale glTF 2.0 model, with true-heading orientation in a local WGS84 frame.
 - The selected-flight caption exposes **View aircraft · reported altitude**.
   It places the eye 250 m above and 200 m behind the reported position.
@@ -38,7 +80,7 @@ Unknown types remain generic aircraft markers. Pitch, bank and gear states are
 not measured/animated. Pressure/geoid corrections are not applied to reported
 altitude; this is visualisation, not navigation-grade positioning.
 
-## Checks and remaining visual approval
+## Earlier aircraft-integration checks (before the map LOD update)
 
 - `npm run test:aircraft`: 10 tests, including actual fleet geometry parsing and
   batching, physical units, orientation, altitude, resource packaging and replay.

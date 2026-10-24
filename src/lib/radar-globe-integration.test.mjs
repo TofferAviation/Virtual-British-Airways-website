@@ -63,7 +63,7 @@ test("cloud graphics prepare asynchronously before volume/shadow draws are enabl
 
 test("release identifies the aircraft build and keeps production traffic on the BA store",async()=>{
   const health=await read("src/app/api/health/route.ts");
-  assert.match(health,/globeRevision: "aircraft-altitude-v1-20261024"/);
+  assert.match(health,/globeRevision: "airframe-model-lods-v2-20261024"/);
   assert.match(health,/releaseCommit: process\.env\.RENDER_GIT_COMMIT/);
   const api=await read("src/app/api/radar/live/route.ts");
   assert.match(api,/listPublicRadarFlights\(\)/);

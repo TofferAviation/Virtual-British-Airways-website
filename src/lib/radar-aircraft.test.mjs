@@ -4,7 +4,7 @@ import {readFile,stat} from "node:fs/promises";
 import * as THREE from "three";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
 import ts from "typescript";
-import {aircraftFrame,flightAltitudeMetres,flightTrackSegments,flightAltitudeColor,resolveAircraftModel} from "./radar-aircraft.ts";
+import {aircraftFrame,aircraftDisplay,aircraftAboveHorizon,flightAltitudeMetres,flightTrackSegments,flightAltitudeColor,resolveAircraftModel} from "./radar-aircraft.ts";
 import {worldToGeodetic,geodeticToWorld} from "./radar-globe-geodesy.ts";
 
 const root=new URL("../../",import.meta.url);
@@ -68,6 +68,76 @@ test("aircraft instances reuse geometry, stay at telemetry height, and disappear
   assert.equal(layer.stats.loading,0,"no eager fleet downloads");
   layer.sync([],"");assert.equal(layer.group.children.length,0);layer.dispose();
 });
+
+test("3D map size is readable at orbit, converges to true metres, and never changes position",()=>{
+  for(const selected of [true,false]){
+    const far=aircraftDisplay(72.72,18000,45,900,selected);
+    assert.ok(far.mapOverlay);assert.equal(far.highDetail,false);
+    assert.ok(Math.abs(far.scale/.001*far.naturalPixels-(selected?44:30))<1e-8);
+    const near=aircraftDisplay(72.72,.3,45,900,selected);
+    assert.equal(near.scale,.001);assert.equal(near.mapOverlay,false);assert.equal(near.highDetail,true);
+    for(let range=1;range<20;range+=.01){
+      const a=aircraftDisplay(72.72,range,45,900,selected),b=aircraftDisplay(72.72,range+.01,45,900,selected);
+      assert.ok(Math.abs(a.scale-b.scale)<.00003,"no scale jump at either LOD boundary");
+    }
+  }
+});
+
+test("enlarged 3D markers are horizon-culled by real centres, including poles and ground",()=>{
+  for(const lat of [-90,-53,0,53,90])for(const lon of [-180,0,170]){
+    const camera=geodeticToWorld(lat,lon,400000),near=geodeticToWorld(lat,lon,0),far=geodeticToWorld(-lat,lon===0?180:lon>0?lon-180:lon+180,11000);
+    assert.equal(aircraftAboveHorizon(camera,near),true);
+    assert.equal(aircraftAboveHorizon(camera,far),false);
+  }
+});
+
+test("normal map zoom loads matching 3D LODs, not full fleet textures; close-up detail stays physical",async()=>{
+  const calls=[],prototypes=[];
+  const layer=new GlobeAircraft({async loadAsync(url){
+    calls.push(url);const scene=new THREE.Group();scene.add(new THREE.Mesh(new THREE.BoxGeometry(79,20,72),new THREE.MeshStandardMaterial()));
+    prototypes.push(scene);return {scene};
+  }});
+  const flight={id:"one",aircraft:"A388",lastSnapshot:{latitude:53,longitude:-3,altitudeFt:36000,headingDeg:315}};
+  layer.sync([flight],"one");
+  const centre=new THREE.Vector3(...geodeticToWorld(53,-3,10972.8)),up=new THREE.Vector3(...aircraftFrame(53,-3,0).up);
+  const camera=new THREE.PerspectiveCamera(45,1,.0001,40000),frustum=new THREE.Frustum();
+  const update=(range,time)=>{
+    camera.position.copy(centre).addScaledVector(up,range);camera.lookAt(centre);camera.updateMatrixWorld(true);
+    frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    layer.update(camera.position,45,900,time,frustum);
+  };
+  update(400,0);await new Promise(setImmediate);update(400,16);
+  assert.deepEqual(calls,["/models/aircraft/lod/a380.glb"]);
+  assert.equal(layer.stats.mapModels,1);assert.equal(layer.stats.highDetail,0);
+  const root=layer.group.children[0],map=root.children.find(child=>child instanceof THREE.Group&&child.visible);
+  assert.ok(map);assert.equal(root.children[0].visible,false,"no flat icon once a supported mesh loads");
+  assert.ok(map.children[0].layers.isEnabled(6));assert.equal(map.children[0].layers.isEnabled(5),false,"giant markers never cut cloud depth");
+  assert.ok(root.position.distanceTo(centre)<1e-9);
+  layer.sync([flight,{...flight,id:"two"}],"one");update(400,32);
+  assert.equal(layer.stats.mapModels,2);assert.equal(layer.stats.mapLoaded,1);
+  assert.equal(layer.group.children[1].children.at(-1).children[0].geometry,map.children[0].geometry);
+  update(.3,400);await new Promise(setImmediate);update(.3,416);
+  assert.deepEqual(calls,["/models/aircraft/lod/a380.glb","/models/aircraft/a380.glb"]);
+  assert.equal(layer.stats.highDetail,2);assert.equal(layer.stats.detailed,2);
+  const full=root.children.find(child=>child instanceof THREE.Group&&child.visible);
+  assert.equal(full.scale.x,.001);assert.ok(full.children[0].layers.isEnabled(0));assert.ok(full.children[0].layers.isEnabled(5));
+  assert.ok(root.position.distanceTo(centre)<1e-9);
+  layer.dispose();assert.equal(layer.group.children.length,0);
+});
+
+test("offscreen types do not download and shared map transfers are bounded to two",async()=>{
+  const calls=[],finish=[];
+  const layer=new GlobeAircraft({loadAsync(url){calls.push(url);return new Promise(resolve=>finish.push(()=>resolve({scene:new THREE.Group()})));}});
+  const position={latitude:0,longitude:0,altitudeFt:30000,headingDeg:0};
+  const camera=new THREE.PerspectiveCamera(45,1,.01,40000);camera.position.set(0,0,7000);camera.lookAt(0,0,0);camera.updateMatrixWorld();
+  const frustum=new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+  layer.sync([{id:"hidden",aircraft:"A388",lastSnapshot:{...position,longitude:180}}],"");
+  layer.update(camera.position,45,900,0,frustum);assert.equal(calls.length,0,"no downloads on the far side of Earth");
+  layer.sync(["A388","A320","B789","B773"].map((aircraft,i)=>({id:String(i),aircraft,lastSnapshot:position})),"0");
+  layer.update(camera.position,45,900,400,frustum);assert.equal(calls.length,2);assert.equal(layer.stats.loading,2);
+  layer.dispose();finish.forEach(done=>done());await new Promise(setImmediate);
+  assert.equal(layer.stats.mapLoaded,0,"pending loads cannot repopulate a disposed viewer");
+});
 test("static model batching preserves transformed bounds, merges shared materials and includes cloud depth",()=>{
   const source=new THREE.Group(),material=new THREE.MeshStandardMaterial(),geometry=new THREE.BoxGeometry(2,2,4);
   for(const x of [-5,5]){const part=new THREE.Mesh(geometry,material);part.position.set(x,4,8);source.add(part);}
@@ -116,6 +186,26 @@ test("the actual fleet geometry parses in Three.js and batches without changing 
       batched.traverse(mesh=>{if(mesh instanceof THREE.Mesh){mesh.geometry.dispose();for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])m.dispose();}});
     }
   }finally{if(OriginalProgressEvent)globalThis.ProgressEvent=OriginalProgressEvent;else delete globalThis.ProgressEvent;}
+});
+
+test("each supported type has a small single-draw 3D map mesh derived from its own airframe",async()=>{
+  const manifest=JSON.parse(await read("public/models/aircraft/manifest.json")),lods=JSON.parse(await read("public/models/aircraft/lod/manifest.json"));
+  assert.equal(lods.models.length,manifest.models.length);assert.equal(lods.revision,manifest.revision);
+  assert.ok(lods.models.reduce((n,m)=>n+m.bytes,0)<2.5*1024**2);
+  for(const model of manifest.models){
+    const bytes=await readFile(new URL(`public/models/aircraft/lod/${model.file}`,root));
+    assert.equal(bytes.toString("ascii",0,4),"glTF");assert.equal(bytes.readUInt32LE(4),2);
+    const g=JSON.parse(bytes.toString("utf8",20,20+bytes.readUInt32LE(12))),p=g.meshes[0].primitives[0];
+    assert.equal(g.meshes.length,1);assert.equal(g.meshes[0].primitives.length,1);assert.equal(g.materials.length,1);
+    assert.equal(g.images,undefined);assert.equal(g.buffers[0].uri,undefined);
+    assert.equal(g.extras.source,`../${model.file}`);assert.equal(g.extras.license,"GPL-2.0");
+    assert.ok(g.accessors[p.indices].count/3<=12000);
+    assert.ok(p.attributes.NORMAL!==undefined&&p.attributes.COLOR_0!==undefined);
+    const spec=resolveAircraftModel(model.type),positions=g.accessors[p.attributes.POSITION];
+    assert.ok((positions.max[2]-positions.min[2])>spec.lengthM*.8);
+    assert.ok((positions.max[0]-positions.min[0])>spec.spanM*.75);
+  }
+  assert.equal(await read("scripts/bake-aircraft-lods.mjs"),await read("public/models/aircraft/source/bake-aircraft-lods.mjs"));
 });
 test("live/replay integration has no cone or fixed flight height and exports altitude",async()=>{
   const source=await read("src/components/radar-globe/scene.ts");

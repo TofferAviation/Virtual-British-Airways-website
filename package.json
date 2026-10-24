@@ -12,6 +12,7 @@
     "test:globe-integration": "node --test src/lib/radar-globe-integration.test.mjs",
     "test:aircraft": "node --test src/lib/radar-aircraft.test.mjs",
     "aircraft:import": "node scripts/import-radar-aircraft.mjs",
+    "aircraft:lod": "node scripts/bake-aircraft-lods.mjs",
     "test:satellite-clouds": "node --test src/lib/radar-satellite.test.mjs",
     "clouds:ingest": "node scripts/ingest-satellite-clouds.mjs",
     "clouds:forecast": "node scripts/ingest-forecast-clouds.mjs",

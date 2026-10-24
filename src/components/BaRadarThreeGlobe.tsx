@@ -66,7 +66,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
         </span>
         <span>WASD: move · Q/E: down/up · Shift: faster · Home: reset view</span>
         <span>NASA GIBS · Blue Marble / Landsat (historical) · NOAA ABI / GFS winds / SWPC</span>
-        <span>Aircraft: type-matched 3D nearby; enlarged silhouettes at map scale. Track colour: green low → violet high. Heights are reported, not exaggerated.</span>
+        <span>Aircraft: type-matched 3D airframes at every zoom; models enlarged at map scale, true size close up. Track colour: green low → violet high. Positions and heights follow reports.</span>
         <a href="/globe-sources" target="_blank" rel="noreferrer" style={{pointerEvents:"auto",color:"#a8c6d9"}}>Aircraft / terrain: authors, sources, licences &amp; limits</a>
         <button type="button" style={{ pointerEvents: "auto", justifySelf: "start", font: "10px Arial", padding: "4px 7px", color: "#d7ebff", background: "#12344b", border: "1px solid #4982a6", borderRadius: 3 }} onClick={() => {
           const canvas = container.current?.querySelector("canvas");

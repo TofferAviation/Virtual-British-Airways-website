@@ -24,3 +24,14 @@ To reproduce the conversion: install Node.js, run npm install gltf-pipeline@4.3.
 and run the import-radar-aircraft.mjs script in the source directory below.
 
 No FSLTL, MSFS or Asobo model assets are included.
+
+Additional changes by British Airways Virtual, 24 October 2026: map-scale LODs
+in lod/ derive from the same converted aircraft. Default poses are baked into
+static meshes, texture colours sampled into vertices, and geometry simplified
+offline with meshoptimizer (bundled in Three.js). Each map LOD uses a single
+opaque material; these reduced meshes retain the aircraft licence above.
+The original detailed models and all editable sources remain unchanged.
+Run npm run aircraft:lod after importing to reproduce them. The complete
+recipe is supplied at source/bake-aircraft-lods.mjs, with its asset inventory
+in lod/manifest.json. Install the project's pinned Three.js/Sharp dependencies
+from the repository lockfile before running that script.

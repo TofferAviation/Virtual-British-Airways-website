@@ -1,3 +1,5 @@
+import {WGS84_A_KM,WGS84_B_KM} from "./radar-globe-geodesy.ts";
+
 /** Aircraft dimensions in metres; Earth/render coordinates elsewhere use kilometres. */
 export type AircraftModel = { key: string; label: string; lengthM: number; spanM: number; match: "type" | "family" };
 const fleet: Record<string, [string, string, number, number]> = {
@@ -36,6 +38,26 @@ export function resolveAircraftModel(name: string): AircraftModel | null {
   if (!code) return null;
   const [key, label, lengthM, spanM] = fleet[family[code] ?? code];
   return { key, label, lengthM, spanM, match: family[code] ? "family" : "type" };
+}
+
+/** Map-scale models are deliberately enlarged, never the telemetry position.
+ * The same scale applies to both LODs, so loading detail cannot shrink a plane. */
+export function aircraftDisplay(lengthM:number,rangeKm:number,fov:number,pixelsHigh:number,selected:boolean) {
+  const kmPerPixel=Math.max(1e-8,2*Math.max(.001,rangeKm)*Math.tan(Math.max(1,fov)*Math.PI/360)/Math.max(1,pixelsHigh));
+  const naturalPixels=Math.max(1,lengthM)/1000/kmPerPixel;
+  const scale=.001*Math.max(1,(selected?44:30)/naturalPixels);
+  return {scale,naturalPixels,mapOverlay:scale>.0010001,highDetail:naturalPixels>=64};
+}
+
+/** Cull the entire enlarged marker by its real centre, not the enlarged wings.
+ * Segment/ellipsoid test works over the poles and horizon, including ground traffic. */
+export function aircraftAboveHorizon(camera:readonly number[],position:readonly number[]) {
+  const axes=[WGS84_A_KM,WGS84_B_KM,WGS84_A_KM];
+  const c=camera.map((v,i)=>v/axes[i]),p=position.map((v,i)=>v/axes[i]),d=p.map((v,i)=>v-c[i]);
+  const a=d.reduce((sum,v)=>sum+v*v,0);
+  if(a<1e-16)return true;
+  const t=Math.max(0,Math.min(1,-c.reduce((sum,v,i)=>sum+v*d[i],0)/a));
+  return c.reduce((sum,v,i)=>sum+(v+t*d[i])**2,0)>=1-1e-8;
 }
 
 export type FlightTrackPoint = { latitude: number; longitude: number; altitudeFt?: number | null; onGround?: boolean; timestamp?: string };

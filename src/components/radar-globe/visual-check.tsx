@@ -18,7 +18,7 @@ const views = {
   "forecast-asia": {latitude:30,longitude:110,distanceKm:19000,date:"2026-03-20T05:00:00Z"},
   "forecast-flight": {latitude:54,longitude:9,distanceKm:6382.937,pitch:76,bearing:10,fov:62,date:"2026-03-20T12:30:00Z"},
   "forecast-overcast": {latitude:46,longitude:0,distanceKm:6384.637,pitch:80,bearing:0,fov:62,date:"2026-03-20T14:30:00Z"},
-  traffic: {latitude:53,longitude:-2,distanceKm:6778.137,pitch:30,fov:45,date:"2026-03-20T12:00:00Z"},
+  traffic: {latitude:53.1,longitude:-2.7,distanceKm:6778.137,pitch:0,fov:45,date:"2026-03-20T12:00:00Z"},
   aircraft: {latitude:53.7482,longitude:-3.1,distanceKm:6389.3598,pitch:38.66,bearing:0,fov:45,date:"2026-03-20T12:00:00Z"},
   observed: {latitude:15,longitude:-100,distanceKm:23000,date:undefined},
   "observed-flight": {latitude:41.77,longitude:-52.2,distanceKm:6387.237,pitch:78,fov:62,date:"2026-03-20T15:30:00Z"},
@@ -101,6 +101,7 @@ const views = {
 };
 export function GlobeVisualCheck() {
   const [view, setView] = useState<keyof typeof views>("day"),
+    [trafficSelected,setTrafficSelected]=useState("qa-a380"),
     [revision, setRevision] = useState(0),
     [data, setData] = useState<RadarCloudData | null>(null),
     [aurora, setAurora] = useState<RadarAuroraData | null>(null),
@@ -192,8 +193,8 @@ export function GlobeVisualCheck() {
         <BaRadarThreeGlobe
           key={`${view}-${revision}`}
           flights={view==="traffic"||view==="aircraft"?TRAFFIC_FIXTURE:[]}
-          selectedId={view==="traffic"||view==="aircraft"?"qa-a380":""}
-          onSelect={() => {}}
+          selectedId={view==="traffic"||view==="aircraft"?trafficSelected:""}
+          onSelect={setTrafficSelected}
           controllers={[]}
           onSelectController={() => {}}
           replay={null}
@@ -237,6 +238,7 @@ export function GlobeVisualCheck() {
             style={{ font: "12px Arial", padding: "5px 9px", color: "white", border: "1px solid #3f5e79", borderRadius: 3, background: view === name ? "#12639c" : "#10283c" }}
             onClick={() => {
               setView(name as keyof typeof views);
+              if(name==="aircraft")setTrafficSelected("qa-a380");
               setRevision((value) => value + 1);
             }}
           >

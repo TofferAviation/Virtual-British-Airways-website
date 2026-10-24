@@ -132,7 +132,7 @@ export async function GET() {
     // value so the public health endpoint can confirm which authentication
     // release Render is actually serving, without exposing any secret.
     revision: "fleet-dependency-check-v1",
-    globeRevision: "aircraft-altitude-v1-20261024",
+    globeRevision: "airframe-model-lods-v2-20261024",
     globeCloudRevision: "dual-source-forecast-billows-v1.1",
     releaseCommit: process.env.RENDER_GIT_COMMIT?.match(/^[a-f0-9]{40}$/i)?.[0] ?? null,
     staffAuthConfigured: Boolean(

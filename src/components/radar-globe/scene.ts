@@ -402,7 +402,9 @@ export function createGlobeScene(
       #include <logdepthbuf_vertex>
     }`,terrainDepthFragment,{uWorldToEarth:{value:new THREE.Matrix4()}});
   const aircraftSun=new THREE.DirectionalLight(0xfff5df,2.4);
-  earth.add(aircraftSun,aircraftSun.target,new THREE.HemisphereLight(0xeaf4ff,0x273244,1.6));
+  const aircraftAmbient=new THREE.HemisphereLight(0xeaf4ff,0x273244,1.6);
+  aircraftSun.layers.enable(6);aircraftAmbient.layers.enable(6);
+  earth.add(aircraftSun,aircraftSun.target,aircraftAmbient);
   let trafficRevision=0;
   const markerMaterials = [
     new THREE.MeshBasicMaterial({ color: 0xf2c84b }),
@@ -717,6 +719,7 @@ export function createGlobeScene(
     previousY = 0;
   const pointer = new THREE.Vector2(),
     raycaster = new THREE.Raycaster();
+  raycaster.layers.enable(6); // Pick enlarged 3D map markers as well as true-scale aircraft.
   const keys = new Set<string>();
   const translate = (eastKm: number, northKm: number) => {
     ({ latitude, longitude } = globePanPosition(latitude, longitude, eastKm, northKm));
@@ -1039,7 +1042,7 @@ export function createGlobeScene(
     shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
     shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
     const settings = read().cloudSettings;
-    const signature = [trafficRevision,aircraft.stats.loaded,aircraft.stats.detailed,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const signature = [trafficRevision,aircraft.stats.revision,aircraft.stats.detailed,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
     const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
     const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();
@@ -1084,6 +1087,10 @@ export function createGlobeScene(
     renderer.autoClear = false;
     camera.layers.set(2);
     if(!auroraBeforeClouds) renderer.render(scene, camera);
+    // Enlarged 3D map markers are an overlay, not kilometre-sized physical
+    // aircraft cutting into terrain/clouds. Real centres are horizon-culled;
+    // true-scale aircraft stay in the normal world/cloud depth passes.
+    renderer.clearDepth();camera.layers.set(6);renderer.render(scene,camera);
     camera.layers.set(0);
     renderer.autoClear = true;
     renderer.setClearColor(0x01040a, 1);

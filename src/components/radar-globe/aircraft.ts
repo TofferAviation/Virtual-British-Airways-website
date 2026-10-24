@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { aircraftFrame, flightAltitudeMetres, resolveAircraftModel, type AircraftModel } from "@/lib/radar-aircraft";
+import { aircraftFrame, aircraftDisplay, aircraftAboveHorizon, flightAltitudeMetres, resolveAircraftModel, type AircraftModel } from "@/lib/radar-aircraft";
 import { geodeticToWorld } from "@/lib/radar-globe-geodesy";
 
-type Entry = { root: THREE.Group; icon: THREE.Mesh; model: THREE.Group | null; spec: AircraftModel | null; selected: boolean };
+type Entry = { root: THREE.Group; icon: THREE.Mesh; model: THREE.Group | null; lod: THREE.Group | null; spec: AircraftModel | null; selected: boolean; physical: boolean };
 type Cached = { prototype: THREE.Group; used: number };
 type AircraftFlight = {id: string; aircraft: string; lastSnapshot: {latitude:number;longitude:number;altitudeFt:number;headingDeg:number} | null};
 
@@ -13,6 +13,7 @@ export class GlobeAircraft {
   readonly group = new THREE.Group();
   private entries = new Map<string, Entry>();
   private cache = new Map<string, Cached>();
+  private mapCache = new Map<string, THREE.Group>();
   private pending = new Set<string>();
   private failed = new Set<string>();
   private icons = new Map<string, THREE.BufferGeometry>();
@@ -22,7 +23,9 @@ export class GlobeAircraft {
   private clock = 0;
   private lastModelScan = -Infinity;
   private basis = new THREE.Matrix4();
-  get stats() { return { aircraft: this.entries.size, loaded: this.cache.size, loading: this.pending.size, failed: [...this.failed], detailed: [...this.entries.values()].filter(e => e.model?.visible).length }; }
+  private revision=0;
+  constructor(private loader:Pick<GLTFLoader,"loadAsync">=new GLTFLoader()) {}
+  get stats() { return { aircraft: this.entries.size, loaded: this.cache.size, mapLoaded: this.mapCache.size, loading: this.pending.size, failed: [...this.failed], revision:this.revision, detailed: [...this.entries.values()].filter(e=>e.physical).length, highDetail:[...this.entries.values()].filter(e=>e.model?.visible).length, mapModels:[...this.entries.values()].filter(e=>e.lod?.visible&&!e.physical).length }; }
   get pickable() { return [...this.entries.values()].map(e => e.root); }
 
   private icon(spec: AircraftModel | null) {
@@ -52,7 +55,7 @@ export class GlobeAircraft {
       if (!entry) {
         const root = new THREE.Group(), icon = new THREE.Mesh(this.icon(spec), this.normal);
         root.add(icon); root.userData = { kind: "flight", id: flight.id };
-        this.group.add(root); entry = { root, icon, model: null, spec, selected: false }; this.entries.set(flight.id, entry);
+        this.group.add(root); entry = { root, icon, model: null, lod:null, spec, selected: false, physical:false }; this.entries.set(flight.id, entry);
       }
       entry.spec=spec; entry.selected = flight.id === selectedId; entry.icon.material = entry.selected ? this.selected : this.normal;
       entry.root.userData.aircraft = spec ? `${spec.label}${spec.match === "family" ? " · family substitute" : ""}` : `${flight.aircraft} · generic marker`;
@@ -66,29 +69,35 @@ export class GlobeAircraft {
   update(cameraLocal: THREE.Vector3, fov: number, pixelsHigh: number, now: number, frustum: THREE.Frustum) {
     const scan = now - this.lastModelScan > 350;
     if (scan) this.lastModelScan=now;
-    const candidates: Array<{entry: Entry; range: number}> = [];
+    const candidates: Array<{entry: Entry; range: number; highDetail:boolean}> = [];
     for (const entry of this.entries.values()) {
       const range = Math.max(.001,cameraLocal.distanceTo(entry.root.position));
-      const kmPerPixel = Math.max(1e-8,2 * range * Math.tan(fov*Math.PI/360) / Math.max(1,pixelsHigh));
-      const lengthKm = (entry.spec?.lengthM ?? 40) / 1000;
-      const naturalPixels = lengthKm / kmPerPixel;
-      // True metre-sized models near the aircraft; a small type-proportioned icon at map scales.
-      // Match icon/model pixel sizes at the transition; never swap a 28 px
-      // marker for a barely visible one-pixel model as the eye zooms in.
-      const detailed = !!entry.spec && range < 50 && naturalPixels >= (entry.selected?28:18) && frustum.containsPoint(entry.root.position);
-      if (detailed && scan) candidates.push({entry,range});
+      const display=aircraftDisplay(entry.spec?.lengthM??40,range,fov,pixelsHigh,entry.selected);
+      const visible=frustum.containsPoint(entry.root.position)&&aircraftAboveHorizon(cameraLocal.toArray(),entry.root.position.toArray());
+      if (visible && entry.spec && scan) candidates.push({entry,range,highDetail:display.highDetail});
       if (entry.spec && this.cache.has(entry.spec.key)) {
         const cached = this.cache.get(entry.spec.key)!;
         if (!entry.model) { entry.model=cached.prototype.clone(true); entry.root.add(entry.model); }
-        if (detailed) cached.used=++this.clock;
+        if (visible&&display.highDetail) cached.used=++this.clock;
       }
-      if (entry.model) { entry.model.visible=detailed; entry.model.scale.setScalar(.001); }
-      entry.icon.visible=!entry.model?.visible;
-      entry.icon.scale.setScalar(Math.max(lengthKm, kmPerPixel * (entry.selected ? 28 : 18)));
+      if(entry.spec&&!entry.lod&&this.mapCache.has(entry.spec.key)){entry.lod=this.mapCache.get(entry.spec.key)!.clone(true);entry.root.add(entry.lod);}
+      const model=display.highDetail&&entry.model?entry.model:entry.lod;
+      entry.physical=visible&&!!model&&!display.mapOverlay;
+      for(const object of [entry.model,entry.lod])if(object){
+        object.visible=visible&&object===model;object.scale.setScalar(display.scale);
+        object.traverse(part=>{part.layers.set(object.visible?(display.mapOverlay?6:0):7);if(object.visible&&!display.mapOverlay)part.layers.enable(5);});
+      }
+      // Generic/temporary fallback only: a supported, loaded type always uses a 3D mesh.
+      entry.icon.visible=visible&&!model;
+      entry.icon.layers.set(entry.icon.visible?6:7);
+      entry.icon.scale.setScalar((entry.spec?.lengthM??40)*display.scale);
     }
     if (scan) {
       candidates.sort((a,b) => Number(b.entry.selected)-Number(a.entry.selected) || a.range-b.range);
-      for (const {entry} of candidates.slice(0,4)) if(entry.spec) this.request(entry.spec.key);
+      // Load tiny map LODs first. Only request detailed textures/geometry when
+      // they are large enough on screen to be useful, with two shared transfers.
+      for(const {entry}of candidates)if(entry.spec)this.request(entry.spec.key,true);
+      for(const {entry,highDetail}of candidates.slice(0,4))if(entry.spec&&highDetail)this.request(entry.spec.key,false);
     }
   }
 
@@ -98,11 +107,14 @@ export class GlobeAircraft {
     return distance;
   }
 
-  private request(key: string) {
-    if(this.disposed||this.cache.has(key)||this.pending.has(key)||this.failed.has(key)||this.pending.size>=2)return;
-    this.pending.add(key);
-    void new GLTFLoader().loadAsync(`/models/aircraft/${key}.glb`).then(gltf=>{
+  private request(key: string,mapLod:boolean) {
+    const id=`${mapLod?"map":"detail"}:${key}`;
+    if(this.disposed||(mapLod?this.mapCache.has(key):this.cache.has(key))||this.pending.has(id)||this.failed.has(id)||this.pending.size>=2)return;
+    this.pending.add(id);
+    void this.loader.loadAsync(`/models/aircraft/${mapLod?"lod/":""}${key}.glb`).then(gltf=>{
       if(this.disposed){disposeModel(gltf.scene);return;}
+      this.revision++;
+      if(mapLod){this.mapCache.set(key,gltf.scene);return;}
       const prototype=prepareAircraftModel(gltf.scene);
       this.cache.set(key,{prototype,used:++this.clock});
       // At most six fleet types resident. Detach shared clones before an LRU eviction.
@@ -114,14 +126,15 @@ export class GlobeAircraft {
           disposeModel(cached.prototype);this.cache.delete(old);
         }
       }
-    }).catch(error=>{this.failed.add(key);console.warn(`Aircraft model ${key} could not load; keeping aircraft silhouette`,error);}).finally(()=>this.pending.delete(key));
+    }).catch(error=>{this.failed.add(id);console.warn(`Aircraft model ${id} could not load; retaining the available LOD or temporary marker`,error);}).finally(()=>this.pending.delete(id));
   }
 
   dispose() {
     this.disposed=true;
     for(const cached of this.cache.values())disposeModel(cached.prototype);
+    for(const cached of this.mapCache.values())disposeModel(cached);
     for(const geometry of this.icons.values())geometry.dispose();
-    this.normal.dispose();this.selected.dispose();this.group.clear();this.entries.clear();this.cache.clear();
+    this.normal.dispose();this.selected.dispose();this.group.clear();this.entries.clear();this.cache.clear();this.mapCache.clear();
   }
 }
 
