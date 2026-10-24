@@ -4,6 +4,26 @@
 `/api/health`: this update's `globeRevision` is `airframe-model-lods-v2-20261024` and
 `releaseCommit` reports the Render Git commit when available.
 
+## Selected aircraft close-up size
+
+The selected airframe now defaults to a 175% visual size nearby. A Close-up
+size slider below View aircraft offers 100–250% in 25% steps; 100% restores
+the previous true-size close-up. A smoothstep blends the extra size between
+15 km and 500 m of camera/aircraft range, without changing distant map sizes
+or unselected traffic. The same factor is applied to both mesh LODs, and
+detailed geometry is requested according to the boosted natural pixel size.
+No asset, texture, livery, reported position, heading or altitude is modified.
+Nearby models retain world/cloud depth; the boost does not convert them to
+always-visible map overlays. Changing the slider invalidates cached cloud
+depth without rebuilding the scene, moving the camera or reloading assets.
+
+Regression checks cover continuous/monotonic zoom sizing, clamped finite
+limits, unchanged distant/other aircraft, true-size restoration, original
+reported coordinates and shared geometry. Browser comparison at 100% and
+175% used the same A380/camera pose and retained the 60 fps cap on this
+machine. The user approved deployment of this size follow-up after local
+review; verify the exact deployed Git SHA using `releaseCommit` above.
+
 ## 3D airframes at map scale
 
 The previous model-only-when-close gate has been replaced. Every supported,
@@ -16,9 +36,9 @@ A380 has 10,399. Full textures/geometry load only at 64 natural screen pixels.
 Downloads remain visibility-driven, selected-first and bounded to two; the
 detailed six-type shared LRU cache is retained. No new dependency is added.
 
-Map models remain readable at 44 selected / 30 other CSS pixels. Their centres
+At distant map scales, models remain readable at 44 selected / 30 other CSS pixels. Their centres
 and true-heading frames still use actual telemetry. Only display size is
-enlarged, and it converges continuously to 1 metre = 0.001 render kilometres.
+enlarged; at 100% close-up size it converges continuously to 1 metre = 0.001 render kilometres.
 At enlarged scale they render in a separate, centre-horizon-culled 3D marker
 pass after the world, rather than intersecting the Earth or falsely blocking
 volumetric clouds as giant physical aircraft. At true scale, aircraft rejoin

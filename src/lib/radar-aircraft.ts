@@ -40,13 +40,20 @@ export function resolveAircraftModel(name: string): AircraftModel | null {
   return { key, label, lengthM, spanM, match: family[code] ? "family" : "type" };
 }
 
-/** Map-scale models are deliberately enlarged, never the telemetry position.
- * The same scale applies to both LODs, so loading detail cannot shrink a plane. */
-export function aircraftDisplay(lengthM:number,rangeKm:number,fov:number,pixelsHigh:number,selected:boolean) {
+export const DEFAULT_AIRCRAFT_CLOSE_SCALE=1.75;
+
+/** Visual scaling never changes telemetry. The selected plane gains a smooth,
+ * bounded close-up boost within 15 km; 100% restores the original true-size view.
+ * Both LODs use exactly the same size, including while detail is loading. */
+export function aircraftDisplay(lengthM:number,rangeKm:number,fov:number,pixelsHigh:number,selected:boolean,closeScale=DEFAULT_AIRCRAFT_CLOSE_SCALE) {
   const kmPerPixel=Math.max(1e-8,2*Math.max(.001,rangeKm)*Math.tan(Math.max(1,fov)*Math.PI/360)/Math.max(1,pixelsHigh));
   const naturalPixels=Math.max(1,lengthM)/1000/kmPerPixel;
-  const scale=.001*Math.max(1,(selected?44:30)/naturalPixels);
-  return {scale,naturalPixels,mapOverlay:scale>.0010001,highDetail:naturalPixels>=64};
+  const baseScale=.001*Math.max(1,(selected?44:30)/naturalPixels);
+  const t=Math.max(0,Math.min(1,(rangeKm-.5)/14.5));
+  const proximity=1-t*t*(3-2*t);
+  const requested=Number.isFinite(closeScale)?Math.max(1,Math.min(2.5,closeScale)):DEFAULT_AIRCRAFT_CLOSE_SCALE;
+  const closeBoost=selected?1+(requested-1)*proximity:1;
+  return {scale:baseScale*closeBoost,naturalPixels,closeBoost,mapOverlay:baseScale>.0010001,highDetail:naturalPixels*closeBoost>=64};
 }
 
 /** Cull the entire enlarged marker by its real centre, not the enlarged wings.

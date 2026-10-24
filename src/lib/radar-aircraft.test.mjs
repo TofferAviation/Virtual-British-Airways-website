@@ -69,18 +69,43 @@ test("aircraft instances reuse geometry, stay at telemetry height, and disappear
   layer.sync([],"");assert.equal(layer.group.children.length,0);layer.dispose();
 });
 
-test("3D map size is readable at orbit, converges to true metres, and never changes position",()=>{
+test("100% retains readable map size and true metre scale nearby",()=>{
   for(const selected of [true,false]){
-    const far=aircraftDisplay(72.72,18000,45,900,selected);
+    const far=aircraftDisplay(72.72,18000,45,900,selected,1);
     assert.ok(far.mapOverlay);assert.equal(far.highDetail,false);
     assert.ok(Math.abs(far.scale/.001*far.naturalPixels-(selected?44:30))<1e-8);
-    const near=aircraftDisplay(72.72,.3,45,900,selected);
+    const near=aircraftDisplay(72.72,.3,45,900,selected,1);
     assert.equal(near.scale,.001);assert.equal(near.mapOverlay,false);assert.equal(near.highDetail,true);
     for(let range=1;range<20;range+=.01){
-      const a=aircraftDisplay(72.72,range,45,900,selected),b=aircraftDisplay(72.72,range+.01,45,900,selected);
+      const a=aircraftDisplay(72.72,range,45,900,selected,1),b=aircraftDisplay(72.72,range+.01,45,900,selected,1);
       assert.ok(Math.abs(a.scale-b.scale)<.00003,"no scale jump at either LOD boundary");
     }
   }
+});
+
+test("selected close-up boost grows smoothly to 175%, stays bounded and leaves distant/other aircraft unchanged",()=>{
+  for(const length of [31.44,37.57,72.72]){
+    let previousPixels=Infinity;
+    for(let range=.1;range<100;range+=.01){
+      const base=aircraftDisplay(length,range,45,900,true,1),display=aircraftDisplay(length,range,45,900,true);
+      assert.ok(display.closeBoost>=1&&display.closeBoost<=1.75);
+      assert.ok(Math.abs(display.scale/base.scale-display.closeBoost)<1e-9);
+      assert.equal(display.mapOverlay,base.mapOverlay,"close-up display boost retains world/cloud depth instead of becoming an always-visible overlay");
+      const pixels=display.scale/.001*display.naturalPixels;
+      assert.ok(pixels<=previousPixels+1e-8,"aircraft cannot shrink when zooming closer");previousPixels=pixels;
+      const other=aircraftDisplay(length,range,45,900,false);
+      assert.equal(other.closeBoost,1);
+    }
+    const close=aircraftDisplay(length,.3,45,900,true),far=aircraftDisplay(length,20,45,900,true);
+    assert.equal(close.scale,.00175);assert.equal(close.closeBoost,1.75);assert.equal(far.closeBoost,1);
+    for(const edge of [.5,15]){
+      const a=aircraftDisplay(length,edge-.0001,45,900,true),b=aircraftDisplay(length,edge+.0001,45,900,true);
+      assert.ok(Math.abs(a.closeBoost-b.closeBoost)<1e-8,"smooth blend at both ends");
+    }
+  }
+  assert.equal(aircraftDisplay(72.72,.3,45,900,true,99).closeBoost,2.5);
+  assert.equal(aircraftDisplay(72.72,.3,45,900,true,-1).closeBoost,1);
+  assert.equal(aircraftDisplay(72.72,.3,45,900,true,NaN).closeBoost,1.75);
 });
 
 test("enlarged 3D markers are horizon-culled by real centres, including poles and ground",()=>{
@@ -104,7 +129,7 @@ test("normal map zoom loads matching 3D LODs, not full fleet textures; close-up 
   const update=(range,time)=>{
     camera.position.copy(centre).addScaledVector(up,range);camera.lookAt(centre);camera.updateMatrixWorld(true);
     frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
-    layer.update(camera.position,45,900,time,frustum);
+    layer.update(camera.position,45,900,time,frustum,1);
   };
   update(400,0);await new Promise(setImmediate);update(400,16);
   assert.deepEqual(calls,["/models/aircraft/lod/a380.glb"]);
@@ -122,6 +147,12 @@ test("normal map zoom loads matching 3D LODs, not full fleet textures; close-up 
   const full=root.children.find(child=>child instanceof THREE.Group&&child.visible);
   assert.equal(full.scale.x,.001);assert.ok(full.children[0].layers.isEnabled(0));assert.ok(full.children[0].layers.isEnabled(5));
   assert.ok(root.position.distanceTo(centre)<1e-9);
+  layer.update(camera.position,45,900,432,frustum,1.75);
+  assert.equal(full.scale.x,.00175);assert.ok(full.children[0].layers.isEnabled(5));assert.equal(full.children[0].layers.isEnabled(6),false);
+  assert.ok(root.position.distanceTo(centre)<1e-9,"size control cannot move the reported position or altitude");
+  assert.equal(layer.stats.loading,0,"changing size reuses the loaded model");
+  layer.update(camera.position,45,900,448,frustum,1);
+  assert.equal(full.scale.x,.001,"100% restores true size without resetting the camera");
   layer.dispose();assert.equal(layer.group.children.length,0);
 });
 

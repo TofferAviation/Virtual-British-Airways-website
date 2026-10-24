@@ -66,13 +66,13 @@ export class GlobeAircraft {
     for (const [id,entry] of this.entries) if (!alive.has(id)) { this.group.remove(entry.root); this.entries.delete(id); }
   }
 
-  update(cameraLocal: THREE.Vector3, fov: number, pixelsHigh: number, now: number, frustum: THREE.Frustum) {
+  update(cameraLocal: THREE.Vector3, fov: number, pixelsHigh: number, now: number, frustum: THREE.Frustum,closeScale?:number) {
     const scan = now - this.lastModelScan > 350;
     if (scan) this.lastModelScan=now;
     const candidates: Array<{entry: Entry; range: number; highDetail:boolean}> = [];
     for (const entry of this.entries.values()) {
       const range = Math.max(.001,cameraLocal.distanceTo(entry.root.position));
-      const display=aircraftDisplay(entry.spec?.lengthM??40,range,fov,pixelsHigh,entry.selected);
+      const display=aircraftDisplay(entry.spec?.lengthM??40,range,fov,pixelsHigh,entry.selected,closeScale);
       const visible=frustum.containsPoint(entry.root.position)&&aircraftAboveHorizon(cameraLocal.toArray(),entry.root.position.toArray());
       if (visible && entry.spec && scan) candidates.push({entry,range,highDetail:display.highDetail});
       if (entry.spec && this.cache.has(entry.spec.key)) {

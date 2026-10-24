@@ -69,6 +69,8 @@ export type GlobeReplay = {
 export type GlobeSceneState = {
   flights: PublicRadarFlight[];
   selectedId: string;
+  /** Visual-only selected-aircraft boost nearby; does not change reported position. */
+  aircraftCloseScale?: number;
   onSelect: (id: string) => void;
   controllers: VatsimStation[];
   onSelectController: (callsign: string) => void;
@@ -1026,7 +1028,7 @@ export function createGlobeScene(
       surface.update(shared.uCamera.value, host.clientHeight * renderer.getPixelRatio(), camera.fov, localFrustum, shared.uSun.value, read().dayNightEnabled, groundRequested||targetDistance-WGS84_A_KM<30||(!ground.ready&&height<80));
       lastLodUpdate = now;
     }
-    aircraft.update(shared.uCamera.value,camera.fov,host.clientHeight,now,localFrustum);
+    aircraft.update(shared.uCamera.value,camera.fov,host.clientHeight,now,localFrustum,read().aircraftCloseScale);
     aircraftSun.position.copy(shared.uSun.value).multiplyScalar(10000);
     aircraftSun.intensity=read().dayNightEnabled?Math.max(.08,2.4*Math.max(0,shared.uSun.value.dot(shared.uCamera.value.clone().normalize()))):2.4;
     const moving = (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
@@ -1042,7 +1044,7 @@ export function createGlobeScene(
     shared.uShadowRegion.value.set(shadowWidth / shadowTarget.width, shadowHeight / shadowTarget.height, 1 / shadowTarget.width, 1 / shadowTarget.height);
     shared.uPixelAngle.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / cloudSize.height;
     const settings = read().cloudSettings;
-    const signature = [trafficRevision,aircraft.stats.revision,aircraft.stats.detailed,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
+    const signature = [trafficRevision,aircraft.stats.revision,aircraft.stats.detailed,read().aircraftCloseScale,distance.toFixed(7), latitude.toFixed(8), longitude.toFixed(8), bearing.toFixed(4), pitch.toFixed(4), camera.fov, cloudSize.width, cloudSize.height, weatherRevision, Math.floor(shared.uObservationBlend.value*12),surface.revision, cloudMesh.visible, settings.opacity, settings.low, settings.middle, settings.high, settings.selfShadows, settings.debugMode, shared.uDayNight.value, effectiveQuality, ...shared.uSun.value.toArray()].join("/");
     const cacheEnabled = process.env.NODE_ENV === "production" || read().testCloudCache !== false;
     const refreshClouds = cloudCache.shouldRefresh(signature, now, cacheEnabled);
     renderer.info.reset();
