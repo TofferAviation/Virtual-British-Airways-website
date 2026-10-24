@@ -89,3 +89,13 @@ test("background-tab recovery is bounded and cannot reverse playback",()=>{
   close(motion.sample(60000).latitude,53);
   close(motion.sample(30000).latitude,53);
 });
+
+test("cosmetic history is bounded to actual buffered reports and cannot alter or rewind playback",()=>{
+  const motion=new AircraftMotion();motion.sync(report(0),history,0,utc);
+  const before={...motion.sample(1000)},trail=motion.history(60);
+  assert.ok(trail.length>0&&trail.length<=60);assert.ok(trail.every(p=>p.age>0&&p.age<=60&&p.latitude<=before.latitude));
+  assert.deepEqual(motion.sample(1000),before);
+  for(let now=2000;now<=100000;now+=1000)motion.sample(now);
+  assert.equal(motion.history(60).length,0,"stale reports must not seed freshly born trails");
+  motion.sync(report(-10),history,100001,utc+100001,true);assert.equal(motion.history(60).length,0,"no guessed replay emissions");
+});

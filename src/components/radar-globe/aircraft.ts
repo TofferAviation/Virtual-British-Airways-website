@@ -4,10 +4,11 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { aircraftFrame, aircraftDisplay, aircraftAboveHorizon, flightAltitudeMetres, resolveAircraftModel, type AircraftModel } from "@/lib/radar-aircraft";
 import { geodeticToWorld } from "@/lib/radar-globe-geodesy";
 import { AircraftMotion, type AircraftMotionReport } from "@/lib/radar-aircraft-motion";
+import type { ContrailSource } from "./contrails";
 
-type Entry = { root: THREE.Group; icon: THREE.Mesh; model: THREE.Group | null; lod: THREE.Group | null; spec: AircraftModel | null; selected: boolean; physical: boolean; motion:AircraftMotion };
+type Entry = { root: THREE.Group; icon: THREE.Mesh; model: THREE.Group | null; lod: THREE.Group | null; spec: AircraftModel | null; selected: boolean; physical: boolean; motion:AircraftMotion; contrailEligible:boolean; altitudeMetres:number; anchorBoost:number; trailSource:ContrailSource };
 type Cached = { prototype: THREE.Group; used: number };
-type AircraftFlight = {id: string; aircraft: string; lastSnapshot: AircraftMotionReport | null; recentSnapshots?:readonly AircraftMotionReport[]; motion?:"instant"};
+type AircraftFlight = {id: string; aircraft: string; lastSnapshot: (AircraftMotionReport & {onGround?:boolean;enginesRunning?:boolean}) | null; recentSnapshots?:readonly AircraftMotionReport[]; motion?:"instant"};
 
 /** Shared assets, bounded cache and distance LOD. No simulator assets or remote hotlinks. */
 export class GlobeAircraft {
@@ -35,6 +36,16 @@ export class GlobeAircraft {
   constructor(private loader:Pick<GLTFLoader,"loadAsync">=new GLTFLoader()) {}
   get stats() { return { aircraft: this.entries.size, loaded: this.cache.size, mapLoaded: this.mapCache.size, loading: this.pending.size, failed: [...this.failed], revision:this.revision, depthRevision:this.depthRevision, moving:this.physicalMoving, detailed: [...this.entries.values()].filter(e=>e.physical).length, highDetail:[...this.entries.values()].filter(e=>e.model?.visible).length, mapModels:[...this.entries.values()].filter(e=>e.lod?.visible&&!e.physical).length }; }
   get pickable() { return [...this.entries.values()].map(e => e.root); }
+  get contrailSources():ContrailSource[] {return [...this.entries.values()].map(e=>{
+    const source=e.trailSource;source.selected=e.selected;source.enabled=e.contrailEligible&&e.altitudeMetres>=6000;source.anchorBoost=e.anchorBoost;return source;
+  });}
+
+  private trailSource(id:string,root:THREE.Group,spec:AircraftModel|null,motion:AircraftMotion):ContrailSource {
+    return {id,key:spec?.key??"",position:root.position,rotation:root.quaternion,selected:false,enabled:false,anchorBoost:1,history:(seconds:number)=>motion.history(seconds).filter(p=>p.altitudeFt*.3048>=6000).map(p=>{
+      const frame=aircraftFrame(p.latitude,p.longitude,p.headingDeg);
+      return {position:new THREE.Vector3(...geodeticToWorld(p.latitude,p.longitude,p.altitudeFt*.3048)),rotation:new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().fromArray(frame.right),new THREE.Vector3().fromArray(frame.up),new THREE.Vector3().fromArray(frame.back))),age:p.age};
+    })};
+  }
 
   private icon(spec: AircraftModel | null) {
     const key = spec?.key ?? "unknown";
@@ -63,9 +74,11 @@ export class GlobeAircraft {
       if (!entry) {
         const root = new THREE.Group(), icon = new THREE.Mesh(this.icon(spec), this.normal);
         root.add(icon); root.userData = { kind: "flight", id: flight.id };
-        this.group.add(root); entry = { root, icon, model: null, lod:null, spec, selected: false, physical:false, motion:new AircraftMotion() }; this.entries.set(flight.id, entry);
+        const motion=new AircraftMotion();
+        this.group.add(root); entry = { root, icon, model: null, lod:null, spec, selected: false, physical:false, motion,contrailEligible:false,altitudeMetres:height,anchorBoost:1,trailSource:this.trailSource(flight.id,root,spec,motion) }; this.entries.set(flight.id, entry);
       }
       entry.spec=spec; entry.selected = flight.id === selectedId; entry.icon.material = entry.selected ? this.selected : this.normal;
+      entry.contrailEligible=flight.motion!=="instant"&&p.enginesRunning!==false&&p.onGround!==true;
       entry.root.userData.aircraft = spec ? `${spec.label}${spec.match === "family" ? " · family substitute" : ""}` : `${flight.aircraft} · generic marker`;
       entry.motion.sync({...p,headingDeg:Number.isFinite(p.headingDeg)?p.headingDeg:0},flight.recentSnapshots??[],now,utc,flight.motion==="instant");
       this.pose(entry,now);
@@ -84,6 +97,7 @@ export class GlobeAircraft {
       const moved=this.previousPosition.distanceToSquared(entry.root.position)>1e-16||1-Math.abs(this.previousRotation.dot(entry.root.quaternion))>1e-12;
       const range = Math.max(.001,cameraLocal.distanceTo(entry.root.position));
       const display=aircraftDisplay(entry.spec?.lengthM??40,range,fov,pixelsHigh,entry.selected,closeScale);
+      entry.anchorBoost=display.mapOverlay?1:display.closeBoost;
       const visible=frustum.containsPoint(entry.root.position)&&aircraftAboveHorizon(cameraLocal.toArray(),entry.root.position.toArray());
       if (visible && entry.spec && scan) candidates.push({entry,range,highDetail:display.highDetail});
       if (entry.spec && this.cache.has(entry.spec.key)) {
@@ -118,6 +132,7 @@ export class GlobeAircraft {
 
   private pose(entry:Entry,now:number) {
     const p=entry.motion.sample(now);
+    entry.altitudeMetres=p.altitudeFt*.3048;
     entry.root.position.set(...geodeticToWorld(p.latitude,p.longitude,p.altitudeFt*.3048));
     const frame=aircraftFrame(p.latitude,p.longitude,p.headingDeg);
     entry.root.quaternion.setFromRotationMatrix(this.basis.makeBasis(this.right.fromArray(frame.right),this.up.fromArray(frame.up),this.back.fromArray(frame.back)));

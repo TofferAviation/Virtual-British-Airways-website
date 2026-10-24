@@ -69,6 +69,15 @@ test("aircraft instances reuse geometry, stay at telemetry height, and disappear
   layer.sync([],"");assert.equal(layer.group.children.length,0);layer.dispose();
 });
 
+test("contrail eligibility follows the smoothed physical height and engine/ground state, never weather or replay",()=>{
+  const layer=new GlobeAircraft(),flight={id:"one",aircraft:"A388",lastSnapshot:{latitude:53,longitude:-3,altitudeFt:36000,headingDeg:45,onGround:false,enginesRunning:true}};
+  layer.sync([flight],"one");assert.equal(layer.contrailSources[0].enabled,true);assert.equal(layer.contrailSources[0].key,"a380");
+  assert.equal(layer.contrailSources[0],layer.contrailSources[0],"render frames reuse source objects/history providers");
+  for(const overrides of [{onGround:true},{enginesRunning:false},{altitudeFt:10000}]){layer.sync([{...flight,lastSnapshot:{...flight.lastSnapshot,...overrides}}],"one");assert.equal(layer.contrailSources[0].enabled,false);}
+  layer.sync([{...flight,motion:"instant"}],"one");assert.equal(layer.contrailSources[0].enabled,false);
+  layer.dispose();assert.equal(layer.contrailSources.length,0);
+});
+
 test("100% retains readable map size and true metre scale nearby",()=>{
   for(const selected of [true,false]){
     const far=aircraftDisplay(72.72,18000,45,900,selected,1);

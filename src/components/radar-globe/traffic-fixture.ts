@@ -34,3 +34,15 @@ export function movingTrafficFixture(epochUtc:number,seconds:number):PublicRadar
   const lastSnapshot=recentSnapshots.at(-1)!;
   return [{...base,lastSnapshot,recentSnapshots,trackSnapshots:recentSnapshots,updatedAt:lastSnapshot.timestamp}];
 }
+
+/** Close, explicitly synthetic two-/four-engine circuits for exhaust-effect QA. */
+export function contrailTrafficFixture(epochUtc:number,seconds:number):PublicRadarFlight[] {
+  return ["a380","a320"].map((type,index)=>{
+    const recentSnapshots=Array.from({length:13},(_,i)=>{
+      const t=seconds+(i-12)*5,angle=t*.08+index*1.5;
+      return {...base.lastSnapshot!,timestamp:new Date(epochUtc+t*1000).toISOString(),latitude:53.7+.0225*Math.cos(angle),longitude:-3.1+.0378*Math.sin(angle),headingDeg:(90+angle*180/Math.PI%360+360)%360,altitudeFt:36000};
+    });
+    const lastSnapshot=recentSnapshots.at(-1)!;
+    return {...base,id:`qa-${type}`,callsign:`QA ${type.toUpperCase()}`,aircraft:type==="a380"?"Airbus A380-800":"Airbus A320",lastSnapshot,recentSnapshots,trackSnapshots:[lastSnapshot],updatedAt:lastSnapshot.timestamp};
+  });
+}

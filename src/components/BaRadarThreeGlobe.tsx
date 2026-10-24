@@ -9,7 +9,8 @@ export type { GlobeCamera } from "@/components/radar-globe/scene";
 export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
   const [aircraftCloseScale,setAircraftCloseScale]=useState(props.aircraftCloseScale??DEFAULT_AIRCRAFT_CLOSE_SCALE);
-  const current = useRef({...props,aircraftCloseScale});
+  const [contrailsEnabled,setContrailsEnabled]=useState(props.contrailsEnabled??true);
+  const current = useRef({...props,aircraftCloseScale,contrailsEnabled});
   const [error, setError] = useState<string | null>(null);
   const [performanceLabel, setPerformanceLabel] = useState("Loading globe assets…");
   const [cloudCoverageLabel,setCloudCoverageLabel]=useState("Cloud coverage below camera: unknown (not clear)");
@@ -17,8 +18,8 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
   const aircraftName=props.replay?.aircraft??selectedFlight?.aircraft;
   const aircraftModel=aircraftName?resolveAircraftModel(aircraftName):null;
   useEffect(() => {
-    current.current = {...props,aircraftCloseScale};
-  }, [props,aircraftCloseScale]);
+    current.current = {...props,aircraftCloseScale,contrailsEnabled};
+  }, [props,aircraftCloseScale,contrailsEnabled]);
   useEffect(() => {
     let disposed = false,
       cleanup: (() => void) | undefined;
@@ -57,6 +58,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
         <strong>Earth · WGS84</strong>
         {aircraftName?<><span>{aircraftModel?`${aircraftModel.label}${aircraftModel.match==="family"?" · family substitute":""} · house livery`:`${aircraftName} · generic aircraft marker`}</span><button type="button" style={{pointerEvents:"auto",font:"10px Arial",padding:"4px 7px",color:"#d7ebff",background:"#12344b",border:"1px solid #4982a6",borderRadius:3}} onClick={()=>container.current?.querySelector("canvas")?.dispatchEvent(new Event("globe-aircraft-view"))}>View aircraft · reported altitude</button></>:null}
         {aircraftModel?<label style={{pointerEvents:"auto",display:"flex",alignItems:"center",gap:7,font:"10px Arial"}} title="Visual size of the selected aircraft nearby. 100% restores true size close up; reported position and altitude never change.">Close-up size <input type="range" aria-label="Selected aircraft close-up size" min={100} max={250} step={25} value={Math.round(aircraftCloseScale*100)} style={{width:90}} onChange={event=>setAircraftCloseScale(Number(event.target.value)/100)} /><output>{Math.round(aircraftCloseScale*100)}%</output></label>:null}
+        <label style={{pointerEvents:"auto",display:"flex",alignItems:"center",gap:5,font:"10px Arial"}} title="Cosmetic engine trails on moving cruise-altitude aircraft. Not weather-dependent or observed contrails."><input aria-label="Simulated contrails" type="checkbox" checked={contrailsEnabled} onChange={event=>setContrailsEnabled(event.target.checked)}/>Contrails · visual effect</label>
         {props.cloudsEnabled?<span>{cloudCoverageLabel}</span>:null}
         {props.cloudsEnabled&&!props.testCloudProfile?<span style={{color:"#eacb8a"}}>{props.cloudSettings.coverageMode==="forecast"?"GLOBAL FORECAST · modelled clouds, not satellite observed":"Reconstructed cloud edges · uncertainty band ≤10 km"}</span>:null}
         {props.auroraEnabled&&auroraKpOverride(props.auroraSettings)!==null?<strong style={{color:"#ffcf83"}}>SIMULATION · manual Kp {auroraKpOverride(props.auroraSettings)} · not live NOAA</strong>:null}

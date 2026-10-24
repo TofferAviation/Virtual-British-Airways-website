@@ -83,16 +83,29 @@ export class AircraftMotion {
     return this.interpolate();
   }
 
-  private interpolate() {
+  /** Bounded display history for cosmetic trails; never extrapolates or changes playback. */
+  history(seconds:number) {
+    if(this.instant||!this.reports.length)return [];
+    const result:Array<AircraftPose & {age:number}>=[];
+    const hold=Math.max(0,this.epochUtc-this.origin+this.lastNow-this.epochNow-AIRCRAFT_PLAYBACK_DELAY_MS-this.playhead);
+    const start=Math.max(this.reports[0].time-this.origin,this.playhead-Math.min(60,Math.max(0,seconds))*1000);
+    for(let t=start;t<this.playhead-100;t+=1000) {
+      const age=(this.playhead-t+hold)/1000;
+      if(age<=seconds)result.push({...this.interpolate(t,{latitude:0,longitude:0,altitudeFt:0,headingDeg:0}),age});
+    }
+    return result;
+  }
+
+  private interpolate(time=this.playhead,pose=this.pose) {
     let a=this.reports[0],b=a;
     for(const report of this.reports) {
-      b=report;if(report.time-this.origin>=this.playhead)break;a=report;
+      b=report;if(report.time-this.origin>=time)break;a=report;
     }
-    const t=b.time===a.time?0:clamp((this.playhead-(a.time-this.origin))/(b.time-a.time),0,1);
-    this.pose.latitude=a.latitude+(b.latitude-a.latitude)*t;
-    this.pose.longitude=wrap(a.longitude+wrap(b.longitude-a.longitude)*t);
-    this.pose.altitudeFt=a.altitudeFt+(b.altitudeFt-a.altitudeFt)*t;
-    this.pose.headingDeg=(a.headingDeg+wrap(b.headingDeg-a.headingDeg)*t+360)%360;
-    return this.pose;
+    const t=b.time===a.time?0:clamp((time-(a.time-this.origin))/(b.time-a.time),0,1);
+    pose.latitude=a.latitude+(b.latitude-a.latitude)*t;
+    pose.longitude=wrap(a.longitude+wrap(b.longitude-a.longitude)*t);
+    pose.altitudeFt=a.altitudeFt+(b.altitudeFt-a.altitudeFt)*t;
+    pose.headingDeg=(a.headingDeg+wrap(b.headingDeg-a.headingDeg)*t+360)%360;
+    return pose;
   }
 }

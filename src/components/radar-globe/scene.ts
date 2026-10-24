@@ -30,6 +30,9 @@ import {
 } from "@/lib/radar-globe-geodesy";
 import { GlobeSurface } from "./surface";
 import { GlobeAircraft } from "./aircraft";
+import { GlobeContrails } from "./contrails";
+import { contrailVertex, contrailFragment } from "./contrail-shaders";
+import { CONTRAIL_PROFILES } from "@/lib/radar-contrails";
 import { flightTrackGeometry } from "./flight-track";
 import { flightAltitudeMetres, type FlightTrackPoint } from "@/lib/radar-aircraft";
 import { buildAuroraCurtains, updateAuroraCurtains } from "./aurora";
@@ -52,6 +55,7 @@ import {
   cloudCompositeFragment,
   auroraFieldVertex, auroraFieldFragment,
   terrainDepthFragment,
+  geoGLSL, densityGLSL,
 } from "./shaders";
 
 export type GlobeCamera = {
@@ -71,6 +75,8 @@ export type GlobeSceneState = {
   selectedId: string;
   /** Visual-only selected-aircraft boost nearby; does not change reported position. */
   aircraftCloseScale?: number;
+  /** Cosmetic-only engine exhaust trails, independent of live weather. */
+  contrailsEnabled?: boolean;
   onSelect: (id: string) => void;
   controllers: VatsimStation[];
   onSelectController: (callsign: string) => void;
@@ -393,6 +399,11 @@ export function createGlobeScene(
   earth.add(routes, traffic);
   const aircraft = new GlobeAircraft();
   earth.add(aircraft.group);
+  const contrailMaterial=material(contrailVertex,contrailFragment(geoGLSL,densityGLSL),{
+    uTrailTime:{value:0},uTrailLife:{value:45},uTrailCloudSamples:{value:6},uTrailPixelAngle:{value:.001},uWorldToEarth:{value:new THREE.Matrix4()},
+  });
+  contrailMaterial.transparent=true;contrailMaterial.depthWrite=false;contrailMaterial.depthTest=true;contrailMaterial.side=THREE.DoubleSide;
+  const contrails=new GlobeContrails(contrailMaterial);earth.add(contrails.group);
   const aircraftDepthMaterial=material(`
     uniform mat4 uWorldToEarth;
     #include <common>
@@ -1030,6 +1041,12 @@ export function createGlobeScene(
       lastLodUpdate = now;
     }
     aircraft.update(shared.uCamera.value,camera.fov,host.clientHeight,now,localFrustum,read().aircraftCloseScale);
+    contrailMaterial.uniforms.uTrailTime.value=now/1000;
+    contrailMaterial.uniforms.uTrailLife.value=CONTRAIL_PROFILES[effectiveQuality].seconds;
+    contrailMaterial.uniforms.uTrailCloudSamples.value=CONTRAIL_PROFILES[effectiveQuality].cloudSamples;
+    contrailMaterial.uniforms.uTrailPixelAngle.value=2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))/Math.max(1,shared.uGroundSize.value.y);
+    contrailMaterial.uniforms.uWorldToEarth.value.copy(earth.matrixWorld).invert();
+    contrails.update(read().contrailsEnabled===false?[]:aircraft.contrailSources,shared.uCamera.value,now,effectiveQuality,read().contrailsEnabled!==false);
     aircraftSun.position.copy(shared.uSun.value).multiplyScalar(10000);
     aircraftSun.intensity=read().dayNightEnabled?Math.max(.08,2.4*Math.max(0,shared.uSun.value.dot(shared.uCamera.value.clone().normalize()))):2.4;
     const moving = aircraft.physicalMoving || (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
@@ -1088,6 +1105,9 @@ export function createGlobeScene(
       renderer.autoClear = true;
     }
     renderer.autoClear = false;
+    // Transparent world-space trails are depth-tested against terrain/airframes.
+    // Their bounded foreground-cloud probes avoid stamping clouds below on top.
+    if(contrails.stats.draws>0){camera.layers.set(8);renderer.render(scene,camera);}
     camera.layers.set(2);
     if(!auroraBeforeClouds) renderer.render(scene, camera);
     // Enlarged 3D map markers are an overlay, not kilometre-sized physical
@@ -1128,6 +1148,7 @@ export function createGlobeScene(
         textures: renderer.info.memory.textures,
         triangles: renderer.info.render.triangles,
         traffic: aircraft.stats,
+        contrails:contrails.stats,
         clouds: cloudMesh.visible,
         cloudPrograms,
         cloudRenderer: forecastPixels.size?FORECAST_CLOUD_REVISION:ACCEPTED_CLOUD_REVISION,
@@ -1198,6 +1219,7 @@ export function createGlobeScene(
     clearGroup(routes);
     clearGroup(traffic);
     aircraft.dispose();
+    contrails.dispose();contrailMaterial.dispose();
     aircraftDepthMaterial.dispose();
     markerMaterials.forEach((m) => m.dispose());
     routeMaterials.forEach((m) => m.dispose());

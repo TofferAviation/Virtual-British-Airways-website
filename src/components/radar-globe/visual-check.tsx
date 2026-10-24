@@ -11,7 +11,7 @@ import { createGlobeAuroraSettings, createGlobeCloudSettings } from "@/lib/radar
 import { AuroraKpControls } from "@/components/AuroraKpControls";
 import { auroraKpOverride,type AuroraKpSettings } from "@/lib/radar-aurora-kp";
 import { unpackCloudData } from "@/lib/radar-cloud-transport";
-import { TRAFFIC_FIXTURE, movingTrafficFixture } from "./traffic-fixture";
+import { TRAFFIC_FIXTURE, movingTrafficFixture, contrailTrafficFixture } from "./traffic-fixture";
 
 const views = {
   "forecast-europe": {latitude:51,longitude:2,distanceKm:19000,date:"2026-03-20T11:00:00Z"},
@@ -21,6 +21,8 @@ const views = {
   traffic: {latitude:53.1,longitude:-2.7,distanceKm:6778.137,pitch:0,fov:45,date:"2026-03-20T12:00:00Z"},
   aircraft: {latitude:53.7482,longitude:-3.1,distanceKm:6389.3598,pitch:38.66,bearing:0,fov:45,date:"2026-03-20T12:00:00Z"},
   "aircraft-motion": {latitude:53.7,longitude:-3.1,distanceKm:6413.137,pitch:0,bearing:0,fov:45,date:"2026-03-20T12:00:00Z"},
+  contrails: {latitude:53.7,longitude:-3.1,distanceKm:6395.137,pitch:0,bearing:0,fov:60,date:"2026-03-20T12:00:00Z"},
+  "contrails-clouds": {latitude:53.7,longitude:-3.1,distanceKm:6395.137,pitch:0,bearing:0,fov:60,date:"2026-03-20T12:00:00Z"},
   observed: {latitude:15,longitude:-100,distanceKm:23000,date:undefined},
   "observed-flight": {latitude:41.77,longitude:-52.2,distanceKm:6387.237,pitch:78,fov:62,date:"2026-03-20T15:30:00Z"},
   "observed-towers": {latitude:17.5,longitude:-35.3,distanceKm:6390.637,pitch:76,fov:62,date:"2026-03-20T16:30:00Z"},
@@ -125,10 +127,11 @@ export function GlobeVisualCheck() {
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
   const recordingRef=useRef<{recorder:MediaRecorder;stream:MediaStream;timer:ReturnType<typeof setTimeout>}|null>(null),captureRef=useRef("");
-  const trafficEpoch=useRef(0),trafficView=view==="traffic"||view==="aircraft"||view==="aircraft-motion";
+  const trafficEpoch=useRef(0),contrailView=view==="contrails"||view==="contrails-clouds",trafficView=view==="traffic"||view==="aircraft"||view==="aircraft-motion"||contrailView;
   useEffect(()=>{
-    if(view!=="aircraft-motion")return;
-    const timer=setInterval(()=>setMovingFlights(movingTrafficFixture(trafficEpoch.current,Math.floor((Date.now()-trafficEpoch.current)/5000)*5)),5000);
+    if(view!=="aircraft-motion"&&view!=="contrails"&&view!=="contrails-clouds")return;
+    const factory=view==="aircraft-motion"?movingTrafficFixture:contrailTrafficFixture;
+    const timer=setInterval(()=>setMovingFlights(factory(trafficEpoch.current,Math.floor((Date.now()-trafficEpoch.current)/5000)*5)),5000);
     return ()=>clearInterval(timer);
   },[view]);
   const cloudMode=view.startsWith("observed")?"satellite":coverageMode;
@@ -200,7 +203,7 @@ export function GlobeVisualCheck() {
       <div style={{ position: "absolute", inset: "112px 0 88px" }}>
         <BaRadarThreeGlobe
           key={`${view}-${revision}`}
-          flights={view==="aircraft-motion"?movingFlights:trafficView?TRAFFIC_FIXTURE:[]}
+          flights={view==="aircraft-motion"||contrailView?movingFlights:trafficView?TRAFFIC_FIXTURE:[]}
           selectedId={trafficView?trafficSelected:""}
           onSelect={setTrafficSelected}
           controllers={[]}
@@ -218,7 +221,7 @@ export function GlobeVisualCheck() {
             enhancedPresentation: false,
             hemisphere,debug:auroraDebug,
           }}
-          cloudsEnabled={clouds&&!trafficView}
+          cloudsEnabled={clouds&&(!trafficView||view==="contrails-clouds")}
           cloudData={data}
           cloudSettings={{
             ...createGlobeCloudSettings(),
@@ -232,7 +235,7 @@ export function GlobeVisualCheck() {
           testCloudCache={cache}
           testCameraMotion={motion}
           testView={selected}
-          testCloudProfile={view === "cumulus" ? { coverage: 0.58, baseKm: 1.2, topKm: 5 } : undefined}
+          testCloudProfile={view === "cumulus"||view==="contrails-clouds" ? { coverage: 0.58, baseKm: 1.2, topKm: 5 } : undefined}
         />
       </div>
       <nav
@@ -246,8 +249,9 @@ export function GlobeVisualCheck() {
             style={{ font: "12px Arial", padding: "5px 9px", color: "white", border: "1px solid #3f5e79", borderRadius: 3, background: view === name ? "#12639c" : "#10283c" }}
             onClick={() => {
               setView(name as keyof typeof views);
-              if(name==="aircraft"||name==="aircraft-motion")setTrafficSelected("qa-a380");
+              if(name==="aircraft"||name==="aircraft-motion"||name.startsWith("contrails"))setTrafficSelected("qa-a380");
               if(name==="aircraft-motion"){trafficEpoch.current=Date.now();setMovingFlights(movingTrafficFixture(trafficEpoch.current,0));}
+              if(name.startsWith("contrails")){trafficEpoch.current=Date.now();setMovingFlights(contrailTrafficFixture(trafficEpoch.current,0));}
               setRevision((value) => value + 1);
             }}
           >
@@ -270,7 +274,7 @@ export function GlobeVisualCheck() {
         <button onClick={record} disabled={recording}>{recording?"Recording…":`Record ${captureSeconds} s`}</button>
         {captureUrl?<a href={captureUrl} download={captureName} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
-          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : cloudMode==="forecast"?`GLOBAL GFS FORECAST · NOT SATELLITE OBSERVED · valid ${data?.forecast?data.validAt:"unavailable"}`:`Satellite: ${data?.satellite?.status==="ready"?data.validAt:"unknown"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · Sun: {selected.date??"live UTC"}
+          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus"||view==="contrails-clouds" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : cloudMode==="forecast"?`GLOBAL GFS FORECAST · NOT SATELLITE OBSERVED · valid ${data?.forecast?data.validAt:"unavailable"}`:`Satellite: ${data?.satellite?.status==="ready"?data.validAt:"unknown"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · Sun: {selected.date??"live UTC"}
         </span>
       </nav>
       <details style={{position:"absolute",left:12,top:152,zIndex:4,width:280,maxHeight:"calc(100% - 250px)",overflowY:"auto",background:"#0a1929ed",border:"1px solid #35516c",borderRadius:5,padding:10}}>

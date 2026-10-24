@@ -4,6 +4,57 @@
 `/api/health`: this update's `globeRevision` is `airframe-model-lods-v2-20261024` and
 `releaseCommit` reports the Render Git commit when available.
 
+## Cosmetic contrails
+
+Contrails are an optional visual effect, on by default with a **Contrails ·
+visual effect** checkbox in the globe caption. Formation does not depend on
+weather, satellite observations, humidity or temperature. Moving supported
+aircraft emit two or four streams from model-specific, approximately calibrated
+engine positions. As a cosmetic rule, emission requires engines running,
+airborne status and a displayed reported height of at least 6,000 m. Unknown
+airframes and scrubbed replay markers do not emit guessed engine trails.
+
+The existing buffered/smoothed aircraft pose drives each live tip. Available
+measured display history seeds the initial wake without inventing a straight
+line; stale/relocated/disconnected history is excluded. Older knots remain
+Earth-fixed. Shader-driven widening, soft billows, slow synthetic drift, solar
+tint, atmospheric haze and age fading give the effect its appearance. Bounded
+midpoint interpolation rounds the cosmetic wake without changing aircraft
+telemetry or stored tracks. Holds stop spawning; teleports, tab suspensions,
+emission gaps and missing flights cannot produce huge connecting streaks.
+
+Low / Medium / High / Ultra cap nearby selected-first aircraft at 4 / 8 / 16 /
+24 and lifetime at 18 / 30 / 45 / 60 seconds. Each aircraft has one reusable
+mesh/draw, at most 127 stored knots and twice-subdivided ribbon geometry for
+all engines. Knots update at 1 / 0.6 / 0.5 / 0.5 seconds, while only the live
+midpoint/tip uploads every frame. No added texture/model downloads, particle
+objects or per-frame React state updates are needed. Disabling the effect or
+downshifting quality releases allocations. Trails fade by 1,200 km range and
+never inherit the kilometre-sized display scale of distant aircraft markers.
+
+The separate transparent world-space pass respects terrain/airframe depth
+and the ellipsoid horizon. A bounded 3–8 foreground-cloud density probe on
+trail pixels approximates cloud occlusion; it is not a full scattering
+simulation. It does not add contrails to the main volume/shadow/depth field or
+invalidate its cache. Existing cloud appearance and source constraints remain
+unchanged. Close-up size boosts affect only the fresh visual engine attachment.
+
+Development-only `contrails` and `contrails-clouds` presets exercise two-/four-
+engine aircraft and a separately labelled synthetic cloud layer below them.
+No test aircraft enter the live feed/database. Automated checks include buffer
+reuse/limits, 30/60/144 fps, eligibility, smoothing history, removal/disposal,
+stale holds, teleports, engine counts and render-pass separation.
+
+Local verification: all 144 regression tests, TypeScript, changed-file ESLint
+and the production build pass. Browser QA checked the effect on/off (zero
+trail allocations when off), Low and High profiles, two/four engine streams,
+clouds below the aircraft and source switching including unknown satellite
+coverage. No shader errors were reported. The two-aircraft tests retained
+their 30 / 45 / 60 fps profile caps on this machine after loading; this is not
+a guarantee for heavy traffic or low-end hardware. The user approved release
+on 24 October 2026; confirm the deployed Git revision via `/api/health` →
+`releaseCommit`.
+
 ## Continuous live aircraft motion
 
 The globe no longer assigns a new transform only on the five-second API poll.
