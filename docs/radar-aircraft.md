@@ -4,6 +4,33 @@
 `/api/health`: this update's `globeRevision` is `airframe-model-lods-v2-20261024` and
 `releaseCommit` reports the Render Git commit when available.
 
+## Aircraft camera follow
+
+Click a 3D aircraft, then **Follow aircraft** in the globe caption. This is
+separate from the sidebar's existing **Follow flight** watchlist. It starts
+200 m aft / 250 m above the displayed aircraft and transports the current eye
+offset through its position, heading and altitude changes. Pan, look, wheel
+zoom and keyboard movement still adjust the view while following. **Stop
+following** or Escape releases the eye in place. Clearing/changing selection,
+opening replay, missing positions and simulator relocations stop follow;
+Reset view, Go to ground and the one-shot View aircraft action also exit it.
+
+The camera samples the same buffered display pose and frame time as the
+airframe, not raw five-second API positions. No additional playback delay,
+prediction, telemetry writes, per-frame React updates or render passes are
+introduced. Terrain clearance and existing cloud/quality controls remain in
+effect. A remounted globe starts with follow off.
+
+All 152 regression tests, TypeScript, changed-file ESLint and production build
+pass (the build retains nine existing filesystem-tracing warnings). Tests cover
+30/60/144 fps, real aircraft-layer sampling, stale holds, manual offsets,
+heading/dateline/polar crossings, invalid data, selection changes and jumps.
+Local browser state confirms active follow and Escape returning the control
+to Follow aircraft. Screenshot capture timed out, so visual framing and
+hardware frame-rate approval are not claimed. The user approved deployment
+on 24 October 2026; confirm the deployed revision via `/api/health` →
+`releaseCommit`.
+
 ## Cosmetic contrails
 
 Contrails are an optional visual effect, on by default with a **Contrails ·

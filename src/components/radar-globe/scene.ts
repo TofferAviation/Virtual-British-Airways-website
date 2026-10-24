@@ -35,6 +35,7 @@ import { contrailVertex, contrailFragment } from "./contrail-shaders";
 import { CONTRAIL_PROFILES } from "@/lib/radar-contrails";
 import { flightTrackGeometry } from "./flight-track";
 import { flightAltitudeMetres, type FlightTrackPoint } from "@/lib/radar-aircraft";
+import { AircraftFollow, aircraftChaseView, type AircraftFollowCamera } from "@/lib/radar-aircraft-follow";
 import { buildAuroraCurtains, updateAuroraCurtains } from "./aurora";
 import { auroraField } from "@/lib/radar-aurora-field";
 import { AdaptiveGlobeQuality, GLOBE_PROFILES, globeRenderSize, type GlobeQuality } from "@/lib/radar-globe-quality";
@@ -734,25 +735,42 @@ export function createGlobeScene(
     raycaster = new THREE.Raycaster();
   raycaster.layers.enable(6); // Pick enlarged 3D map markers as well as true-scale aircraft.
   const keys = new Set<string>();
+  const follow = new AircraftFollow();
+  const followChanged = (message="") => host.dispatchEvent(new CustomEvent("globe-follow-change", {detail:{id:follow.id,message}}));
+  const stopFollowing = (message="") => {
+    if(!follow.id)return;
+    follow.stop();followChanged(message);remember();
+  };
+  const followCamera = ():AircraftFollowCamera => ({latitude,longitude,heightKm:distance-WGS84_A_KM,bearing,pitch});
+  const frameAircraft = (view:AircraftFollowCamera) => {
+    ({latitude,longitude,bearing,pitch}=view);
+    targetDistance=distance=WGS84_A_KM+view.heightKm;
+    verticalVelocity=0;initialDescent=false;groundRequested=false;groundPitchTarget=null;
+    camera.fov=45;lastMotionAt=performance.now();orbit();remember();
+  };
+  const toggleFollow = () => {
+    const state=read(),now=performance.now();
+    if(follow.id===state.selectedId&&follow.id){stopFollowing();return;}
+    stopFollowing();
+    if(state.replay||!state.selectedId)return;
+    const view=follow.start(state.selectedId,aircraft.displayedPose(state.selectedId,now),now);
+    if(!view){followChanged("Aircraft position unavailable");return;}
+    keys.clear();frameAircraft(view);followChanged();
+  };
   const translate = (eastKm: number, northKm: number) => {
     ({ latitude, longitude } = globePanPosition(latitude, longitude, eastKm, northKm));
     lastMotionAt = performance.now();
     orbit();
   };
-  const resetView = () => { bearing = 0; pitch = 0; groundPitchTarget=null; lastMotionAt = performance.now(); remember(); };
+  const resetView = () => { stopFollowing();bearing = 0; pitch = 0; groundPitchTarget=null; lastMotionAt = performance.now(); remember(); };
   let groundRequested = false;
-  const groundView = () => { initialDescent=false;groundRequested=true; groundPitchTarget=88;maxDescentFrameFraction=0;cameraTrace.length=0; lastMotionAt=performance.now(); };
+  const groundView = () => { stopFollowing();initialDescent=false;groundRequested=true; groundPitchTarget=88;maxDescentFrameFraction=0;cameraTrace.length=0; lastMotionAt=performance.now(); };
   const aircraftView = () => {
     const state=read(),id=state.replay?`replay:${state.replay.id}`:state.selectedId;
     const p=aircraft.displayedPose(id)??state.replay?.points[state.replay.activeIndex]??state.flights.find(f=>f.id===state.selectedId)?.lastSnapshot;
     const metres=p?flightAltitudeMetres(p):null;
     if(!p||metres===null)return;
-    const heading=Number.isFinite(p.headingDeg)?p.headingDeg:0;
-    ({latitude,longitude}=globePanPosition(p.latitude,p.longitude,-.2*Math.sin(heading*Math.PI/180),-.2*Math.cos(heading*Math.PI/180)));
-    targetDistance=distance=WGS84_A_KM+metres/1000+.25;
-    verticalVelocity=0;initialDescent=false;groundRequested=false;groundPitchTarget=null;
-    pitch=Math.atan2(.2,.25)*180/Math.PI;bearing=heading;camera.fov=45;
-    lastMotionAt=performance.now();orbit();remember();
+    stopFollowing();frameAircraft(aircraftChaseView({...p,altitudeFt:metres/.3048,headingDeg:Number.isFinite(p.headingDeg)?p.headingDeg:0}));
   };
   const onDown = (event: PointerEvent) => {
     if (down) return;
@@ -847,6 +865,7 @@ export function createGlobeScene(
   const onKey = (event: KeyboardEvent) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.toLowerCase();
+    if(key==="escape"){stopFollowing();event.preventDefault();return;}
     if (["w", "a", "s", "d", "q", "e", "shift"].includes(key)) {
       keys.add(key); event.preventDefault(); return;
     }
@@ -888,6 +907,7 @@ export function createGlobeScene(
   canvas.addEventListener("globe-reset-view", resetView);
   canvas.addEventListener("globe-ground-view", groundView);
   canvas.addEventListener("globe-aircraft-view", aircraftView);
+  canvas.addEventListener("globe-aircraft-follow", toggleFollow);
   window.addEventListener("blur", stopInput);
   const resize = () => {
     camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
@@ -963,6 +983,22 @@ export function createGlobeScene(
     }
     const deltaSeconds = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
+    // Sync reports first, then sample follow and model motion at the same frame
+    // time. Camera follows the delayed display, never the raw polling position.
+    sync();
+    let followMoving=false;
+    if(follow.id){
+      const state=read(),id=state.replay?"":state.selectedId;
+      const priorHeight=distance-WGS84_A_KM,priorLatitude=latitude,priorLongitude=longitude,priorBearing=bearing;
+      const view=follow.advance(id,aircraft.displayedPose(id,now),followCamera(),now);
+      if(view){
+        ({latitude,longitude,bearing,pitch}=view);
+        const heightChange=view.heightKm-priorHeight;
+        distance+=heightChange;targetDistance+=heightChange;
+        followMoving=latitude!==priorLatitude||longitude!==priorLongitude||bearing!==priorBearing||Math.abs(heightChange)>1e-9;
+        if(followMoving)orbit();
+      }else{followChanged(id?"Follow stopped · aircraft unavailable or relocated":"");remember();}
+    }
     const testingMotion = process.env.NODE_ENV !== "production" && Boolean(read().testCameraMotion);
     const ground = surface.heightAt(latitude,longitude);
     const clearance = distance-WGS84_A_KM-ground.heightKm;
@@ -1008,7 +1044,6 @@ export function createGlobeScene(
     earth.position.set(...geodeticToWorld(latitude,longitude,height*1000)).applyQuaternion(earth.quaternion).negate();
     camera.up.set(Math.sin(yaw) * Math.cos(tilt), Math.cos(yaw) * Math.cos(tilt), Math.sin(tilt));
     camera.lookAt(Math.sin(yaw) * Math.sin(tilt) * 1000, Math.cos(yaw) * Math.sin(tilt) * 1000, camera.position.z - Math.cos(tilt) * 1000);
-    sync();
     auroraMaterial.uniforms.uAuroraTime.value=advanceAuroraTime(auroraMaterial.uniforms.uAuroraTime.value,deltaSeconds,read().auroraSettings.animationSpeed);
     shared.uTime.value = (now - started) / 1000;
     if (now - lastSunUpdate > 1000) {
@@ -1049,7 +1084,7 @@ export function createGlobeScene(
     contrails.update(read().contrailsEnabled===false?[]:aircraft.contrailSources,shared.uCamera.value,now,effectiveQuality,read().contrailsEnabled!==false);
     aircraftSun.position.copy(shared.uSun.value).multiplyScalar(10000);
     aircraftSun.intensity=read().dayNightEnabled?Math.max(.08,2.4*Math.max(0,shared.uSun.value.dot(shared.uCamera.value.clone().normalize()))):2.4;
-    const moving = aircraft.physicalMoving || (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
+    const moving = followMoving || aircraft.physicalMoving || (down && moved > 2) || keys.size > 0 || testingMotion || now - lastMotionAt < 180 || Math.abs(distance - targetDistance) > 0.01;
     const cloudSize = movingCloudSize(cloudTarget.width, cloudTarget.height, moving, effectiveQuality === "low");
     const shadowWidth = Math.max(1, Math.floor(cloudSize.width / 2)), shadowHeight = Math.max(1, Math.floor(cloudSize.height / 2));
     cloudTarget.viewport.set(0, 0, cloudSize.width, cloudSize.height);
@@ -1149,6 +1184,7 @@ export function createGlobeScene(
         triangles: renderer.info.render.triangles,
         traffic: aircraft.stats,
         contrails:contrails.stats,
+        followingAircraft:follow.id||null,
         clouds: cloudMesh.visible,
         cloudPrograms,
         cloudRenderer: forecastPixels.size?FORECAST_CLOUD_REVISION:ACCEPTED_CLOUD_REVISION,
@@ -1213,6 +1249,7 @@ export function createGlobeScene(
     canvas.removeEventListener("globe-reset-view", resetView);
     canvas.removeEventListener("globe-ground-view", groundView);
     canvas.removeEventListener("globe-aircraft-view", aircraftView);
+    canvas.removeEventListener("globe-aircraft-follow", toggleFollow);
     window.removeEventListener("blur", stopInput);
     surface.dispose();
     clearGroup(curtains);
