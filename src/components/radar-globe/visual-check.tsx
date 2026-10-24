@@ -14,6 +14,10 @@ import { unpackCloudData } from "@/lib/radar-cloud-transport";
 import { TRAFFIC_FIXTURE } from "./traffic-fixture";
 
 const views = {
+  "forecast-europe": {latitude:51,longitude:2,distanceKm:19000,date:"2026-03-20T11:00:00Z"},
+  "forecast-asia": {latitude:30,longitude:110,distanceKm:19000,date:"2026-03-20T05:00:00Z"},
+  "forecast-flight": {latitude:54,longitude:9,distanceKm:6382.937,pitch:76,bearing:10,fov:62,date:"2026-03-20T12:30:00Z"},
+  "forecast-overcast": {latitude:46,longitude:0,distanceKm:6384.637,pitch:80,bearing:0,fov:62,date:"2026-03-20T14:30:00Z"},
   traffic: {latitude:53,longitude:-2,distanceKm:6778.137,pitch:30,fov:45,date:"2026-03-20T12:00:00Z"},
   aircraft: {latitude:53.7482,longitude:-3.1,distanceKm:6389.3598,pitch:38.66,bearing:0,fov:45,date:"2026-03-20T12:00:00Z"},
   observed: {latitude:15,longitude:-100,distanceKm:23000,date:undefined},
@@ -102,6 +106,7 @@ export function GlobeVisualCheck() {
     [aurora, setAurora] = useState<RadarAuroraData | null>(null),
     [clouds, setClouds] = useState(true),
     [quality, setQuality] = useState<GlobeQualityRequest>("auto"),
+    [coverageMode,setCoverageMode]=useState<"satellite"|"forecast">("forecast"),
     [cache, setCache] = useState(true),
     [motion, setMotion] = useState(false),
     [auroraDebug,setAuroraDebug]=useState<AuroraSettings["debug"]>("off"),
@@ -117,6 +122,7 @@ export function GlobeVisualCheck() {
     [errors, setErrors] = useState<string[]>([]),
     [diagnostics, setDiagnostics] = useState("");
   const recordingRef=useRef<{recorder:MediaRecorder;stream:MediaStream;timer:ReturnType<typeof setTimeout>}|null>(null),captureRef=useRef("");
+  const cloudMode=view.startsWith("observed")?"satellite":coverageMode;
   useEffect(()=>()=>{const active=recordingRef.current;if(active){clearTimeout(active.timer);if(active.recorder.state!=="inactive")active.recorder.stop();active.stream.getTracks().forEach(t=>t.stop());}if(captureRef.current)URL.revokeObjectURL(captureRef.current);},[]);
   const record=()=>{
     const canvas=document.querySelector<HTMLCanvasElement>(".ba-radar-globe-three-canvas");
@@ -130,11 +136,16 @@ export function GlobeVisualCheck() {
     }catch(e){setErrors(v=>[...v,String(e)]);}
   };
   useEffect(() => {
-    const refreshClouds=()=>void fetch("/api/radar/clouds",{cache:"no-store"})
-      .then((r) => r.json())
-      .then(async (data: RadarCloudData) => setData(await unpackCloudData(data)))
-      .catch((e) => {setData(null);setErrors((v) => [...v.slice(-7), String(e)]);});
-    refreshClouds();const cloudTimer=setInterval(refreshClouds,60_000);
+    let active=true;
+    let etag="";
+    const refreshClouds=()=>void fetch(`/api/radar/clouds?mode=${cloudMode}`,{cache:"no-store",headers:etag?{"If-None-Match":etag}:{}})
+      .then(async r=>{if(r.status===304)return null;if(!r.ok)throw Error("Cloud feed unavailable");const data=await r.json() as RadarCloudData;etag=r.headers.get("etag")??"";return data;})
+      .then(async (data: RadarCloudData|null) => {if(!data)return;const unpacked=await unpackCloudData(data);if(active)setData(unpacked);})
+      .catch((e) => {if(active){etag="";setData(null);setErrors((v) => [...v.slice(-7), String(e)]);}});
+    refreshClouds();const cloudTimer=setInterval(refreshClouds,cloudMode==="forecast"?300_000:60_000);
+    return ()=>{active=false;clearInterval(cloudTimer);};
+  },[cloudMode]);
+  useEffect(() => {
     const refreshAurora=()=>void fetch("/api/radar/aurora").then(r=>r.json()).then(setAurora).catch(()=>{});
     refreshAurora();const auroraTimer=setInterval(refreshAurora,300000);
     const handler = (event: Event) =>
@@ -150,7 +161,6 @@ export function GlobeVisualCheck() {
     );
     return () => {
       clearInterval(timer);
-      clearInterval(cloudTimer);
       clearInterval(auroraTimer);
       window.removeEventListener("globe-shader-error", handler);
     };
@@ -203,6 +213,7 @@ export function GlobeVisualCheck() {
           cloudData={data}
           cloudSettings={{
             ...createGlobeCloudSettings(),
+            coverageMode:cloudMode,
             quality,
           }}
           dayNightEnabled
@@ -236,6 +247,7 @@ export function GlobeVisualCheck() {
           Clouds {clouds ? "on" : "off"}
         </button>
         <label style={{fontSize: 12}}>Globe quality {" "}<select aria-label="Globe quality" value={quality} onChange={e => setQuality(e.target.value as GlobeQualityRequest)}>{["auto", "low", "medium", "high", "ultra"].map(q => <option key={q} value={q}>{q}</option>)}</select></label>
+        <label style={{fontSize:12}}>Cloud source <select aria-label="Cloud source" value={cloudMode} disabled={view.startsWith("observed")} onChange={e=>{setData(null);setCoverageMode(e.target.value as "satellite"|"forecast");}}><option value="forecast">Global forecast · not observed</option><option value="satellite">Satellite Live</option></select></label>
         <label style={{fontSize: 12}}><input type="checkbox" checked={cache} onChange={e => setCache(e.target.checked)} />Cloud cache</label>
         <label style={{fontSize: 12}}><input type="checkbox" checked={motion} onChange={e => setMotion(e.target.checked)} />Motion test</label>
         <label>Aurora view <select aria-label="Aurora view" value={auroraDebug} onChange={e=>setAuroraDebug(e.target.value as AuroraSettings["debug"])}><option value="off">Curtains</option><option value="field">NOAA heatmap</option><option value="altitude">Altitude 95–450 km</option></select></label>
@@ -247,7 +259,7 @@ export function GlobeVisualCheck() {
         <button onClick={record} disabled={recording}>{recording?"Recording…":`Record ${captureSeconds} s`}</button>
         {captureUrl?<a href={captureUrl} download={captureName} style={{color:"#94d4ff"}}>Save orbital capture</a>:null}
         <span style={{flexBasis: "100%", fontSize: 11, color: view === "cumulus" ? "#ffce74" : "#9ab7ce"}}>
-          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : `Satellite: ${data?.satellite?.status==="ready"?data.validAt:"unknown"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · Sun: {selected.date??"live UTC"}
+          {auroraKpOverride(photo)!==null?`MANUAL KP ${auroraKpOverride(photo)} SIMULATION — NOT LIVE NOAA · `:""}{photo.photoMode?"SCREENSHOT COLOUR OVERRIDE · ":""}{auroraKpOverride(photo)===null&&auroraCase!=="live"?`SYNTHETIC AURORA ${auroraCase.toUpperCase()} — NOT LIVE NOAA · `:""}{view === "cumulus" ? "SYNTHETIC CUMULUS CALIBRATION — not live weather" : cloudMode==="forecast"?`GLOBAL GFS FORECAST · NOT SATELLITE OBSERVED · valid ${data?.forecast?data.validAt:"unavailable"}`:`Satellite: ${data?.satellite?.status==="ready"?data.validAt:"unknown"} · NOAA feed valid: ${displayAurora?.forecastAt ?? "loading"}`} · Sun: {selected.date??"live UTC"}
         </span>
       </nav>
       <details style={{position:"absolute",left:12,top:152,zIndex:4,width:280,maxHeight:"calc(100% - 250px)",overflowY:"auto",background:"#0a1929ed",border:"1px solid #35516c",borderRadius:5,padding:10}}>

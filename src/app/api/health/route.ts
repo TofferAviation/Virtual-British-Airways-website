@@ -133,7 +133,7 @@ export async function GET() {
     // release Render is actually serving, without exposing any secret.
     revision: "fleet-dependency-check-v1",
     globeRevision: "aircraft-altitude-v1-20261024",
-    globeCloudRevision: "smooth-cloud-masses-v5.1-10km",
+    globeCloudRevision: "dual-source-forecast-billows-v1.1",
     releaseCommit: process.env.RENDER_GIT_COMMIT?.match(/^[a-f0-9]{40}$/i)?.[0] ?? null,
     staffAuthConfigured: Boolean(
       process.env.BAV_STAFF_SESSION_SECRET &&

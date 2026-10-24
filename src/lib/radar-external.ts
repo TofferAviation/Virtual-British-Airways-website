@@ -63,8 +63,8 @@ export type RadarWindGrid = {
 };
 
 /**
- * Legacy forecast-layer contract retained for development calibration and the
- * older map renderer. These fields do not grant cloud support in Live mode;
+ * Explicit forecast-layer contract, also used for development calibration and
+ * the older map renderer. These fields do not grant cloud support in Live mode;
  * the satellite observation contract below is authoritative there.
  */
 export type RadarCloudLayerId = "low" | "middle" | "high";
@@ -82,6 +82,14 @@ export type RadarCloudLayer = {
 
 export type RadarCloudData = {
   source: "NOAA GFS" | "NOAA GOES ABI";
+  /** Explicit alternative to observed Live mode; never merged into its mask. */
+  forecast?: {
+    mode: "global-forecast";
+    model: "GFS";
+    forecastHour: number;
+    sourceUrl: string;
+    layerBounds: "time-averaged-pressure-interpolated-height";
+  };
   /** Required by Live mode; absence never permits forecast/procedural coverage. */
   satellite?: SatelliteCloudObservation;
   sourceResolutionDeg: number;

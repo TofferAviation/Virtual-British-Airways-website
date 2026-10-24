@@ -56,7 +56,7 @@ export function BaRadarThreeGlobe(props: GlobeSceneState & { compactControls?: b
         <strong>Earth · WGS84</strong>
         {aircraftName?<><span>{aircraftModel?`${aircraftModel.label}${aircraftModel.match==="family"?" · family substitute":""} · house livery`:`${aircraftName} · generic aircraft marker`}</span><button type="button" style={{pointerEvents:"auto",font:"10px Arial",padding:"4px 7px",color:"#d7ebff",background:"#12344b",border:"1px solid #4982a6",borderRadius:3}} onClick={()=>container.current?.querySelector("canvas")?.dispatchEvent(new Event("globe-aircraft-view"))}>View aircraft · reported altitude</button></>:null}
         {props.cloudsEnabled?<span>{cloudCoverageLabel}</span>:null}
-        {props.cloudsEnabled&&!props.testCloudProfile?<span style={{color:"#eacb8a"}}>Reconstructed cloud edges · uncertainty band ≤10 km</span>:null}
+        {props.cloudsEnabled&&!props.testCloudProfile?<span style={{color:"#eacb8a"}}>{props.cloudSettings.coverageMode==="forecast"?"GLOBAL FORECAST · modelled clouds, not satellite observed":"Reconstructed cloud edges · uncertainty band ≤10 km"}</span>:null}
         {props.auroraEnabled&&auroraKpOverride(props.auroraSettings)!==null?<strong style={{color:"#ffcf83"}}>SIMULATION · manual Kp {auroraKpOverride(props.auroraSettings)} · not live NOAA</strong>:null}
         <details className="ba-radar-globe-help" open={!props.compactControls}>
         <summary>Camera controls &amp; sources</summary>

@@ -1,6 +1,7 @@
 import { auroraShapeGLSL, auroraRayGLSL } from "@/lib/radar-aurora-shape";
 import { auroraPhotoGLSL } from "@/lib/radar-aurora-photo";
 import { acceptedCloudAppearanceGLSL } from "./cloud-appearance";
+import { forecastCloudAppearanceGLSL } from "./forecast-cloud-appearance";
 import { satelliteCloudAdapterGLSL } from "./satellite-cloud-adapter";
 
 // All positions are Earth-fixed kilometres. Weather uses north-first rows,
@@ -69,7 +70,11 @@ const float CLOUD_EXTINCTION=25.0;
 // The accepted appearance kernel has no satellite-specific branches.
 ${acceptedCloudAppearanceGLSL}
 #ifndef BAV_FORECAST_CALIBRATION
+#ifdef BAV_GLOBAL_FORECAST
+${forecastCloudAppearanceGLSL}
+#else
 ${satelliteCloudAdapterGLSL}
+#endif
 #endif
 float densityAtDetail(vec3 p,bool fineDetail){
   if(uClouds<0.5)return 0.0;
@@ -81,6 +86,9 @@ float densityAtDetail(vec3 p,bool fineDetail){
   vec2 uv=geographicUV(p);
   float low=uLayers.x>0.5?layerCloud(weatherAt(uLowWeather,uv),p,h,0.0,fineDetail):0.0;
   return low;
+#elif defined(BAV_GLOBAL_FORECAST)
+  if(uSatelliteMode>0.5)return 0.0;
+  return forecastDensity(p,h,fineDetail);
 #else
   if(uSatelliteMode>0.5)return satelliteDensity(p,h,fineDetail);
   return 0.0;

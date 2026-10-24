@@ -14,6 +14,8 @@ import { SATELLITE_MAX_AGE_MS, satelliteGridIndex } from "@/lib/radar-satellite-
 import { buildSatelliteRenderTexture, observedCloudDistance } from "@/lib/radar-satellite-render";
 import { CLOUD_BOUNDARY_BAND_KM, sampleCloudFootprint, type CloudFootprint, type CloudFootprintResponse } from "@/lib/radar-cloud-footprint";
 import { ACCEPTED_CLOUD_REVISION } from "./cloud-appearance";
+import { FORECAST_CLOUD_REVISION } from "./forecast-cloud-appearance";
+import { FORECAST_MAX_AGE_MS } from "@/lib/radar-cloud-forecast";
 import {
   WGS84_A_KM,
   WGS84_B_KM,
@@ -266,20 +268,25 @@ export function createGlobeScene(
     shared.uLowWeather.value = testCloudTexture;
     shared.uSatelliteMode.value=0; // Explicitly labelled development calibration only.
   }
+  let materialForecast=read().cloudSettings.coverageMode==="forecast";
+  const cloudSourceMaterials:THREE.ShaderMaterial[]=[];
   const material = (
     vertexShader: string,
     fragmentShader: string,
     uniforms: Record<string, THREE.IUniform> = {},
-  ) =>
-    new THREE.ShaderMaterial({
+  ) => {
+    const shader=new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
-      // Live programs contain only observed reconstruction, not three unused
-      // forecast density trees at every lighting probe. Calibration is QA-only.
-      defines: testProfile ? { BAV_FORECAST_CALIBRATION: 1 } : {},
+      // Compile only the selected source: observed constraints OR global
+      // model layers. Calibration remains an explicit QA-only third variant.
+      defines: testProfile ? { BAV_FORECAST_CALIBRATION: 1 } : materialForecast ? { BAV_GLOBAL_FORECAST: 1 } : {},
       uniforms: { ...shared, ...uniforms },
       vertexShader,
       fragmentShader,
     });
+    cloudSourceMaterials.push(shader);
+    return shader;
+  };
   const surface = new GlobeSurface(
     (texture, night) =>
       material(surfaceVertex, surfaceFragment, {
@@ -506,6 +513,8 @@ export function createGlobeScene(
     lastAurora: RadarAuroraData | null = null,
     lastQuality = "";
   const weatherTextures: THREE.Texture[] = [];
+  let forecastValidUntil=0;
+  const forecastPixels=new Map<string,Uint8Array>();
   let weatherRevision = 0;
   let footprintWorker: Worker | null = null, footprintPending = false, footprintError = "", footprintLobes = 0;
   let footprintSize: [number,number] = [0,0];
@@ -544,6 +553,16 @@ export function createGlobeScene(
   let satelliteReceivedAt=0,satelliteValidUntil=0,satellitePixels:Uint8Array|null=null,satelliteRevision="";
   const sync = () => {
     const state = read();
+    const nextForecast=state.cloudSettings.coverageMode==="forecast";
+    if(!testProfile&&nextForecast!==materialForecast){
+      materialForecast=nextForecast;
+      for(const shader of cloudSourceMaterials){
+        if(nextForecast)shader.defines.BAV_GLOBAL_FORECAST=1;
+        else delete shader.defines.BAV_GLOBAL_FORECAST;
+        shader.needsUpdate=true;
+      }
+      cloudCompileRevision++;cloudPrograms="idle";cloudCache.invalidate();
+    }
     if (
       state.flights !== lastFlights ||
       state.controllers !== lastControllers ||
@@ -562,7 +581,8 @@ export function createGlobeScene(
     ) {
       lastData = state.cloudData;
       const d=state.cloudData,s=d?.satellite;
-      const revision=s?.status==="ready"?(s.revision??`${s.current.observedAt}/${s.current.sources.map(x=>x.mask).join("/")}/${s.winds?.validAt}`):"";
+      const forecast=materialForecast&&d?.source==="NOAA GFS"&&d.forecast?.mode==="global-forecast";
+      const revision=forecast?`forecast:${d.forecast!.sourceUrl}/${d.fetchedAt}`:s?.status==="ready"?(s.revision??`${s.current.observedAt}/${s.current.sources.map(x=>x.mask).join("/")}/${s.winds?.validAt}`):"";
       if(revision!==satelliteRevision) {
       satelliteRevision=revision;
       weatherRevision++;
@@ -572,8 +592,21 @@ export function createGlobeScene(
       footprintPending=false;footprintError="";footprintSize=[0,0];footprintLobes=0;
       footprintField=null;footprintUsesCurrentHistory=false;
       satellitePixels=null;satelliteValidUntil=0;
+      forecastPixels.clear();forecastValidUntil=0;
+      if(forecast){footprintWorker?.terminate();footprintWorker=null;}
+      shared.uLowWeather.value=shared.uMiddleWeather.value=shared.uHighWeather.value=fallback;
+      shared.uSatelliteMode.value=1;
       weatherTextures.splice(0).forEach((texture) => texture.dispose());
-      if(d?.source==="NOAA GOES ABI"&&d.encoding==="rgba8-base64"&&s?.status==="ready") {
+      if(forecast&&d.encoding==="rgba8-base64"&&!d.stale&&d.layers.length===3&&Date.now()-Date.parse(d.validAt)<FORECAST_MAX_AGE_MS){
+        for(const layer of d.layers){
+          const texture=decodeTexture(d,layer.volume);
+          weatherTextures.push(texture);forecastPixels.set(layer.id,texture.image.data as Uint8Array);
+          shared[layer.id==="low"?"uLowWeather":layer.id==="middle"?"uMiddleWeather":"uHighWeather"].value=texture;
+        }
+        forecastValidUntil=Date.parse(d.validAt)+FORECAST_MAX_AGE_MS;
+        shared.uSatelliteMode.value=0;
+      }
+      if(!materialForecast&&d?.source==="NOAA GOES ABI"&&d.encoding==="rgba8-base64"&&s?.status==="ready") {
         const current=decodeTexture(d,s.current.volume,true),previous=s.previous?decodeTexture(d,s.previous.volume,true):current,motion=decodeTexture(d,s.motion,true);
         // History supplies R/B properties only, never the current support.
         const shapePrevious=previous===current?null:satelliteShapeTexture(d,previous,false);
@@ -628,9 +661,10 @@ export function createGlobeScene(
     auroraMaterial.uniforms.uAuroraBlend.value=Math.min(1,(performance.now()-auroraTransitionAt)/12000);
     auroraMaterial.uniforms.uAuroraDebug.value=state.auroraSettings.debug==="altitude"?2:0;
     auroraMaterial.uniforms.uHemisphere.value=state.auroraSettings.hemisphere==="north"?1:state.auroraSettings.hemisphere==="south"?-1:0;
-    const cloudsRequested = state.cloudsEnabled && state.cloudSettings.realWorld && (!!testProfile || (satellitePixels!==null&&Date.now()<satelliteValidUntil));
+    const forecastReady=forecastPixels.size===3&&Date.now()<forecastValidUntil;
+    const cloudsRequested = state.cloudsEnabled && state.cloudSettings.realWorld && (!!testProfile || forecastReady || (satellitePixels!==null&&Date.now()<satelliteValidUntil));
     if (cloudsRequested) prepareCloudPrograms();
-    cloudMesh.visible = cloudsRequested && cloudPrograms === "ready" && (!!testProfile || shared.uSatelliteFootprintReady.value > .5);
+    cloudMesh.visible = cloudsRequested && cloudPrograms === "ready" && (!!testProfile || forecastReady || shared.uSatelliteFootprintReady.value > .5);
     if (cloudsRequested && (cloudPrograms !== "ready" || footprintPending || footprintError)) host.dataset.globeStatus = footprintError ? "Cloud formations could not reconstruct — reload or switch to 2D" : cloudPrograms === "failed" ? "Cloud graphics could not start — reload or switch to 2D" : footprintPending ? "Reconstructing observed cloud formations…" : "Preparing cloud graphics…";
     else if (!contextLost) delete host.dataset.globeStatus;
     shared.uObservationBlend.value=Math.min(1,Math.max(0,(performance.now()-satelliteReceivedAt)/12000));
@@ -1086,11 +1120,11 @@ export function createGlobeScene(
         traffic: aircraft.stats,
         clouds: cloudMesh.visible,
         cloudPrograms,
-        cloudRenderer: ACCEPTED_CLOUD_REVISION,
-        cloudSupport: "smooth-cloud-masses-v5.1-10km",
+        cloudRenderer: forecastPixels.size?FORECAST_CLOUD_REVISION:ACCEPTED_CLOUD_REVISION,
+        cloudSupport: forecastPixels.size?"global GFS layers · estimated geometry":"smooth-cloud-masses-v5.1-10km",
         cloudFootprint: { pending: footprintPending, error: footprintError, size: footprintSize, lobes: footprintLobes, boundaryBandKm: CLOUD_BOUNDARY_BAND_KM },
-        cloudSource: testProfile?"synthetic-calibration":satellitePixels&&Date.now()<satelliteValidUntil?"satellite-observed":"unknown",
-        cloudBelowCamera: testProfile?"synthetic":satellitePixels&&Date.now()<satelliteValidUntil&&read().cloudData?(()=>{const data=read().cloudData!,u=(longitude+180)/360,v=(90-latitude)/180;const flag=satellitePixels![satelliteGridIndex(latitude,longitude,data.width,data.height)*4+3]??0;const usable=((flag&7)===3||(flag&7)===4)&&!(flag&24);if(!usable&&footprintField&&sampleCloudFootprint(footprintField,u,v)>128&&observedCloudDistance(satellitePixels!,data.width,data.height,u,v)<CLOUD_BOUNDARY_BAND_KM)return "estimated boundary fringe (≤10 km); not directly observed";return (flag&7)>=3&&(flag&24)?"cloud detected; volume unknown (missing optical depth/top)":(["unknown","clear","uncertain","probably cloudy","observed cloudy"][flag&7]??"unknown");})():"unknown",
+        cloudSource: testProfile?"synthetic-calibration":forecastPixels.size&&Date.now()<forecastValidUntil?"global-forecast":satellitePixels&&Date.now()<satelliteValidUntil?"satellite-observed":"unknown",
+        cloudBelowCamera: testProfile?"synthetic":forecastPixels.size&&Date.now()<forecastValidUntil&&read().cloudData?(()=>{const d=read().cloudData!,i=satelliteGridIndex(latitude,longitude,d.width,d.height)*4;return "GFS forecast · "+[...forecastPixels].map(([id,bytes])=>`${id}: ${bytes[i+3]?Math.round(bytes[i]/255*100)+"%":"unknown"}`).join(" · ");})():satellitePixels&&Date.now()<satelliteValidUntil&&read().cloudData?(()=>{const data=read().cloudData!,u=(longitude+180)/360,v=(90-latitude)/180;const flag=satellitePixels![satelliteGridIndex(latitude,longitude,data.width,data.height)*4+3]??0;const usable=((flag&7)===3||(flag&7)===4)&&!(flag&24);if(!usable&&footprintField&&sampleCloudFootprint(footprintField,u,v)>128&&observedCloudDistance(satellitePixels!,data.width,data.height,u,v)<CLOUD_BOUNDARY_BAND_KM)return "estimated boundary fringe (≤10 km); not directly observed";return (flag&7)>=3&&(flag&24)?"cloud detected; volume unknown (missing optical depth/top)":(["unknown","clear","uncertain","probably cloudy","observed cloudy"][flag&7]??"unknown");})():"unknown",
         aurora: curtains.visible,
         auroraForecast:appliedForecast,
         auroraObserved:appliedObservation,

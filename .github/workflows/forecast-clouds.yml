@@ -1,0 +1,39 @@
+name: Global cloud forecast
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/forecast-clouds.yml
+      - scripts/ingest-forecast-clouds.mjs
+      - scripts/publish-forecast-clouds.mjs
+      - src/lib/radar-cloud-forecast*
+      - package-lock.json
+  workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: bav-global-cloud-forecast
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'TofferAviation/Virtual-British-Airways-website' && github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts
+      - run: node --test src/lib/radar-cloud-forecast.test.mjs
+      - run: npm run clouds:forecast
+      - name: Replace the generated MODEL feed (never the satellite feed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-forecast-clouds.mjs

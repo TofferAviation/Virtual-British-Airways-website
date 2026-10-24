@@ -349,7 +349,8 @@ test("one shared observation adapter governs volume and ground shadows; calibrat
   assert.match(shader,/tau\+=densityAt\(p\+uSun/);
   assert.match(shader,/#ifdef BAV_FORECAST_CALIBRATION/);
   assert.match(shader,/#else\s+if\(uSatelliteMode>0.5\)return satelliteDensity\(p,h,fineDetail\);\s+return 0\.0;/);
+  assert.match(shader,/#ifdef BAV_GLOBAL_FORECAST\s+\$\{forecastCloudAppearanceGLSL\}/);
   const scene=await readFile(new URL("../components/radar-globe/scene.ts",import.meta.url),"utf8");
   assert.match(scene,/process\.env\.NODE_ENV !== "production" \? read\(\)\.testCloudProfile : undefined/);
-  assert.match(scene,/cloudRenderer: ACCEPTED_CLOUD_REVISION/);
+  assert.match(scene,/cloudRenderer: forecastPixels.size\?FORECAST_CLOUD_REVISION:ACCEPTED_CLOUD_REVISION/);
 });

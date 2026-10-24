@@ -7,6 +7,7 @@ export type CloudDebugMode = "lit" | "coverage" | "density" | "height" | "lighti
 
 export type CloudSettings = {
   realWorld: boolean;
+  coverageMode?: "satellite" | "forecast";
   opacity: number;
   quality: CloudQuality;
   low: boolean;

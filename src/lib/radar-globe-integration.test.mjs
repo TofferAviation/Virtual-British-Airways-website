@@ -10,7 +10,7 @@ const settingsSource = (await read("src/lib/radar-globe-settings.ts")).replace('
 const compiled = ts.transpileModule(settingsSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
 const {createGlobeAuroraSettings,createGlobeCloudSettings}=await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
-test("website and QA defaults retain the accepted look without enabling simulations",()=>{
+test("website and QA retain aurora defaults and explicitly select the approved global forecast",()=>{
   const aurora=createGlobeAuroraSettings(),clouds=createGlobeCloudSettings();
   assert.equal(aurora.animationSpeed,.3);
   assert.equal(aurora.quality,"auto");
@@ -20,6 +20,7 @@ test("website and QA defaults retain the accepted look without enabling simulati
   assert.equal(aurora.hemisphere,"both");
   assert.equal(clouds.quality,"auto");
   assert.equal(clouds.opacity,.65);
+  assert.equal(clouds.coverageMode,"forecast");
   for(const key of ["low","middle","high","selfShadows","realWorld"])assert.equal(clouds[key],true);
   aurora.kpOverrideEnabled=true;aurora.photoMode=true;clouds.opacity=.2;
   assert.equal(createGlobeAuroraSettings().kpOverrideEnabled,false);

@@ -1,5 +1,101 @@
 # Satellite-observed Live clouds
 
+## Explicit global forecast alternative, 24 October 2026
+
+The user approved **labelled global forecast coverage** as an alternative to
+satellite-only Live. The globe now defaults to `Global forecast · modelled`;
+the selector also retains `Live · satellite observations`. The existing
+`/api/radar/clouds` endpoint still defaults to satellite-only for compatibility.
+Only `?mode=forecast` requests the separate GFS artifact/cache. Neither source
+falls back to the other. The rules below still apply unchanged to satellite
+Live; they do not describe the explicitly selected model mode.
+
+Global mode uses actual NOAA 0.25° LCDC/MCDC/HCDC fractions and the same cycle's
+time-averaged low/middle/high cloud-boundary PRES fields. Boundary pressures
+are mapped through the model's 1000/925/850/700/500/300/200/100 hPa HGT profile
+using log-pressure interpolation (limited surface extrapolation above 1000 hPa).
+Bases are constrained above model terrain. This estimates layer height, not
+observed cloud base, hidden layers or instantaneous geometric cloud tops.
+North-up, longitude-adjusted 1440×721 point data is resampled at cell centres
+into 1440×720 textures, wrapping longitude without duplicated polar rows.
+Missing/inverted source bounds remain unknown; they are not manufactured clear.
+
+`forecast-billows-v1.1` is a separate appearance module. Coherent organisation,
+nonlinear areal-cover calibration, rounded variable-height canopies, merged
+shallow overcast decks, filtered edge erosion and thin high fibres create
+estimated three-dimensional formations. Actual weather fields are unchanged
+by visual calibration. Optical density, billows and cloud type are estimated;
+this is not measured cloud microphysics or a match to an individual simulator.
+Overlapping time-averaged layers use the dominant fraction at the sample's
+height, avoiding double-counted density and three noise trees per light probe.
+Sub-grid structures are stationary between model revisions; no simulated
+fluid dynamics or wind-advection accuracy is claimed.
+
+Forecast and observed shaders compile as separate variants. The selected mode
+alone is prepared asynchronously; changing source invalidates old textures and
+cached frames. Existing adaptive resolution/LOD, empty-space skipping, early
+opaque termination, illumination reuse, reduced-resolution ground shadows and
+frame reuse remain. Global mode needs three RGBA8 weather textures (~11.9 MiB),
+not the satellite footprint worker/derived edge textures. Rendering 60 cached
+frames is not proof of a 60 fps full-volume workload.
+
+Run `npm run clouds:forecast` to generate the local ignored artifact at
+`.bav-data/forecast-clouds/latest.json` (`BAV_FORECAST_CLOUD_FILE` overrides it).
+It downloads bounded NOAA index/GRIB byte ranges, validates grids, coordinates,
+units, cycle and interval ends, then atomically replaces that generated file.
+The web request never decodes GRIB. A local preparation peaked around 298 MiB
+RSS; that is ingestion-process memory, not viewer memory. Source requests are
+sequential/bounded; no entire ~500 MB model file is downloaded.
+
+The new, separately scoped `Global cloud forecast` workflow is prepared to run
+hourly on a standard public-repository runner and publish only `latest.json.gz`
+in the marked `bav-global-forecast-v1` prerelease. It cannot overwrite the
+satellite release or an ordinary application release. The feed reader limits
+compressed input to 8 MiB and JSON to 24 MiB, validates provenance and all
+columns, and shares its in-flight fetch/cache. Global polling is five minutes;
+the hosted reader caches for ten minutes and rechecks age on every return.
+Conditional ETag refreshes return an empty 304 before transport compression;
+the client skips repeated downloading/decompression of an unchanged field.
+Forecasts expire six hours after valid time (cycles older than 24 hours are
+rejected). An outage never substitutes random weather or stale model coverage.
+This adds no paid host/worker, database schema or pilot-data processing.
+
+Local QA presets include `forecast-europe`, `forecast-asia`, `forecast-flight`
+(a current broken-low-cloud region over northern Europe), and
+`forecast-overcast` (a multi-layer region that can legitimately obscure the
+view from inside cloud). Dates for comparison sunlight are visibly fixed;
+weather comes from the real prepared forecast. The old `observed-*` presets
+remain satellite-only and `cumulus` remains explicitly synthetic calibration.
+Nine new regression tests cover navigation/resampling, pressure interpolation,
+source/age/size validation, explicit mode separation and shader behaviour;
+all 118 existing/new tests pass. Numerical tests are not visual acceptance.
+The user approved the local visual review and requested production release on
+24 October 2026. Release checks include the hosted forecast feed, automated
+workflow, deployed cloud revision and unchanged satellite-only API default.
+
+Final local checks: full ESLint has zero errors (30 pre-existing warnings),
+TypeScript/production build pass (nine pre-existing filesystem tracing
+warnings), forecast HTTP requests return 200 then an empty conditional 304,
+unknown source selectors return 400, and the default API stays satellite-only.
+The actual browser compiled `forecast-billows-v1.1` without console warnings or
+errors; Europe and Asia overview presets displayed the real 06 UTC cycle's
+12 UTC forecast. Source switching cleared model clouds when satellite data
+was unavailable rather than silently retaining forecast coverage. At 1869×834
+ground resolution, a Low moving-camera sample reached its 30 fps cap with
+934×417 clouds refreshed 30 times/second and about 5.4 ms moving-frame GPU cost.
+A High close-up used 1588×708 clouds and about 16 ms full-refresh GPU cost;
+cached-frame cost is not that full workload. These are snapshots on this machine,
+not low-end guarantees. The preview is left on `forecast-flight`, Auto quality,
+motion test off. Screenshots are saved outside Git in the parent workspace as
+`cloud-forecast-flight-20261024.jpg`, `cloud-forecast-europe-20261024.jpg` and
+`cloud-forecast-asia-20261024.jpg`. Publishing uses the separately marked
+managed forecast prerelease and its own hourly workflow.
+
+Primary references: [NOAA GFS products](https://www.nco.ncep.noaa.gov/pmb/products/gfs/nomads/),
+[GFS cloud fractions and boundary-pressure inventory](https://www.nco.ncep.noaa.gov/pmb/products/gfs/gfs.t12z.pgrb2full.0p50.f003.shtml),
+[NOAA cloud morphology](https://www.noaa.gov/jetstream/clouds/ten-basic-clouds),
+and [Met Office low-cloud formation](https://weather.metoffice.gov.uk/learn-about/weather/types-of-weather/clouds/low-level-clouds).
+
 Live cloud locations are anchored to satellite observations. The user authorised an explicitly labelled **boundary-uncertainty band up to 10 km** on 24 October 2026; this limited reconstruction is not a new detection. Production reads a validated, compressed public observation asset prepared separately by the repository's GitHub Actions workflow; Render does not decode native satellite files.
 
 ## Rules
