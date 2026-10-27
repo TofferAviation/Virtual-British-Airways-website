@@ -14,5 +14,7 @@ coverage/
 .DS_Store
 Thumbs.db
 .vercel/
+clients/bav-acars/bin/
+clients/bav-acars/obj/
 # Independent local globe visual-check build.
 .next-globe-qa/

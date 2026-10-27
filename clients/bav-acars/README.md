@@ -10,7 +10,8 @@ Windows desktop ACARS client for British Airways Virtual. This app is BAV-only a
 - Detects X-Plane 12, MSFS 2020 and MSFS 2024 processes
 - Starts and ends real BAV ACARS sessions through the website API
 - Streams telemetry to Staff Live Operations
-- Maintains a local reconnect queue if the website is temporarily unavailable
+- Renews the encrypted device sign-in before its access token expires
+- Persists the active flight context and local telemetry queue so an interrupted flight can resume after Ember or Windows restarts
 - Automatically creates the ACARS PIREP when the session is ended
 - Opens BAV PIREPs, assignments, fleet and support pages from the app
 
@@ -45,4 +46,4 @@ clients\bav-acars\bin\Release\net8.0-windows\win-x64\publish\
 
 ## Local data
 
-The app stores only non-secret connection preferences (website URL and pilot email) in `%APPDATA%\FreeFlight\BavAcars`. Passwords are never persisted. Unsent telemetry is journaled under `%LOCALAPPDATA%\FreeFlight\BavAcars` so a short website/network interruption does not lose the current flight's queued packets.
+The app stores only non-secret connection preferences (website URL and pilot email) in `%APPDATA%\FreeFlight\BavAcars`. Passwords are never persisted. A revocable device credential is protected using Windows DPAPI, while the active-flight manifest and unsent telemetry are journaled under `%LOCALAPPDATA%\FreeFlight\BavAcars`. On restart Ember reconnects to the same BAV session, uploads queued packets, and continues the flight rather than creating a replacement session.

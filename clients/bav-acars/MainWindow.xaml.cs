@@ -14,6 +14,8 @@ public partial class MainWindow : Window
     private readonly BavApiClient _api = new();
     private readonly SettingsStore _settings = new();
     private readonly TelemetryQueue _queue = new();
+    private readonly DeviceCredentialStore _deviceCredentials = new();
+    private readonly FlightRecoveryStore _flightRecovery = new();
     private readonly IReadOnlyList<ISimulatorAdapter> _simulators = SimulatorCatalog.Create();
     private readonly ObservableCollection<EventLogItem> _events = new();
     private readonly DispatcherTimer _scanTimer = new() { Interval = TimeSpan.FromSeconds(3) };
@@ -48,6 +50,20 @@ public partial class MainWindow : Window
         RefreshSimulatorDetection();
         _scanTimer.Start();
         AddEvent("Application", "FreeFlight BAV ACARS v1.0 ready");
+
+        // A renewed device credential is protected with Windows DPAPI. It lets
+        // long-haul flights refresh their short-lived API access token without
+        // storing a password or requiring the pilot to notice a 12-hour timer.
+        var deviceSessionToken = await _deviceCredentials.LoadAsync();
+        if (await _api.TryRestoreDeviceSessionAsync(deviceSessionToken))
+        {
+            await _deviceCredentials.SaveAsync(_api.DeviceSessionToken);
+            ApplyAuthenticatedPilot();
+            LoginOverlay.Visibility = Visibility.Collapsed;
+            AddEvent("BAV login", "Secure Ember session renewed");
+            await RestoreInterruptedFlightAsync();
+            await SyncAssignmentAsync();
+        }
     }
 
     private async void Login_Click(object sender, RoutedEventArgs e)
@@ -59,14 +75,12 @@ public partial class MainWindow : Window
             _api.ConfigureBaseUrl(LoginBaseUrl.Text);
             var auth = await _api.LoginAsync(LoginEmail.Text, LoginPassword.Password);
             await _settings.SaveAsync(new AppSettings(_api.BaseUrl, LoginEmail.Text.Trim()));
+            await _deviceCredentials.SaveAsync(auth.DeviceSessionToken);
             LoginPassword.Clear();
-            PilotNameText.Text = auth.Pilot.Name;
-            PilotIdText.Text = auth.Pilot.PilotNumber;
-            WelcomeText.Text = $"Welcome back, {auth.Pilot.Name}";
-            WebsiteStatusText.Text = "Connected";
-            WebsiteSyncText.Text = "BAV pilot account linked";
+            ApplyAuthenticatedPilot();
             LoginOverlay.Visibility = Visibility.Collapsed;
             AddEvent("BAV login", $"Signed in as {auth.Pilot.PilotNumber}");
+            await RestoreInterruptedFlightAsync();
             await SyncAssignmentAsync();
         }
         catch (Exception ex)
@@ -151,7 +165,7 @@ public partial class MainWindow : Window
             _flightStarted = DateTimeOffset.UtcNow;
             _packets = 0;
             _paused = false;
-            _queue.RemoveOtherSessions(_session.Id);
+            await PersistFlightRecoveryAsync();
             SessionIdText.Text = _session.Id[..Math.Min(8, _session.Id.Length)];
             AcarsStatusText.Text = "Connected";
             TelemetrySourceText.Text = simulator.HasNativeTelemetry ? "Native simulator telemetry" : "Development telemetry bridge · backend and PIREP pipeline are live";
@@ -198,11 +212,19 @@ public partial class MainWindow : Window
             {
                 await FlushQueueAsync(_session.Id);
                 await _api.SendTelemetryAsync(_session.Id, payload);
+                await _deviceCredentials.SaveAsync(_api.DeviceSessionToken);
                 _packets++;
                 PacketsText.Text = _packets.ToString("N0");
                 LastUpdateText.Text = "Updated just now";
                 AcarsStatusText.Text = "Connected";
                 FooterStatusText.Text = $"●  ACARS connected  ·  {simulator.DisplayName}  ·  {_assignment?.FlightNumber}";
+            }
+            catch (AcarsAuthenticationException)
+            {
+                _queue.Enqueue(_session.Id, payload);
+                AcarsStatusText.Text = "Sign-in renewal failed";
+                LastUpdateText.Text = "Tracking locally";
+                FooterStatusText.Text = "●  Ember must renew your secure sign-in · flight data is safely queued locally";
             }
             catch
             {
@@ -212,6 +234,7 @@ public partial class MainWindow : Window
                 FooterStatusText.Text = "●  BAV server unavailable · flight tracking continues locally";
             }
             QueueText.Text = _queue.CountFor(_session.Id).ToString();
+            await PersistFlightRecoveryAsync();
         }
         finally
         {
@@ -278,6 +301,7 @@ public partial class MainWindow : Window
             FlightPhaseText.Text = "BLOCK ON";
             FooterStatusText.Text = "●  Flight complete · PIREP submitted";
             _queue.RemoveSession(_session.Id);
+            _flightRecovery.Clear();
             _session = null;
             _flightStarted = null;
             PauseButton.IsEnabled = false;
@@ -319,6 +343,105 @@ public partial class MainWindow : Window
     {
         LoginStatus.Text = _api.IsAuthenticated ? "Reconnect or switch BAV account. Your password is never stored." : "Configure your BAV website connection.";
         LoginOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void ApplyAuthenticatedPilot()
+    {
+        if (_api.Pilot is null) return;
+        PilotNameText.Text = _api.Pilot.Name;
+        PilotIdText.Text = _api.Pilot.PilotNumber;
+        WelcomeText.Text = $"Welcome back, {_api.Pilot.Name}";
+        WebsiteStatusText.Text = "Connected";
+        WebsiteSyncText.Text = "BAV pilot account linked";
+    }
+
+    private async Task PersistFlightRecoveryAsync()
+    {
+        if (_session is null || _assignment is null || _flightStarted is null || SimulatorCombo.SelectedItem is not ISimulatorAdapter simulator) return;
+        await _flightRecovery.SaveAsync(new ActiveFlightRecovery(
+            _session.Id,
+            _assignment,
+            simulator.Id,
+            _flightStarted.Value,
+            _packets));
+    }
+
+    /** Rehydrates the exact session and drains the durable telemetry queue after an interruption. */
+    private async Task RestoreInterruptedFlightAsync()
+    {
+        var recovery = await _flightRecovery.LoadAsync();
+        if (recovery is null) return;
+
+        try
+        {
+            var serverSession = await _api.GetSessionAsync(recovery.SessionId);
+            if (serverSession?.Session is null)
+            {
+                AddEvent("Recovery", "Saved Ember session was not found on BAV. Local telemetry has been retained for review.");
+                return;
+            }
+
+            // A prior end request can have completed the session but lost its
+            // response. Retrying the idempotent endpoint restores the PIREP
+            // without fabricating a second flight report.
+            if (string.Equals(serverSession.Session.Status, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                if (serverSession.Pirep is null)
+                    await _api.EndSessionAsync(recovery.SessionId, -150, "Recovered after an interrupted Ember shutdown.");
+                _queue.RemoveSession(recovery.SessionId);
+                _flightRecovery.Clear();
+                AddEvent("Recovery", "Completed flight report confirmed with BAV Operations");
+                return;
+            }
+
+            if (!string.Equals(serverSession.Session.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                AddEvent("Recovery", "This saved session is no longer active. Its local telemetry was retained for staff review.");
+                return;
+            }
+
+            var simulator = _simulators.FirstOrDefault(item => item.Id == recovery.SimulatorId)
+                            ?? _simulators.FirstOrDefault(item => item.Id == serverSession.Session.Simulator);
+            if (simulator is null)
+            {
+                AddEvent("Recovery", "Ember could not identify the simulator used by the saved flight.");
+                return;
+            }
+
+            SimulatorCombo.SelectedItem = simulator;
+            _session = serverSession.Session;
+            _assignment = recovery.Assignment;
+            _flightStarted = recovery.FlightStarted;
+            _packets = recovery.Packets;
+            _paused = false;
+            AssignmentFlightText.Text = _assignment.FlightNumber;
+            RouteText.Text = $"{_assignment.From}  →  {_assignment.To}";
+            AircraftText.Text = $"Aircraft  {_assignment.Aircraft}";
+            ScheduleText.Text = $"{_assignment.Date} · {_assignment.Departure}–{_assignment.Arrival} UTC · {_assignment.Duration}";
+            DepartureCodeText.Text = _assignment.From;
+            ArrivalCodeText.Text = _assignment.To;
+            SessionIdText.Text = _session.Id[..Math.Min(8, _session.Id.Length)];
+            PacketsText.Text = _packets.ToString("N0");
+            QueueText.Text = _queue.CountFor(_session.Id).ToString();
+            AcarsStatusText.Text = "Recovering";
+            PirepStatusText.Text = "Automatic upload restored";
+            EndFlightButton.IsEnabled = true;
+            PauseButton.IsEnabled = true;
+            PauseButton.Content = "Ⅱ  Pause tracking";
+            StartFlightButton.IsEnabled = false;
+            AddEvent("Recovery", $"Restored {_assignment.FlightNumber}; {_queue.CountFor(_session.Id)} locally queued packets ready");
+
+            await FlushQueueAsync(_session.Id);
+            QueueText.Text = _queue.CountFor(_session.Id).ToString();
+            AcarsStatusText.Text = "Connected";
+            _telemetryTimer.Start();
+            await TelemetryTickAsync();
+        }
+        catch (Exception ex)
+        {
+            AddEvent("Recovery", FriendlyError(ex));
+            AcarsStatusText.Text = ex is AcarsAuthenticationException ? "Sign-in required" : "Recovery pending";
+        }
     }
 
     private void OpenUrl(string url)

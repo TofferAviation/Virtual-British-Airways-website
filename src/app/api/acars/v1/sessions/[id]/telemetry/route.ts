@@ -34,6 +34,18 @@ function optionalWhole(value: unknown, maximum: number) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= maximum ? value : null;
 }
 
+function optionalCapturedAt(value: unknown, sessionStartedAt: string) {
+  if (typeof value !== "string") return null;
+  const captured = new Date(value);
+  const started = new Date(sessionStartedAt);
+  const now = Date.now();
+  // Allow an interrupted long-haul to replay its own recent points, but do
+  // not accept timestamps before the flight or materially in the future.
+  if (!Number.isFinite(captured.getTime()) || captured.getTime() < started.getTime() - 5 * 60_000 ||
+      captured.getTime() > now + 5 * 60_000 || captured.getTime() < now - 72 * 60 * 60_000) return null;
+  return captured.toISOString();
+}
+
 function optionalCabinStatus(value: unknown): AcarsCabinStatus | null {
   const cabin = record(value);
   if (!cabin) return null;
@@ -68,7 +80,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const current = await getAcarsSession(id);
   if (!current || current.pilotId !== auth.account.id) return NextResponse.json({ error: "Session not found." }, { status: 404 });
-  const body = await request.json().catch(() => null) as Partial<AcarsFlightSnapshot> | null;
+  const body = await request.json().catch(() => null) as (Partial<AcarsFlightSnapshot> & { capturedAt?: unknown }) | null;
   if (!body || typeof body.latitude !== "number" || typeof body.longitude !== "number" || typeof body.altitudeFt !== "number" || typeof body.groundSpeedKt !== "number" || typeof body.headingDeg !== "number") {
     return NextResponse.json({ error: "Invalid telemetry payload." }, { status: 400 });
   }
@@ -77,7 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     sessionId: current.id,
     pilotId: auth.account.id,
     bookingId: current.bookingId,
-    timestamp: new Date().toISOString(),
+    timestamp: optionalCapturedAt(body.capturedAt, current.startedAt) ?? new Date().toISOString(),
     latitude: body.latitude,
     longitude: body.longitude,
     altitudeFt: body.altitudeFt,
