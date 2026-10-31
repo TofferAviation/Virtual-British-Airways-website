@@ -1415,7 +1415,7 @@ export async function releaseOwnStaleFleetAssignment(actor: FleetActor, input: {
     // Fresh movement of this same registration still prevents its release.
     return Date.now() - Date.parse(session.updated_at) < 5 * 60_000 &&
       snapshot?.registration?.toUpperCase() === aircraft.registration.toUpperCase() &&
-      (snapshot.onGround !== true || snapshot.groundSpeedKt > 20 || snapshot.flightStarted === true);
+      (snapshot.onGround !== true || snapshot.groundSpeedKt > 20 || snapshot.enginesRunning !== false);
   })) {
     throw new FleetServiceError("Ember still has an active flight. End or recover it before releasing this registration.", 409);
   }

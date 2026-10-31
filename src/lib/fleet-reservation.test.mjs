@@ -110,10 +110,10 @@ test("audit failure and a concurrent assignment change stop stale release cleanu
   }
 });
 test("a new parked preflight does not protect an old lock, but fresh movement of that airframe does", async () => {
-  const activeSession = { flight_number: "BA209", updated_at: new Date().toISOString(), last_snapshot: { registration: "G-XLEJ", onGround: true, groundSpeedKt: 0, flightStarted: false } };
+  const activeSession = { flight_number: "BA209", updated_at: new Date().toISOString(), last_snapshot: { registration: "G-XLEJ", onGround: true, groundSpeedKt: 0, enginesRunning: false, flightStarted: true } };
   const parked = staleService({ activeSession });
   await parked.api.releaseOwnStaleFleetAssignment(actor, releaseInput);
-  for (const change of [{ onGround: false }, { groundSpeedKt: 30 }, { flightStarted: true }]) {
+  for (const change of [{ onGround: false }, { groundSpeedKt: 30 }, { enginesRunning: true }, { enginesRunning: undefined }]) {
     const moving = staleService({ activeSession: { ...activeSession, last_snapshot: { ...activeSession.last_snapshot, ...change } } });
     await assert.rejects(moving.api.releaseOwnStaleFleetAssignment(actor, releaseInput), moving.api.FleetServiceError);
     assert.equal(moving.writes.length, 0);
