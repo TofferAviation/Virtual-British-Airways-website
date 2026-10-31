@@ -34,6 +34,7 @@ export default async function AcarsRecoveryPage({ searchParams }: { searchParams
         return <article key={session.id}><div><strong>{session.flightNumber} · {session.from} → {session.to}</strong><span>{session.aircraft} · {Math.round(session.distanceNm).toLocaleString("en-GB")} NM · {duration(session.startedAt, end)}</span><small>{session.status === "completed" ? "Completed session awaiting PIREP recovery" : "Tracking stopped before PIREP submission"}</small></div><form action={recoverAcarsFlightAction}><input type="hidden" name="sessionId" value={session.id} /><button disabled={!eligible}>{eligible ? "Recover flight report" : "Telemetry incomplete"}</button></form></article>;
       })}</div> : <p>No interrupted Ember flights are waiting for recovery.</p>}
     </section>
+    <p><Link href="/account/aircraft-release">Aircraft still locked after your flight? Release a stale assignment →</Link></p>
     <div className={styles.back}><Link href="/account">← Back to pilot dashboard</Link></div>
   </div></main>;
 }

@@ -1388,6 +1388,55 @@ export async function cancelFleetAircraftReservation(aircraftId: string, actor: 
   return asFlightAssignment(data as FlightAssignmentRow);
 }
 
+/** Releases only the signed-in pilot's stale lock, without inventing an arrival or utilization. */
+export async function releaseOwnStaleFleetAssignment(actor: FleetActor, input: { aircraftId: string; assignmentId: string; reason: string }) {
+  const reason = requiredText(input.reason, "Release reason", 10).slice(0, 800);
+  const client = getServerClient();
+  const organization = await organizationId(client);
+  const { data: assignment, error } = await client.from("aircraft_flight_assignments").select("*")
+    .eq("organization_id", organization).eq("id", input.assignmentId).eq("aircraft_id", input.aircraftId)
+    .eq("pilot_subject", actor.subject.trim().toUpperCase()).maybeSingle();
+  rpcError("Could not verify your aircraft assignment", error);
+  if (!assignment) throw new FleetServiceError("This aircraft assignment does not belong to your account.", 404);
+  if (!["reserved", "operating"].includes(assignment.status)) return;
+  if (!Number.isFinite(Date.parse(assignment.updated_at)) || Date.now() - Date.parse(assignment.updated_at) < 10 * 60_000) {
+    throw new FleetServiceError("This assignment was recently updated. End the flight normally in Ember or wait before releasing a stale lock.", 409);
+  }
+  const pilotId = actor.subject.replace(/^bav:/i, "");
+  const { data: sessions, error: telemetryError } = await client.from("acars_sessions")
+    .select("id, flight_number, status, updated_at").eq("pilot_id", pilotId).eq("status", "active");
+  rpcError("Could not verify flight activity", telemetryError);
+  if ((sessions ?? []).some((session) => Date.now() - Date.parse(session.updated_at) < 5 * 60_000 ||
+      session.flight_number.toUpperCase() === assignment.flight_reference.toUpperCase())) {
+    throw new FleetServiceError("Ember still has an active flight. End or recover it before releasing this registration.", 409);
+  }
+  const aircraft = await getFleetAircraft(input.aircraftId);
+  if (!aircraft) throw new FleetServiceError("Aircraft not found.", 404);
+  // Write the reason first: a failed audit write must never release a lock.
+  const { error: auditError } = await client.from("fleet_audit_events").insert({
+    organization_id: organization, aircraft_id: input.aircraftId, action: "flight.assignment.stale_release_requested",
+    entity_type: "aircraft_flight_assignment", entity_id: assignment.id,
+    before_value: assignment, after_value: { requestedStatus: "cancelled" }, reason,
+    actor_subject: actor.subject, actor_role: actor.fleetRole, client_source: "website", request_id: requestId(),
+  });
+  rpcError("Could not record the release reason", auditError);
+  const now = new Date().toISOString();
+  const { data: released, error: releaseError } = await client.from("aircraft_flight_assignments")
+    .update({ status: "cancelled", updated_at: now }).eq("organization_id", organization)
+    .eq("id", assignment.id).eq("pilot_subject", assignment.pilot_subject)
+    .eq("status", assignment.status).eq("updated_at", assignment.updated_at).select("id").maybeSingle();
+  rpcError("Could not release the stale assignment", releaseError);
+  if (!released) throw new FleetServiceError("The assignment changed. Refresh and review it before releasing.", 409);
+  // Version check protects a new reservation racing this cleanup. Preserve
+  // station, technical restrictions, hours, cycles, telemetry and PIREPs.
+  const { error: statusError } = await client.from("aircraft").update({
+    operational_status: "available", next_assigned_flight_reference: null,
+    status_version: aircraft.statusVersion + 1, updated_at: now,
+  }).eq("organization_id", organization).eq("id", input.aircraftId)
+    .eq("status_version", aircraft.statusVersion).in("operational_status", ["assigned", "in_service"]);
+  rpcError("The lock was released but aircraft status needs refreshing", statusError);
+}
+
 export async function startFleetRepaint(aircraftId: string, actor: FleetActor, input: FleetRepaintInput) {
   requiredText(input.newLivery, "New livery", 2);
   const client = getServerClient();
