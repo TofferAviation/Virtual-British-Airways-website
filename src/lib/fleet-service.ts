@@ -1402,16 +1402,23 @@ export async function releaseOwnStaleFleetAssignment(actor: FleetActor, input: {
   if (!Number.isFinite(Date.parse(assignment.updated_at)) || Date.now() - Date.parse(assignment.updated_at) < 10 * 60_000) {
     throw new FleetServiceError("This assignment was recently updated. End the flight normally in Ember or wait before releasing a stale lock.", 409);
   }
-  const pilotId = actor.subject.replace(/^bav:/i, "");
-  const { data: sessions, error: telemetryError } = await client.from("acars_sessions")
-    .select("id, flight_number, status, updated_at").eq("pilot_id", pilotId).eq("status", "active");
-  rpcError("Could not verify flight activity", telemetryError);
-  if ((sessions ?? []).some((session) => Date.now() - Date.parse(session.updated_at) < 5 * 60_000 ||
-      session.flight_number.toUpperCase() === assignment.flight_reference.toUpperCase())) {
-    throw new FleetServiceError("Ember still has an active flight. End or recover it before releasing this registration.", 409);
-  }
   const aircraft = await getFleetAircraft(input.aircraftId);
   if (!aircraft) throw new FleetServiceError("Aircraft not found.", 404);
+  const pilotId = actor.subject.replace(/^bav:/i, "");
+  const { data: sessions, error: telemetryError } = await client.from("acars_sessions")
+    .select("id, flight_number, status, updated_at, last_snapshot").eq("pilot_id", pilotId).eq("status", "active");
+  rpcError("Could not verify flight activity", telemetryError);
+  if ((sessions ?? []).some((session) => {
+    if (session.flight_number.toUpperCase() === assignment.flight_reference.toUpperCase()) return true;
+    const snapshot = session.last_snapshot;
+    // A new flight's parked preflight session must not protect an old lock.
+    // Fresh movement of this same registration still prevents its release.
+    return Date.now() - Date.parse(session.updated_at) < 5 * 60_000 &&
+      snapshot?.registration?.toUpperCase() === aircraft.registration.toUpperCase() &&
+      (snapshot.onGround !== true || snapshot.groundSpeedKt > 20 || snapshot.flightStarted === true);
+  })) {
+    throw new FleetServiceError("Ember still has an active flight. End or recover it before releasing this registration.", 409);
+  }
   // Write the reason first: a failed audit write must never release a lock.
   const { error: auditError } = await client.from("fleet_audit_events").insert({
     organization_id: organization, aircraft_id: input.aircraftId, action: "flight.assignment.stale_release_requested",

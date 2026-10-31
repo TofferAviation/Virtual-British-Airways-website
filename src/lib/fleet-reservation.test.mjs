@@ -63,7 +63,7 @@ test("permission failures cannot be bypassed as missing reservations", async () 
   await assert.rejects(api.cancelFleetAircraftReservation(aircraftId, actor, input), (error) => error.status === 403);
 });
 
-function staleService({ missing = false, fresh = false, active = false, auditFails = false, racing = false } = {}) {
+function staleService({ missing = false, fresh = false, active = false, activeSession, auditFails = false, racing = false } = {}) {
   const writes = [], filters = [];
   const row = { id: "assignment", aircraft_id: aircraftId, pilot_subject: "BAV:PILOT", flight_reference: "BA12", status: "operating", updated_at: fresh ? new Date().toISOString() : "2026-01-01T00:00:00Z" };
   const client = { from(table) {
@@ -71,7 +71,7 @@ function staleService({ missing = false, fresh = false, active = false, auditFai
     const result = () => ({ data: table === "organizations" ? { id: "org" }
       : table === "aircraft_flight_assignments" ? (missing || update && racing ? null : update ? { id: row.id } : row)
       : table === "aircraft" ? { id: aircraftId, status_version: 7, registration: "G-XLEJ" }
-      : table === "acars_sessions" ? (active ? [{ flight_number: "BA12", updated_at: new Date().toISOString() }] : []) : [], error: null });
+      : table === "acars_sessions" ? (activeSession ? [activeSession] : active ? [{ flight_number: "BA12", updated_at: new Date().toISOString() }] : []) : [], error: null });
     const query = {
       select() { return query; }, eq(key, value) { filters.push([table, key, value]); return query; }, in() { return query; },
       order() { return query; },
@@ -107,5 +107,15 @@ test("audit failure and a concurrent assignment change stop stale release cleanu
     await assert.rejects(api.releaseOwnStaleFleetAssignment(actor, releaseInput), api.FleetServiceError);
     assert.ok(!writes.some(([table]) => table === "aircraft"));
     if (option.auditFails) assert.ok(!writes.some(([table]) => table === "aircraft_flight_assignments"));
+  }
+});
+test("a new parked preflight does not protect an old lock, but fresh movement of that airframe does", async () => {
+  const activeSession = { flight_number: "BA209", updated_at: new Date().toISOString(), last_snapshot: { registration: "G-XLEJ", onGround: true, groundSpeedKt: 0, flightStarted: false } };
+  const parked = staleService({ activeSession });
+  await parked.api.releaseOwnStaleFleetAssignment(actor, releaseInput);
+  for (const change of [{ onGround: false }, { groundSpeedKt: 30 }, { flightStarted: true }]) {
+    const moving = staleService({ activeSession: { ...activeSession, last_snapshot: { ...activeSession.last_snapshot, ...change } } });
+    await assert.rejects(moving.api.releaseOwnStaleFleetAssignment(actor, releaseInput), moving.api.FleetServiceError);
+    assert.equal(moving.writes.length, 0);
   }
 });
