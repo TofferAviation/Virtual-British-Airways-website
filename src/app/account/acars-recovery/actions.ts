@@ -20,12 +20,16 @@ export async function recoverAcarsFlightAction(formData: FormData) {
     ? await recoverAcarsSession(existing.id, pilot.pilotId)
     : existing.status === "completed" ? existing : null;
   if (!session?.completedAt) redirect("/account/acars-recovery?error=not-recoverable");
+  let pirepId: string;
   try {
     const { pirep } = await submitAcarsPirep(session, { recovered: true });
-    revalidatePath("/account");
-    revalidatePath("/account/acars-recovery");
-    redirect(`/account/flights/${encodeURIComponent(pirep.id)}?recovered=1`);
+    pirepId = pirep.id;
   } catch {
     redirect("/account/acars-recovery?error=submit");
   }
+  // Next.js redirects throw internally; keep successful navigation outside
+  // the submission catch so a saved report cannot appear to have failed.
+  revalidatePath("/account");
+  revalidatePath("/account/acars-recovery");
+  redirect(`/account/flights/${encodeURIComponent(pirepId)}?recovered=1`);
 }
