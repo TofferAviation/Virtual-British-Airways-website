@@ -7,7 +7,7 @@ import { buildSimbriefDispatchUrl, fetchLatestSimbriefPlan, getSimbriefCodes } f
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getBookableRoute } from "@/lib/route-store";
-import { cancelFleetAircraftReservation, FleetServiceError } from "@/lib/fleet-service";
+import { cancelFleetAircraftReservation, FleetReservationInProgressError, FleetServiceError } from "@/lib/fleet-service";
 
 function flightPlanPath(bookingId: string) {
   return `/flight-plans/${encodeURIComponent(bookingId)}`;
@@ -37,9 +37,13 @@ export async function cancelBooking(formData: FormData) {
         arrivalStation: booking.to,
       });
     } catch (error) {
-      // Do not trap the pilot in a stale website assignment if Fleet has
-      // already released (or cannot find) an old reservation.
-      if (!(error instanceof FleetServiceError)) throw error;
+      if (error instanceof FleetReservationInProgressError) {
+        redirect(`${flightPlanPath(booking.id)}?protected=1`);
+      }
+      if (error instanceof FleetServiceError) {
+        redirect(`${flightPlanPath(booking.id)}?error=${encodeURIComponent("Fleet could not release your reservation. Your assignment is saved; please try again shortly.")}`);
+      }
+      throw error;
     }
   }
 

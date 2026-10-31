@@ -11,7 +11,7 @@ import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
 import { resolveFlightCallsign } from "@/lib/flight-callsigns";
-import { cancelFleetAircraftReservation, ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
+import { cancelFleetAircraftReservation, ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetReservationInProgressError, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
 
 export async function bookFlight(formData: FormData) {
   const session = await requirePilotSession();
@@ -101,13 +101,25 @@ export async function bookFlight(formData: FormData) {
 
     if (activeBooking.fleetAircraftId) {
       const actor = { subject: `bav:${session.pilotId}`, displayName: pilot.name, fleetRole: "pilot" };
-      await cancelFleetAircraftReservation(activeBooking.fleetAircraftId, actor, {
-        pilotSubject: actor.subject,
-        pilotDisplayName: actor.displayName,
-        flightReference: activeBooking.flightNumber,
-        departureStation: activeBooking.from,
-        arrivalStation: activeBooking.to,
-      });
+      try {
+        await cancelFleetAircraftReservation(activeBooking.fleetAircraftId, actor, {
+          pilotSubject: actor.subject,
+          pilotDisplayName: actor.displayName,
+          flightReference: activeBooking.flightNumber,
+          departureStation: activeBooking.from,
+          arrivalStation: activeBooking.to,
+        });
+      } catch (error) {
+        if (error instanceof FleetReservationInProgressError) {
+          await createFlightPlanForBooking({ bookingId: activeBooking.id, pilotId: session.pilotId,
+            simbriefPilotId: pilot.simbriefPilotId ?? null, simbriefDispatchUrl: null });
+          redirect(`/flight-plans/${encodeURIComponent(activeBooking.id)}?protected=1`);
+        }
+        if (error instanceof FleetServiceError) {
+          redirect(`/book?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&error=fleet-release`);
+        }
+        throw error;
+      }
     }
     await cancelActivePilotBooking(session.pilotId);
   }

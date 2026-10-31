@@ -142,6 +142,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
           {registrationError ? <div className="integration-note"><strong>Registration no longer available:</strong> choose another listed registration or let Ember select one when you are ready to fly.</div> : null}
           {stationError ? <div className="integration-note"><strong>Registration is at another station:</strong> choose an airframe currently parked at {from}, or leave the registration for Ember to select when it is available.</div> : null}
           {fleetError ? <div className="integration-note"><strong>Fleet service unavailable:</strong> the flight can still be booked without a registration. Try selecting an airframe again in Ember once Fleet is available.</div> : null}
+          {params.error === "fleet-release" ? <div className="integration-note"><strong>Your current assignment is saved.</strong> Fleet could not release its reservation. Please try again shortly before choosing another flight.</div> : null}
           <form className="booking-duration-filter card" action="/book">
             {hub ? <input type="hidden" name="hub" value={hub.code} /> : null}
             {hasCityPair ? <><input type="hidden" name="from" value={from} /><input type="hidden" name="to" value={to} /></> : null}

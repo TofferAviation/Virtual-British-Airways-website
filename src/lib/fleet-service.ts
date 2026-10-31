@@ -605,6 +605,12 @@ export class FleetServiceError extends Error {
   }
 }
 
+export class FleetReservationInProgressError extends FleetServiceError {
+  public constructor() {
+    super("This aircraft is already operating your flight. End the flight in Ember before replacing the assignment.", 409);
+  }
+}
+
 function getServerClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const secret = process.env.SUPABASE_SECRET_KEY?.trim();
@@ -1368,6 +1374,16 @@ export async function cancelFleetAircraftReservation(aircraftId: string, actor: 
     p_actor_role: actor.fleetRole,
     p_request_id: requestId(),
   });
+  if (error?.message === "Only a reservation that has not started can be released.") {
+    // The RPC also uses this error for a reservation already completed,
+    // cancelled or missing. Verify the exact assignment before treating it as
+    // an idempotent release; an operating aircraft must remain protected.
+    const assignment = await getFleetFlightAssignmentForPilotAndFlight({
+      pilotSubject: flight.pilotSubject, aircraftId, flightReference: flight.flightReference,
+    });
+    if (!assignment || assignment.status === "completed") return null;
+    if (assignment.status === "operating") throw new FleetReservationInProgressError();
+  }
   rpcError("Could not release aircraft reservation", error);
   return asFlightAssignment(data as FlightAssignmentRow);
 }
