@@ -8,6 +8,12 @@ import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 
 export type FleetPilotActor = FleetActor & { pilotId: string };
 
+/** Older Ember versions must not post a partner landing to a held BA airframe. */
+export async function requireFleetNotAllianceOperation(actor: FleetPilotActor) {
+  const booking = await getActivePilotBooking(actor.pilotId);
+  if (booking?.alliance) throw new FleetServiceError("Partner operations do not change BA-owned Fleet hours, registrations or maintenance records.", 409);
+}
+
 /**
  * Maps an authenticated BAV website account to the pilot identity recorded in
  * Fleet. The desktop receives a time-limited token only; it never stores the
@@ -60,6 +66,7 @@ export async function requireFleetPilotAircraftForActiveBooking(actor: FleetPilo
     getActivePilotBooking(actor.pilotId),
   ]);
   if (!booking) throw new FleetServiceError("Choose a BAV flight before reserving an aircraft registration.", 409);
+  if (booking.alliance) throw new FleetServiceError("Alliance flights use the partner's scheduled aircraft. BA Fleet registrations cannot be reserved for this assignment.", 409);
   if (!fleetAircraftMatchesVirtualType(result.aircraft, booking.aircraft)) {
     throw new FleetServiceError(`This assignment is for ${booking.aircraft}. Reserve a matching registration, or update the virtual aircraft in Flight Planning before you start Ember.`, 409);
   }

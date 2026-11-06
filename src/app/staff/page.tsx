@@ -97,6 +97,7 @@ export default async function StaffPage() {
                     <div className="staff-workspace-links">
                       {canViewRoutes ? <Link href="/staff/live-operations"><span aria-hidden="true">◉</span><b>Live Operations</b><i aria-hidden="true">›</i></Link> : null}
                       {canViewRoutes ? <Link href="/staff/pireps"><span aria-hidden="true">✈</span><b>PIREP Centre</b><i aria-hidden="true">›</i></Link> : null}
+                      {canEditSettings ? <Link href="/staff/alliance"><span aria-hidden="true">◎</span><b>Alliance Manager</b><i aria-hidden="true">›</i></Link> : null}
                       {canViewFleet ? <Link href="/staff/fleet"><span aria-hidden="true">▤</span><b>Fleet management</b><i aria-hidden="true">›</i></Link> : null}
                       {canViewRoutes ? <Link href="#route-tools"><span aria-hidden="true">⌁</span><b>Schedules</b><i aria-hidden="true">›</i></Link> : null}
                       {canEditPilots ? <Link href="/staff/hour-transfers"><span aria-hidden="true">↟</span><b>Transfer credit</b><i aria-hidden="true">›</i></Link> : null}

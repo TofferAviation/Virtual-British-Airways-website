@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:alliance": "node --test src/lib/alliance.test.mjs src/lib/alliance-database.test.mjs src/lib/alliance-auth.test.mjs src/lib/alliance-ui.test.mjs",
     "test:clouds": "node --test src/lib/radar-cloud-math.test.mjs src/lib/radar-cloud-noise.test.mjs",
     "test:globe-integration": "node --test src/lib/radar-globe-integration.test.mjs",
     "test:aircraft": "node --test src/lib/radar-aircraft.test.mjs src/lib/radar-aircraft-motion.test.mjs src/lib/radar-aircraft-follow.test.mjs src/lib/radar-contrails.test.mjs",
@@ -38,6 +39,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@types/node": "latest",
     "@types/nodemailer": "^8.0.1",
     "@types/react": "latest",

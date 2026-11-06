@@ -5,12 +5,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { SupportedSimulator } from "@/lib/acars-contract";
 import { getEvents } from "@/lib/event-store";
 import { getMatchingBavEvent } from "@/lib/pilot-awards";
-import { applyApprovedPirepStats, claimMentorPirepReward, createPilotNotification, getPilotById, getRewardSettings, isFirstFlightAwardEligible, readPilotOperationsState, writePilotOperationsState } from "@/lib/pilot-store";
+import { applyApprovedPirepStats, claimMentorPirepReward, createPilotNotification, getPilotById, getRewardSettings, inheritPilotOperationsSnapshot, isFirstFlightAwardEligible, readPilotOperationsState, writePilotOperationsState } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculateLateStartAdjustment } from "@/lib/schedule-flexibility";
 import { creditAcceptedPirepSalary } from "@/lib/pilot-career";
 import { normaliseApprovedBaGroupCallsign } from "@/lib/ba-flight-identifiers";
 import type { FlightCallsignResolution } from "@/lib/flight-callsigns";
+import type { AllianceBookingSnapshot } from "@/lib/alliance";
+import { listAllianceLedger, reviewAlliancePirep } from "@/lib/alliance-store";
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const FILE = path.join(DATA_DIR, "pilot-operations.json");
@@ -32,7 +34,7 @@ type PirepRow = {
   fuel_used_kg: number | null; points_awarded: number; tier_points_awarded: number; late_start_penalty_points: number;
   status: PirepStatus; source: "manual" | "acars"; simulator: SupportedSimulator;
   acars_session_id: string | null; pilot_comments: string; staff_comments: string;
-  reviewed_at: string | null; reviewed_by: string | null; created_at: string;
+  reviewed_at: string | null; reviewed_by: string | null; created_at: string; alliance_booking_id?: string | null;
 };
 
 function getPirepClient(): SupabaseClient | null {
@@ -44,7 +46,7 @@ function getPirepClient(): SupabaseClient | null {
 
 function pirepFromRow(row: PirepRow): PilotPirep {
   return {
-    id: row.id, pilotId: row.pilot_id, bookingId: row.booking_id, flightNumber: row.flight_number,
+    id: row.id, pilotId: row.pilot_id, bookingId: row.booking_id, flightNumber: row.flight_number, allianceBookingId: row.alliance_booking_id ?? null,
     from: row.departure_station, to: row.arrival_station, aircraft: row.aircraft, startedAt: row.started_at,
     completedAt: row.completed_at, blockMinutes: row.block_minutes, distanceNm: row.distance_nm,
     landingFpm: row.landing_fpm, fuelUsedKg: row.fuel_used_kg, pointsAwarded: row.points_awarded,
@@ -57,6 +59,8 @@ function pirepFromRow(row: PirepRow): PilotPirep {
 }
 
 export type PilotBooking = {
+  /** Immutable checked partner metadata. BA-only bookings have no alliance value. */
+  alliance?: AllianceBookingSnapshot | null;
   id: string;
   pilotId: string;
   routeId: string | null;
@@ -173,6 +177,7 @@ export type PilotFlightPlan = {
 export type PirepStatus = "pending" | "changes_requested" | "accepted" | "rejected";
 
 export type PilotPirep = {
+  allianceBookingId?: string | null;
   id: string;
   pilotId: string;
   bookingId: string | null;
@@ -211,7 +216,7 @@ type OperationsState = {
 function normalizeBooking(booking: PilotBooking): PilotBooking {
   return {
     ...booking,
-    callsign: normaliseApprovedBaGroupCallsign(booking.callsign),
+    callsign: booking.alliance ? booking.alliance.schedule.callsign : normaliseApprovedBaGroupCallsign(booking.callsign),
     callsignResolution: booking.callsignResolution && typeof booking.callsignResolution === "object" ? booking.callsignResolution : null,
     routeId: booking.routeId ?? null,
     fleetAircraftId: typeof booking.fleetAircraftId === "string" && booking.fleetAircraftId.trim() ? booking.fleetAircraftId.trim() : null,
@@ -249,12 +254,14 @@ function normalizeState(raw: unknown): OperationsState {
   const parsed = raw && typeof raw === "object"
     ? raw as { bookings?: PilotBooking[]; flightPlans?: PilotFlightPlan[]; pireps?: PilotPirep[] }
     : {};
-  return {
+  const state: OperationsState = {
     version: 5,
     bookings: Array.isArray(parsed.bookings) ? parsed.bookings.map(normalizeBooking) : [],
     flightPlans: Array.isArray(parsed.flightPlans) ? parsed.flightPlans.map(normalizeFlightPlan) : [],
     pireps: Array.isArray(parsed.pireps) ? parsed.pireps.map((item) => normalizePirep(item)) : [],
   };
+  inheritPilotOperationsSnapshot(parsed, state);
+  return state;
 }
 
 async function readLegacyLocalState(): Promise<OperationsState | null> {
@@ -500,6 +507,8 @@ export async function cancelActivePilotBooking(pilotId: string) {
 
 export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt" | "reviewedAt" | "reviewedBy" | "staffComments" | "pointsAwarded" | "lateStartPenaltyPoints" | "tierPointsAwarded">) {
   const client = getPirepClient();
+  const sourceBooking = input.bookingId ? await getPilotBooking(input.bookingId, input.pilotId) : null;
+  if (sourceBooking?.alliance && (input.status !== "pending" || input.flightNumber !== sourceBooking.flightNumber || input.aircraft !== sourceBooking.aircraft || input.from !== sourceBooking.from)) throw new Error("Partner report does not match its protected booking, or attempted to bypass review.");
   if (client) {
     const createdAt = new Date().toISOString();
     const row: Record<string, unknown> = {
@@ -511,6 +520,7 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
       pilot_comments: input.pilotComments, staff_comments: "", reviewed_at: null, reviewed_by: null, created_at: createdAt,
     };
     if (persistentScheduleFlexibilityEnabled()) row.late_start_penalty_points = 0;
+    if (sourceBooking?.alliance) row.alliance_booking_id = sourceBooking.id;
     const { data, error } = await client.from("pilot_pireps").insert(row).select("*").single();
     if (error) throw error;
     if (input.bookingId) {
@@ -636,7 +646,9 @@ async function acceptedPirepCredit(pirep: PilotPirep) {
  * never pay the same PIREP twice.
  */
 export async function reconcileAcceptedPirepFinance(pilotId: string) {
-  const acceptedPireps = (await listPilotPireps(pilotId)).filter((pirep) => pirep.status === "accepted");
+  const allianceIds = new Set((await listPilotBookings(pilotId)).filter(b => b.alliance).map(b => b.id));
+  // Alliance salary is committed by the same transaction as the bank ledger.
+  const acceptedPireps = (await listPilotPireps(pilotId)).filter((pirep) => pirep.status === "accepted" && !pirep.allianceBookingId && (!pirep.bookingId || !allianceIds.has(pirep.bookingId)));
   let posted = 0;
   let alreadyPosted = 0;
   let failed = 0;
@@ -656,6 +668,16 @@ export async function reconcileAcceptedPirepFinance(pilotId: string) {
 }
 
 export async function reviewPirep(input: { id: string; decision: "accepted" | "rejected" | "changes_requested"; staffName: string; comments: string }) {
+  const candidate = await getPirep(input.id);
+  const booking = candidate?.bookingId ? await getPilotBooking(candidate.bookingId, candidate.pilotId) : null;
+  if (candidate && (candidate.allianceBookingId || booking?.alliance)) {
+    const ledger = await listAllianceLedger(candidate.pilotId, candidate.id);
+    await reviewAlliancePirep(candidate, { decision: input.decision, reason: input.comments.trim() || `Operations review: ${input.decision}`, actor: input.staffName, expectedRevision: Math.max(0, ...ledger.map(e => e.revision)) });
+    const reviewed = await getPirep(input.id);
+    if (!reviewed) throw new Error("Reviewed report could not be loaded.");
+    await notifyPilotOfPirepReview(reviewed, input.decision, input.staffName, input.comments);
+    return reviewed;
+  }
   const client = getPirepClient();
   if (client) {
     const current = await getPirep(input.id);

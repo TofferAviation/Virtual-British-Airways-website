@@ -167,7 +167,7 @@ export default function OneworldPage() {
             <h2>Ready for your next virtual sector?</h2>
             <p>Browse the BA Virtual network and choose your next available assignment.</p>
           </div>
-          <Link className="button button-primary" href="/book">Find a virtual flight</Link>
+          <Link className="button button-primary" href="/oneworld/operations">Open alliance operations</Link>
         </section>
       </main>
 

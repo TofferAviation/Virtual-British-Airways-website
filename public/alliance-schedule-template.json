@@ -1,0 +1,32 @@
+[
+  {
+    "id": "",
+    "operatorId": "",
+    "marketingCarrierId": "",
+    "flightNumber": "",
+    "operatingFlightNumber": "",
+    "callsign": "",
+    "origin": "",
+    "destination": "",
+    "originIata": "",
+    "destinationIata": "",
+    "originCountry": "",
+    "destinationCountry": "",
+    "region": "",
+    "aircraft": "",
+    "aircraftIcao": "",
+    "departure": "",
+    "arrival": "",
+    "blockSeconds": 0,
+    "distanceNm": 0,
+    "days": [],
+    "validFrom": "",
+    "validUntil": "",
+    "sourceUrl": "",
+    "permission": "",
+    "verifiedAt": "",
+    "sourceType": "verified",
+    "confidence": "high",
+    "enabled": false
+  }
+]

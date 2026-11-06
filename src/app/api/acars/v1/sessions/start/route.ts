@@ -7,6 +7,7 @@ import { getCareerAircraftAccessPolicy, isCareerEnforcementEnabled } from "@/lib
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { getPilotById } from "@/lib/pilot-store";
 import { ensureFleetMembership, FleetServiceError, getFleetAircraft, startFleetAircraftFlight } from "@/lib/fleet-service";
+import { getAllianceBooking } from "@/lib/alliance-store";
 
 function isSupportedSimulator(value: string): value is SupportedSimulator {
   return value in supportedSimulatorLabels;
@@ -20,6 +21,16 @@ export async function POST(request: Request) {
   if (!isSupportedSimulator(simulator)) return NextResponse.json({ error: "Unsupported simulator." }, { status: 400 });
   const booking = await getActivePilotBooking(auth.account.id);
   if (!booking) return NextResponse.json({ error: "No active BAV assignment." }, { status: 409 });
+  if (booking.alliance) {
+    const snapshot = await getAllianceBooking(booking.id, auth.account.id);
+    if (!snapshot) return NextResponse.json({ error: "Partner dispatch metadata is missing. Contact Operations." }, { status: 409 });
+    if (snapshot.mode === "realistic_operations") {
+      const pilot = await getPilotById(auth.account.id);
+      if (!pilot) return NextResponse.json({ error: "Pilot not found." }, { status: 401 });
+      const eligibility = await checkAircraftCareerEligibility(pilot, booking.aircraft);
+      if (!eligibility.eligible || (snapshot.policy.requireDispatchApproval && !snapshot.dispatchApproved)) return NextResponse.json({ error: eligibility.reasons.join(" ") || "This partner flight is awaiting Operations dispatch approval." }, { status: 403 });
+    }
+  }
   if (booking.fleetAircraftId && isCareerEnforcementEnabled()) {
     const pilot = await getPilotById(auth.account.id);
     if (!pilot) return NextResponse.json({ error: "Your BAV pilot account could not be verified. Refresh Flight Planning before starting Ember." }, { status: 409 });

@@ -2,6 +2,7 @@ import type { AcarsSession } from "@/lib/acars-store";
 import { toBritishAirwaysFlightNumber } from "@/lib/ba-flight-identifiers";
 import type { AcarsArrivalResolution } from "@/lib/acars-arrival";
 import { completeFleetAircraftFlight, ensureFleetMembership, getActiveFleetFlightAssignmentForPilot } from "@/lib/fleet-service";
+import { getPilotBooking } from "@/lib/pilot-operations-store";
 
 export type FleetArrivalReconciliation = {
   status: "updated" | "not_managed" | "awaiting_arrival_verification" | "not_operating" | "flight_mismatch" | "unavailable";
@@ -13,6 +14,8 @@ export type FleetArrivalReconciliation = {
  * planned destination is never passed to Fleet when Ember could not verify it.
  */
 export async function reconcileFleetArrival(session: AcarsSession, arrival: AcarsArrivalResolution): Promise<FleetArrivalReconciliation> {
+  const booking = session.bookingId ? await getPilotBooking(session.bookingId, session.pilotId) : null;
+  if (booking?.alliance) return { status: "not_managed", message: "Partner operation recorded without changing BA-owned Fleet aircraft." };
   if (!arrival.canUpdateFleet || !arrival.actualStation) {
     return { status: "awaiting_arrival_verification", message: "Fleet station was not changed because the arrival airport could not be verified." };
   }

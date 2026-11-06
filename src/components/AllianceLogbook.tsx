@@ -1,0 +1,6 @@
+import Link from "next/link";
+import { secondsDisplay, type AllianceLedgerEntry } from "@/lib/alliance";
+
+export function AllianceLogbook({ entries }: { entries: AllianceLedgerEntry[] }) {
+  return <div className="alliance-table-wrap"><table className="alliance-table"><thead><tr><th>Flight</th><th>Airline</th><th>Credit / correction</th><th>Block time</th><th>BA career</th><th>Report</th></tr></thead><tbody>{entries.slice(0, 200).map(e => <tr key={e.id}><td>{e.flight.flightNumber}<small>{e.flight.from} → {e.flight.to} · {e.flight.aircraft}</small><small>{new Date(e.flight.completedAt).toLocaleDateString("en-GB")}</small></td><td><Link href={`/account/alliance/${e.carrierId}`}>{e.carrierId}</Link></td><td>{e.kind}<small>{e.reason}</small><small>Policy {e.policy.version} · revision {e.revision}</small></td><td>{secondsDisplay(e.seconds)}</td><td>{secondsDisplay(e.careerSeconds)}</td><td><Link href={`/account/flights/${e.pirepId}`}>Verified PIREP</Link></td></tr>)}</tbody></table>{!entries.length ? <p>No permanent airline credit yet. Pending reports appear in your standard flight logbook until approved.</p> : null}{entries.length > 200 ? <p>Showing the most recent 200 entries. Export your ledger for the complete history.</p> : null}</div>;
+}

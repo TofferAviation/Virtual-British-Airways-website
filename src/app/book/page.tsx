@@ -123,6 +123,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
       <SiteHeader />
       <main className="page-shell">
         <div className="page-container">
+          <div className="integration-note"><Link href="/oneworld/operations"><strong>oneworld Operations</strong></Link> · Explore partner airline routes and build your airline hour banks.</div>
           <div className="booking-steps"><div className="booking-step active"><span>1</span>Choose flight</div><div className="booking-step"><span>2</span>Flight briefing</div><div className="booking-step"><span>3</span>Confirm assignment</div></div>
           <section className="page-heading booking-heading">
             <div>

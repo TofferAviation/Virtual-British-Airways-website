@@ -14,6 +14,14 @@ import { normalizePassportStudio, type PassportStudio } from "@/lib/passport-stu
 
 const DATA_DIR = path.join(process.cwd(), ".bav-data");
 const PILOT_FILE = path.join(DATA_DIR, "pilots.json");
+// Preserve the database snapshot behind each read. Concurrent saves must fail
+// visibly instead of replacing a newly posted alliance/finance credit.
+const pilotStateSnapshots = new WeakMap<object, unknown>();
+const operationSnapshots = new WeakMap<object, string>();
+export function inheritPilotOperationsSnapshot(source: object, target: object) {
+  const expected = operationSnapshots.get(source);
+  if (expected !== undefined) operationSnapshots.set(target, expected);
+}
 
 type PilotState = {
   version: 12;
@@ -223,6 +231,10 @@ export type PilotAccount = {
   lifetimeTierPoints: number;
   flights: number;
   hours: number;
+  /** Alliance time excluded by the booking's career/rank policy, in seconds. */
+  allianceUncreditedSeconds?: number;
+  allianceRankExcludedSeconds?: number;
+  allianceXp?: number;
   distanceNm: number;
   /** Accepted-flight departures from London Heathrow, used for the specialist award. */
   heathrowDepartures: number;
@@ -290,7 +302,7 @@ async function ensureDataDir() {
 function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "pilotNumber" | "email" | "name" | "passwordHash">): PilotAccount {
   const hours = Number.isFinite(raw.hours) ? Math.max(0, Number(raw.hours)) : 0;
   const rankOverride = isPilotRank(raw.rankOverride) ? raw.rankOverride : null;
-  const rank = rankOverride ?? automaticPilotRank(hours);
+  const rank = rankOverride ?? automaticPilotRank(hours - Math.max(0, Number(raw.allianceRankExcludedSeconds) || 0) / 3600);
   return {
     id: raw.id,
     pilotNumber: raw.pilotNumber,
@@ -314,6 +326,9 @@ function normalizePilot(raw: Partial<PilotAccount> & Pick<PilotAccount, "id" | "
     lifetimeTierPoints: Number(raw.lifetimeTierPoints) || 0,
     flights: Number(raw.flights) || 0,
     hours,
+    allianceUncreditedSeconds: Math.max(0, Number(raw.allianceUncreditedSeconds) || 0),
+    allianceRankExcludedSeconds: Math.max(0, Number(raw.allianceRankExcludedSeconds) || 0),
+    allianceXp: Math.max(0, Number(raw.allianceXp) || 0),
     distanceNm: Number(raw.distanceNm) || 0,
     heathrowDepartures: Math.max(0, Math.floor(Number(raw.heathrowDepartures) || 0)),
     averageLanding: raw.averageLanding ?? null,
@@ -561,7 +576,12 @@ async function readState(): Promise<PilotState> {
   if (client) {
     const { data, error } = await client.from("pilot_state").select("state").eq("singleton", true).maybeSingle();
     if (error) throw error;
-    if (data?.state) return normalizeState((data as PilotStateRow).state as Partial<PilotState>);
+    if (data?.state) {
+      const raw = (data as PilotStateRow).state;
+      const state = normalizeState(raw as Partial<PilotState>);
+      pilotStateSnapshots.set(state, raw);
+      return state;
+    }
 
     // A one-time local import is permitted only when explicitly enabled. It
     // supports moving the existing development state into Supabase without
@@ -569,6 +589,7 @@ async function readState(): Promise<PilotState> {
     const initial = localFallbackAllowed() ? await readLocalState() : emptyState();
     const { error: createError } = await client.from("pilot_state").upsert({ singleton: true, state: initial });
     if (createError) throw createError;
+    pilotStateSnapshots.set(initial, initial);
     return initial;
   }
   if (!localFallbackAllowed()) {
@@ -581,6 +602,18 @@ async function writeState(state: PilotState) {
   const normalized = normalizeState(state);
   const client = getPilotStateClient();
   if (client) {
+    const expected = pilotStateSnapshots.get(state);
+    if (expected) {
+      const result = await client.rpc("bav_compare_swap_pilot_state", { p_expected: expected, p_next: normalized });
+      if (!result.error) {
+        if (!result.data) throw new Error("Your account changed during this update. Refresh and try again; the newer record was protected.");
+        pilotStateSnapshots.set(state, normalized);
+        return;
+      }
+      // Backward-compatible deployment before the additive migration. Once
+      // installed, all other errors fail closed; no stale fallback overwrites.
+      if (!["PGRST202", "42883"].includes(result.error.code)) throw result.error;
+    }
     const { error } = await client.from("pilot_state").upsert({ singleton: true, state: normalized });
     if (error) throw error;
     return;
@@ -598,11 +631,16 @@ async function writeState(state: PilotState) {
  */
 export async function readPilotOperationsState(): Promise<unknown | null> {
   const state = await readState();
-  return state.operationsState === null ? null : structuredClone(state.operationsState);
+  if (state.operationsState === null) return null;
+  const copy = structuredClone(state.operationsState) as object;
+  operationSnapshots.set(copy, JSON.stringify(state.operationsState));
+  return copy;
 }
 
 export async function writePilotOperationsState(operationsState: unknown) {
   const state = await readState();
+  const expected = operationsState && typeof operationsState === "object" ? operationSnapshots.get(operationsState) : undefined;
+  if (expected && expected !== JSON.stringify(state.operationsState)) throw new Error("Your flight assignment changed during this update. Refresh and try again.");
   state.operationsState = operationsState && typeof operationsState === "object"
     ? structuredClone(operationsState)
     : null;
@@ -1034,7 +1072,7 @@ function addCareerHours(state: PilotState, account: PilotAccount, input: {
   requestId?: string | null;
 }) {
   account.hours = Math.round((account.hours + input.hours) * 100) / 100;
-  account.rank = account.rankOverride ?? automaticPilotRank(account.hours);
+  account.rank = account.rankOverride ?? automaticPilotRank(account.hours - (account.allianceRankExcludedSeconds ?? 0) / 3600);
   const adjustment: PilotHourAdjustment = {
     id: randomUUID(),
     pilotId: account.id,
@@ -1587,7 +1625,7 @@ export async function updatePilotAdminFields(id: string, input: { rankOverride?:
   if (!account) throw new Error("Pilot account not found.");
   if (input.rankOverride !== undefined) {
     account.rankOverride = input.rankOverride;
-    account.rank = input.rankOverride ?? automaticPilotRank(account.hours);
+    account.rank = input.rankOverride ?? automaticPilotRank(account.hours - (account.allianceRankExcludedSeconds ?? 0) / 3600);
   }
   if (input.typeRatings !== undefined) account.typeRatings = normalizePilotTypeRatings(input.typeRatings);
   if (input.hub) account.hub = normalizeBavHub(input.hub);
@@ -1647,7 +1685,7 @@ export async function applyApprovedPirepStats(pilotId: string, input: {
     account.averageLanding = account.averageLanding == null ? input.landingFpm : Math.round((account.averageLanding * previousFlights + input.landingFpm) / Math.max(1, account.flights));
     account.bestLanding = account.bestLanding == null ? input.landingFpm : Math.max(account.bestLanding, input.landingFpm);
   }
-  account.rank = account.rankOverride ?? automaticPilotRank(account.hours);
+  account.rank = account.rankOverride ?? automaticPilotRank(account.hours - (account.allianceRankExcludedSeconds ?? 0) / 3600);
   if (account.tierPoints >= state.rewardSettings.tierGoldThreshold) account.tier = "Gold";
   else if (account.tierPoints >= state.rewardSettings.tierSilverThreshold) account.tier = "Silver";
   else if (account.tierPoints >= state.rewardSettings.tierBronzeThreshold) account.tier = "Bronze";

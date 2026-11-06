@@ -1,4 +1,5 @@
 "use server";
+import { validateAllianceSimbriefPlan } from "@/lib/simbrief";
 
 import { redirect } from "next/navigation";
 import { cancelActivePilotBooking, configureFlightPlanSimbrief, getActivePilotBooking, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, setPilotBookingFleetSelection, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
@@ -119,6 +120,7 @@ export async function syncSimbriefFlightPlan(formData: FormData) {
 
   try {
     const details = await fetchLatestSimbriefPlan(plan.simbriefPilotId);
+    validateAllianceSimbriefPlan(booking, details);
     const codes = getSimbriefCodes(booking);
     if (!details.origin || !details.destination || details.origin.toUpperCase() !== codes.origin || details.destination.toUpperCase() !== codes.destination) {
       throw new Error(`Your latest SimBrief plan does not match ${codes.origin ?? booking.from} → ${codes.destination ?? booking.to}. Generate this BAV flight first, then sync again.`);

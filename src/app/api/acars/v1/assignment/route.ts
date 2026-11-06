@@ -39,6 +39,9 @@ export async function GET(request: Request) {
     assignment: assignment
       ? {
           ...assignment,
+          isAllianceFlight: Boolean(assignment.alliance),
+          operatingAirlineName: assignment.alliance?.operator.name ?? null,
+          operatingAirlineIcao: assignment.alliance?.operator.icao ?? null,
           originIcao: codes?.origin ?? null,
           destinationIcao: codes?.destination ?? null,
           careerNotice,
@@ -49,7 +52,7 @@ export async function GET(request: Request) {
                 cruiseAltitude: flightPlan.cruiseAltitude,
                 alternate: flightPlan.alternate,
                 generatedAt: flightPlan.generatedAt,
-                briefing: flightPlan.simbriefBriefing,
+                briefing: assignment.alliance && flightPlan.simbriefBriefing ? { ...flightPlan.simbriefBriefing, flightNumber: assignment.flightNumber } : flightPlan.simbriefBriefing,
               }
             : null,
         }

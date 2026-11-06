@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPilotBooking, getPilotFlightPlan, updateFlightPlanFromSimbrief } from "@/lib/pilot-operations-store";
 import { getPilotSession } from "@/lib/pilot-auth";
-import { fetchLatestSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
+import { fetchLatestSimbriefPlan, getSimbriefCodes, validateAllianceSimbriefPlan } from "@/lib/simbrief";
 
 export const runtime = "nodejs";
 
@@ -21,6 +21,7 @@ export async function POST(request: Request, context: { params: Promise<{ bookin
       return NextResponse.json({ error: "SimBrief is still publishing this OFP. Keep the dispatch popup open until it finishes, then try again." }, { status: 409 });
     }
     const codes = getSimbriefCodes(booking);
+    validateAllianceSimbriefPlan(booking, details);
     if (!details.origin || !details.destination || details.origin.toUpperCase() !== codes.origin || details.destination.toUpperCase() !== codes.destination) {
       return NextResponse.json({ error: `The generated OFP does not match ${codes.origin ?? booking.from} → ${codes.destination ?? booking.to}.` }, { status: 422 });
     }
