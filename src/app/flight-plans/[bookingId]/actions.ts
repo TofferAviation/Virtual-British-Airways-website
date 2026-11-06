@@ -1,16 +1,40 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cancelActivePilotBooking, configureFlightPlanSimbrief, getActivePilotBooking, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
+import { cancelActivePilotBooking, configureFlightPlanSimbrief, getActivePilotBooking, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, setPilotBookingFleetSelection, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { buildSimbriefDispatchUrl, fetchLatestSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
 import { getPilotById } from "@/lib/pilot-store";
 import { getPilotAircraftEligibility } from "@/lib/pilot-ranks";
 import { getBookableRoute } from "@/lib/route-store";
-import { cancelFleetAircraftReservation, FleetReservationInProgressError, FleetServiceError } from "@/lib/fleet-service";
+import { cancelFleetAircraftReservation, ensureFleetMembership, FleetReservationInProgressError, FleetServiceError, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
+import { requireFleetPilotAircraftForActiveBooking } from "@/lib/fleet-pilot-auth";
+import { registrationFailureCode } from "@/lib/fleet-reservation-errors";
 
 function flightPlanPath(bookingId: string) {
   return `/flight-plans/${encodeURIComponent(bookingId)}`;
+}
+
+/** Retry registration selection on the saved briefing without replacing its booking or OFP. */
+export async function reserveBookingAircraft(formData: FormData) {
+  const session = await requirePilotSession();
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const aircraftId = String(formData.get("fleetAircraftId") ?? "");
+  const booking = await getActivePilotBooking(session.pilotId);
+  if (!booking || booking.id !== bookingId) redirect("/manage-assignment");
+  if (booking.status !== "booked") redirect(`${flightPlanPath(booking.id)}?protected=1`);
+  const actor = { subject: `bav:${session.pilotId}`, displayName: session.name, fleetRole: "pilot", pilotId: session.pilotId };
+  try {
+    const { aircraft } = await requireFleetPilotAircraftForActiveBooking(actor, aircraftId);
+    await ensureFleetMembership({ subject: actor.subject, displayName: actor.displayName, websiteRole: "pilot" });
+    await reserveFleetAircraftForFlight(aircraft.id, actor, { pilotSubject: actor.subject, pilotDisplayName: actor.displayName,
+      flightReference: booking.flightNumber, departureStation: booking.from, arrivalStation: booking.to });
+    await setPilotBookingFleetSelection({ bookingId: booking.id, pilotId: session.pilotId, fleetAircraftId: aircraft.id, registration: aircraft.registration });
+  } catch (error) {
+    console.error("[fleet-reservation] Briefing reservation failed", { bookingId, aircraftId, message: error instanceof Error ? error.message : "Unknown error" });
+    redirect(`${flightPlanPath(booking.id)}?error=${error instanceof FleetServiceError ? registrationFailureCode(error) : "registration-failed"}`);
+  }
+  redirect(`${flightPlanPath(booking.id)}?registrationReserved=1`);
 }
 
 /** Cancels an unstarted assignment so the pilot can select a new BAV service. */

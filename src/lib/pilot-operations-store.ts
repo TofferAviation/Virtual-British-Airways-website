@@ -543,6 +543,17 @@ export async function recordPilotPirep(input: Omit<PilotPirep, "id" | "createdAt
 }
 
 /** Clears a failed website reservation attempt without cancelling the pilot's protected flight booking. */
+export async function setPilotBookingFleetSelection(input: { bookingId: string; pilotId: string; fleetAircraftId: string; registration: string }) {
+  const state = await readState();
+  const booking = state.bookings.find((item) => item.id === input.bookingId && item.pilotId === input.pilotId);
+  if (!booking || booking.status !== "booked") throw new Error("Registration selection can only change before the Ember flight begins.");
+  if (booking.fleetAircraftId && booking.fleetAircraftId !== input.fleetAircraftId) throw new Error("This booking already has a different registration.");
+  booking.fleetAircraftId = input.fleetAircraftId;
+  booking.registration = input.registration;
+  await writeState(state);
+  return booking;
+}
+
 export async function clearPilotBookingFleetSelection(input: { bookingId: string; pilotId: string }) {
   const state = await readState();
   const booking = state.bookings.find((item) => item.id === input.bookingId && item.pilotId === input.pilotId);

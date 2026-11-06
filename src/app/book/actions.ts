@@ -11,6 +11,7 @@ import { getCareerAircraftAccessPolicy } from "@/lib/career-enforcement";
 import { getFlightsForRoute } from "@/lib/route-store";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
 import { resolveFlightCallsign } from "@/lib/flight-callsigns";
+import { registrationFailureCode } from "@/lib/fleet-reservation-errors";
 import { cancelFleetAircraftReservation, ensureFleetMembership, fleetAircraftIsAtStation, fleetAircraftMatchesVirtualType, FleetReservationInProgressError, FleetServiceError, isFleetAircraftBookable, listFleetAircraft, reserveFleetAircraftForFlight } from "@/lib/fleet-service";
 
 export async function bookFlight(formData: FormData) {
@@ -204,7 +205,8 @@ export async function bookFlight(formData: FormData) {
       // between the page load and this reservation request.
       await clearPilotBookingFleetSelection({ bookingId: booking.id, pilotId: session.pilotId });
       if (error instanceof FleetServiceError) {
-        redirect(`/flight-plans/${encodeURIComponent(booking.id)}?error=registration-unavailable`);
+        console.error("[fleet-reservation] Booking reservation failed", { bookingId: booking.id, aircraftId: selectedFleetAircraft.id, status: error.status, message: error.message });
+        redirect(`/flight-plans/${encodeURIComponent(booking.id)}?error=${registrationFailureCode(error)}`);
       }
       throw error;
     }
