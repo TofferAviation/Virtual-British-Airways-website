@@ -26,7 +26,9 @@ function save(name, markup) {
 test("route explorer renders real page component with provenance, operator and booking controls", async () => {
   const page = loadTs("../app/oneworld/operations/page.tsx", { ...mocks, "./actions": { bookAlliance: "/fixture-only" } }).default;
   const html = renderToStaticMarkup(await page({ searchParams: Promise.resolve({ date: "2026-11-06" }) }));
-  assert.match(html, /Qatar Airways/); assert.match(html, /virtual schedule/); assert.match(html, /Timetable source/); assert.match(html, /Select and dispatch/); save("routes", html);
+  assert.match(html, /Qatar Airways/); assert.match(html, /virtual route/); assert.match(html, /Route and callsign source/); assert.match(html, /Select and dispatch/);
+  assert.match(html, /<input[^>]*type="time"[^>]*required[^>]*name="departure"/); assert.match(html, /name="aircraft" required/);
+  assert.doesNotMatch(html, /Departs after|Departs before|Estimated airline bank|08:00–14:25/); save("routes", html);
 });
 test("career page uses the same approved ledger and does not add bank hours to lifetime time", async () => {
   const page = loadTs("../app/account/alliance/page.tsx", mocks).default;

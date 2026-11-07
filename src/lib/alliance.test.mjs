@@ -81,3 +81,26 @@ test("partner SimBrief dispatch preserves verified ICAO airports, operator and a
   assert.throws(() => simbrief.validateAllianceSimbriefPlan(booking, { briefing: { flightNumber: "1", airline: "BAW", aircraftIcao: "A35K" } }), /does not match/);
   assert.doesNotThrow(() => simbrief.validateAllianceSimbriefPlan(booking, { briefing: { flightNumber: "001", airline: "QTR", aircraftIcao: "A35K" } }));
 });
+
+test("route imports need no timetable or scheduled airframe, and weekdays do not restrict pilot choice", () => {
+  const route = { ...fixtureSchedule };
+  for (const key of ["aircraft", "aircraftIcao", "departure", "arrival", "blockSeconds", "distanceNm", "days"]) delete route[key];
+  const validated = validateAllianceSchedule(route);
+  assert.equal(validated.callsign, "QTR1"); assert.equal(validated.departure, ""); assert.equal(validated.aircraft, "");
+  assert.equal(validated.blockSeconds, 0);
+  assert.equal(scheduleAvailable({ ...validated, days: [1] }, "2026-11-06"), true);
+  assert.throws(() => validateAllianceSchedule({ ...route, callsign: "" }));
+});
+
+test("SimBrief uses pilot-selected time and airframe while preserving route and callsign", () => {
+  const simbrief = loadTs("./simbrief.ts"), selection = loadTs("./dispatch-aircraft.ts");
+  const booking = { ...pirep, date: "2026-11-06", callsign: "QTR1", aircraft: "Boeing 787-9", departure: "23:55", duration: "", alliance: snapshot };
+  const url = new URL(simbrief.buildSimbriefDispatchUrl(booking, "Test", "1"));
+  assert.equal(url.searchParams.get("type"), "B789"); assert.equal(url.searchParams.get("deph"), "23"); assert.equal(url.searchParams.get("depm"), "55");
+  assert.equal(url.searchParams.get("callsign"), "QTR1"); assert.equal(url.searchParams.get("orig"), "OTHH");
+  assert.equal(url.searchParams.has("steh"), false); assert.equal(url.searchParams.has("stem"), false);
+  assert.doesNotThrow(() => simbrief.validateAllianceSimbriefPlan(booking, { briefing: { flightNumber: "1", airline: "QTR", aircraftIcao: "B789" } }));
+  assert.throws(() => simbrief.validateAllianceSimbriefPlan(booking, { briefing: { flightNumber: "1", airline: "QTR", aircraftIcao: "A35K" } }), /does not match/);
+  assert.equal(selection.allianceAircraftCode("constructor", fixtureSchedule), undefined);
+  assert.equal(fixtureSchedule.aircraftIcao, "A35K");
+});

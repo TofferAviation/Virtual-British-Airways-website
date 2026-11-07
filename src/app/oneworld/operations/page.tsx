@@ -2,7 +2,8 @@ import Link from "next/link";
 import { AllianceShell } from "@/components/AllianceShell";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { allianceReadiness, getAllianceConfiguration, getAllianceSchedules } from "@/lib/alliance-store";
-import { carrierEligible, scheduleAvailable, secondsDisplay } from "@/lib/alliance";
+import { carrierEligible, scheduleAvailable } from "@/lib/alliance";
+import { allianceAircraftOptions } from "@/lib/dispatch-aircraft";
 import { getActivePilotBooking } from "@/lib/pilot-operations-store";
 import { bookAlliance } from "./actions";
 
@@ -22,16 +23,12 @@ export default async function AllianceOperations({ searchParams }: { searchParam
     if (value("carrier") && s.operatorId !== value("carrier")) return false;
     if (value("origin") && ![s.origin, s.originIata].includes(value("origin").toUpperCase())) return false;
     if (value("destination") && ![s.destination, s.destinationIata].includes(value("destination").toUpperCase())) return false;
-    if (value("aircraft") && s.aircraftIcao !== value("aircraft")) return false;
-    if (value("maxDistance") && s.distanceNm > Number(value("maxDistance"))) return false;
-    if (value("maxHours") && s.blockSeconds > Number(value("maxHours")) * 3600) return false;
-    if (value("departureFrom") && s.departure < value("departureFrom")) return false;
-    if (value("departureUntil") && s.departure > value("departureUntil")) return false;
-    const kind = s.originCountry === s.destinationCountry ? "domestic" : s.blockSeconds >= 21600 ? "long-haul" : "regional";
+    if (value("maxDistance") && (!s.distanceNm || s.distanceNm > Number(value("maxDistance")))) return false;
+    const kind = s.originCountry === s.destinationCountry ? "domestic" : "international";
     return !value("kind") || value("kind") === kind;
   });
-  return <AllianceShell title="oneworld Operations" intro="Choose an operating airline, explore its approved timetable and dispatch your next sector. One flight earns BA career credit and an airline bank entry under the published policy.">
-    {!settings.enabled ? <div className="alliance-notice">Operations is in preparation. Timetables can be reviewed here; partner booking will open when Operations enables the programme.</div> : null}
+  return <AllianceShell title="oneworld Operations" intro="Choose a verified route and operating callsign, then pick your own departure time and aircraft. Approved flown time earns credit under the published policy.">
+    {!settings.enabled ? <div className="alliance-notice">Operations is in preparation. Routes can be reviewed here; partner booking will open when Operations enables the programme.</div> : null}
     {value("error") ? <div role="alert" className="alliance-notice error">{value("error")}</div> : null}
     {active ? <div className="alliance-notice">You have an active flight: <Link href={`/flight-plans/${active.id}`}>{active.flightNumber} · {active.from} → {active.to}</Link>. Complete or cancel it before choosing another.</div> : null}
     <form className="alliance-filters" method="get">
@@ -40,16 +37,12 @@ export default async function AllianceOperations({ searchParams }: { searchParam
       <label>Origin · IATA / ICAO<input name="origin" maxLength={4} defaultValue={value("origin")} placeholder="LHR or EGLL" /></label>
       <label>Destination · IATA / ICAO<input name="destination" maxLength={4} defaultValue={value("destination")} /></label>
       <label>Flight, callsign, country or region<input name="q" defaultValue={value("q")} /></label>
-      <label>Aircraft<select name="aircraft" defaultValue={value("aircraft")}><option value="">All types</option>{[...new Set(schedules.map(s => s.aircraftIcao))].sort().map(a => <option key={a}>{a}</option>)}</select></label>
-      <label>Sector<select name="kind" defaultValue={value("kind")}><option value="">All sectors</option><option value="domestic">Domestic</option><option value="regional">International / regional</option><option value="long-haul">Long haul · 6h+</option></select></label>
+      <label>Sector<select name="kind" defaultValue={value("kind")}><option value="">All sectors</option><option value="domestic">Domestic</option><option value="international">International</option></select></label>
       <label>Maximum distance · NM<input type="number" name="maxDistance" min="1" max="15000" defaultValue={value("maxDistance")} /></label>
-      <label>Maximum block hours<input type="number" name="maxHours" min="0.1" max="48" step="0.1" defaultValue={value("maxHours")} /></label>
-      <label>Departs after · UTC<input type="time" name="departureFrom" defaultValue={value("departureFrom")} /></label>
-      <label>Departs before · UTC<input type="time" name="departureUntil" defaultValue={value("departureUntil")} /></label>
       <button className="button button-primary" type="submit">Find flights</button>
     </form>
-    <p>{routes.length} matching service{routes.length === 1 ? "" : "s"} · all schedule times UTC. Estimated bank credit uses scheduled block time; only validated, approved time is credited.</p>
-    {!schedules.length ? <div className="alliance-empty"><h2>Timetable awaiting an approved import</h2><p>Operations can load permissioned partner schedules in the <Link href="/staff/alliance">Alliance Manager</Link>. Real, historical, manual and virtual schedules are labelled separately. No flight numbers or departure times have been invented.</p><Link href="/book">Browse the existing BA network</Link></div> : !routes.length ? <div className="alliance-empty">No approved services match these filters and the selected date.</div> : <div className="alliance-routes">{routes.slice(0, 60).map(s => <article className="alliance-route" key={s.id}><div><span className="alliance-label">{carriers.find(c => c.id === s.operatorId)?.name}</span><span className="alliance-badge">{s.sourceType === "verified" ? "Source verified" : `${s.sourceType} schedule`}</span><h2>{s.originIata} → {s.destinationIata} · {s.flightNumber}</h2><p>{s.aircraft} · {s.callsign} · {s.departure}–{s.arrival} UTC · {secondsDisplay(s.blockSeconds)} · {s.distanceNm.toLocaleString()} NM</p><p>Estimated airline bank +{secondsDisplay(s.blockSeconds)} · BA career {settings.policy.career ? `+${secondsDisplay(s.blockSeconds)}` : "not credited under this policy"}</p>{s.marketingCarrierId !== s.operatorId ? <small>Marketed by {carriers.find(c => c.id === s.marketingCarrierId)?.name}; operated by {carriers.find(c => c.id === s.operatorId)?.name}. Credit follows the operator.</small> : null}<small><a href={s.sourceUrl} rel="noopener noreferrer" target="_blank">Timetable source</a> · confidence {s.confidence} · verified {new Date(s.verifiedAt).toLocaleDateString("en-GB")} · valid {s.validFrom} to {s.validUntil}</small></div><form action={bookAlliance}><input type="hidden" name="scheduleId" value={s.id} /><input type="hidden" name="date" value={date} /><button className="button button-primary" disabled={!settings.enabled || Boolean(active)}>Select and dispatch</button></form></article>)}</div>}
+    <p>{routes.length} matching service{routes.length === 1 ? "" : "s"}. Departure time is your choice; arrival and duration are calculated in SimBrief. Only validated, approved flown time is credited.</p>
+    {!schedules.length ? <div className="alliance-empty"><h2>Routes awaiting an approved import</h2><p>Operations can load verified routes and their correct operating callsigns in the <Link href="/staff/alliance">Alliance Manager</Link>. Published times and scheduled aircraft are optional reference information.</p><Link href="/book">Browse the existing BA network</Link></div> : !routes.length ? <div className="alliance-empty">No approved services match these filters and the selected date.</div> : <div className="alliance-routes">{routes.slice(0, 60).map(s => <article className="alliance-route" key={s.id}><div><span className="alliance-label">{carriers.find(c => c.id === s.operatorId)?.name}</span><span className="alliance-badge">{s.sourceType === "verified" ? "Source verified" : `${s.sourceType} route`}</span><h2>{s.originIata} → {s.destinationIata} · {s.operatingFlightNumber}</h2><p>ATC callsign {s.callsign}{s.distanceNm ? ` · ${s.distanceNm.toLocaleString()} NM` : ""}</p>{s.marketingCarrierId !== s.operatorId ? <small>Marketed as {s.flightNumber} by {carriers.find(c => c.id === s.marketingCarrierId)?.name}; operated by {carriers.find(c => c.id === s.operatorId)?.name}. Credit follows the operator.</small> : null}<small><a href={s.sourceUrl} rel="noopener noreferrer" target="_blank">Route and callsign source</a> · confidence {s.confidence} · verified {new Date(s.verifiedAt).toLocaleDateString("en-GB")} · valid {s.validFrom} to {s.validUntil}</small></div><form action={bookAlliance}><input type="hidden" name="scheduleId" value={s.id} /><input type="hidden" name="date" value={date} /><label>Departure time · UTC<input name="departure" type="time" required /></label><label>Aircraft / airframe<select name="aircraft" required defaultValue=""><option value="" disabled>Choose your aircraft</option>{allianceAircraftOptions(s).map(a => <option key={a}>{a}</option>)}</select></label><small>You can change aircraft in the flight-plan aircraft menu before starting. Realistic mode checks your qualifications.</small><button className="button button-primary" disabled={!settings.enabled || Boolean(active)}>Select and dispatch</button></form></article>)}</div>}
     {routes.length > 60 ? <p>Showing the first 60 results. Narrow your filters to see a specific service.</p> : null}
   </AllianceShell>;
 }

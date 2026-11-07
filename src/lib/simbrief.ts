@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { PilotBooking, SimbriefBriefing, SimbriefRoutePoint } from "@/lib/pilot-operations-store";
 import { BAV_NETWORK_ICAO_BY_IATA } from "@/data/bav-network-2026";
 import { resolveBritishAirwaysCallsign } from "@/lib/ba-flight-identifiers";
+import { allianceAircraftCode } from "@/lib/dispatch-aircraft";
 
 const airportIcao: Record<string, string> = {
   ...BAV_NETWORK_ICAO_BY_IATA,
@@ -42,7 +43,7 @@ function simbriefDate(date: string) {
 }
 
 export function getSimbriefCodes(booking: PilotBooking) {
-  if (booking.alliance) return { origin: booking.alliance.schedule.origin, destination: booking.alliance.schedule.destination, aircraft: booking.alliance.schedule.aircraftIcao };
+  if (booking.alliance) return { origin: booking.alliance.schedule.origin, destination: booking.alliance.schedule.destination, aircraft: allianceAircraftCode(booking.aircraft, booking.alliance.schedule) };
   return { origin: airportIcao[booking.from], destination: airportIcao[booking.to], aircraft: aircraftIcao[booking.aircraft] };
 }
 
@@ -62,8 +63,7 @@ function buildSimbriefDispatchFields(booking: PilotBooking, pilotName: string, s
     dest: codes.destination,
     deph: departure.hours,
     depm: departure.minutes,
-    steh: duration.hours,
-    stem: duration.minutes,
+    ...(booking.duration ? { steh: duration.hours, stem: duration.minutes } : {}),
     date: simbriefDate(booking.date),
     cpt: pilotName,
     pid: simbriefPilotId,
@@ -192,7 +192,8 @@ export function validateAllianceSimbriefPlan(booking: PilotBooking, plan: Simbri
   const { operator, schedule } = booking.alliance;
   const flight = (plan.briefing.flightNumber ?? "").toUpperCase().replaceAll(" ", "").replace(new RegExp(`^(?:${operator.iata}|${operator.icao})`), "").replace(/^0+(?=\d)/, "");
   const expected = schedule.operatingFlightNumber.slice(operator.iata.length).replace(/^0+(?=\d)/, "");
-  if (flight !== expected || plan.briefing.aircraftIcao !== schedule.aircraftIcao || ![operator.iata, operator.icao].includes((plan.briefing.airline ?? "").toUpperCase())) throw new Error("The SimBrief operator, flight number or aircraft does not match this partner assignment. Generate the selected flight first.");
+  const aircraft = allianceAircraftCode(booking.aircraft, schedule);
+  if (!aircraft || flight !== expected || plan.briefing.aircraftIcao !== aircraft || ![operator.iata, operator.icao].includes((plan.briefing.airline ?? "").toUpperCase())) throw new Error("The SimBrief operator, flight number or aircraft does not match this partner assignment. Generate the selected flight first.");
 }
 
 export function extractSimbriefPlan(payload: SimbriefPayload): SimbriefPlanDetails {

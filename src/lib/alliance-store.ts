@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { carrierEligible, scheduleAvailable, secondsDisplay, validateAllianceSchedule, type AllianceBookingSnapshot, type AllianceCarrier, type AllianceLedgerEntry, type AllianceSchedule, type AllianceSettings } from "@/lib/alliance";
+import { carrierEligible, scheduleAvailable, validateAllianceSchedule, type AllianceBookingSnapshot, type AllianceCarrier, type AllianceLedgerEntry, type AllianceSchedule, type AllianceSettings } from "@/lib/alliance";
 import { prepareAllianceCredit, type AllianceReview } from "@/lib/alliance-credit";
 import { getPilotById, getRewardSettings, type PilotAccount } from "@/lib/pilot-store";
 import { calculatePirepReward } from "@/lib/reward-settings";
 import { calculatePilotFlightPay, checkAircraftCareerEligibility, getCareerEconomySettings, listPilotQualifications } from "@/lib/pilot-career";
 import { buildSimbriefDispatchUrl } from "@/lib/simbrief";
+import { allianceAircraftCode } from "@/lib/dispatch-aircraft";
 import type { PilotBooking, PilotFlightPlan, PilotPirep } from "@/lib/pilot-operations-store";
 
 function database() {
@@ -61,20 +62,22 @@ export async function listAllianceLedger(pilotId?: string, pirepId?: string) {
   return rows.map((r): AllianceLedgerEntry => ({ id: String(r.id), pirepId: String(r.pirep_id), pilotId: String(r.pilot_id), carrierId: String(r.carrier_id), revision: Number(r.revision), kind: r.kind as AllianceLedgerEntry["kind"], seconds: Number(r.seconds), careerSeconds: Number(r.career_seconds), sectors: Number(r.sectors), distanceNm: Number(r.distance_nm), points: Number(r.points), tierPoints: Number(r.tier_points), salary: Number(r.salary), xp: Number(r.xp ?? 0), policy: r.policy as AllianceLedgerEntry["policy"], reason: String(r.reason), actor: String(r.actor), createdAt: String(r.created_at), flight: r.flight as AllianceLedgerEntry["flight"] }));
 }
 
-export async function bookAllianceFlight(pilotId: string, scheduleId: string, date: string) {
+export async function bookAllianceFlight(pilotId: string, scheduleId: string, date: string, selection: { aircraft: string; departure: string }) {
   const [config, schedules, pilot] = await Promise.all([getAllianceConfiguration(date), getAllianceSchedules(), getPilotById(pilotId)]);
   const schedule = schedules.find(s => s.id === scheduleId);
   if (!pilot || !config.settings.enabled || !schedule || !scheduleAvailable(schedule, date)) throw new Error("This service is not available on the selected date.");
   const operator = config.carriers.find(c => c.id === schedule.operatorId), marketing = config.carriers.find(c => c.id === schedule.marketingCarrierId);
   if (!operator || !marketing || !carrierEligible(operator, date)) throw new Error("The operating airline is not eligible for this date.");
+  if (!allianceAircraftCode(selection.aircraft, schedule)) throw new Error("Choose an aircraft from the aircraft menu.");
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(selection.departure)) throw new Error("Choose a valid departure time in UTC.");
   const mode = pilot.careerExperience.mode;
   if (mode === "realistic_operations") {
-    const eligibility = await checkAircraftCareerEligibility(pilot, schedule.aircraft);
+    const eligibility = await checkAircraftCareerEligibility(pilot, selection.aircraft);
     if (!eligibility.eligible) throw new Error(eligibility.reasons.join(" "));
   }
   const snapshot: AllianceBookingSnapshot = { schedule, operator, marketing, policy: config.settings.policy, mode, dispatchApproved: false };
   const now = new Date().toISOString();
-  const booking: PilotBooking = { id: randomUUID(), pilotId, routeId: `alliance:${schedule.id}`, flightNumber: schedule.operatingFlightNumber, callsign: schedule.callsign, callsignResolution: null, from: schedule.origin, to: schedule.destination, aircraft: schedule.aircraft, fleetAircraftId: null, registration: null, departure: schedule.departure, arrival: schedule.arrival, duration: secondsDisplay(schedule.blockSeconds), date, scheduleScoringEnabled: false, status: "booked", createdAt: now, alliance: snapshot };
+  const booking: PilotBooking = { id: randomUUID(), pilotId, routeId: `alliance:${schedule.id}`, flightNumber: schedule.operatingFlightNumber, callsign: schedule.callsign, callsignResolution: null, from: schedule.origin, to: schedule.destination, aircraft: selection.aircraft, fleetAircraftId: null, registration: null, departure: selection.departure, arrival: "", duration: "", date, scheduleScoringEnabled: false, status: "booked", createdAt: now, alliance: snapshot };
   const plan: PilotFlightPlan = { id: randomUUID(), bookingId: booking.id, pilotId, status: "draft", simbriefPilotId: pilot.simbriefPilotId, simbriefDispatchUrl: pilot.simbriefPilotId ? buildSimbriefDispatchUrl(booking, pilot.name, pilot.simbriefPilotId) : null, simbriefOfpId: null, simbriefOfpUrl: null, route: null, cruiseAltitude: null, alternate: null, simbriefBriefing: null, generatedAt: null, lastSyncedAt: null, createdAt: now, updatedAt: now };
   const { data, error } = await database().rpc("bav_alliance_book", { p_pilot_id: pilotId, p_booking: booking, p_plan: plan, p_snapshot: snapshot });
   if (error) throw new Error(error.message);

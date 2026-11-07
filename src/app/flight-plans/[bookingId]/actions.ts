@@ -2,6 +2,8 @@
 import { validateAllianceSimbriefPlan } from "@/lib/simbrief";
 
 import { redirect } from "next/navigation";
+import { allianceAircraftOptions } from "@/lib/dispatch-aircraft";
+import { checkAircraftCareerEligibility } from "@/lib/pilot-career";
 import { cancelActivePilotBooking, configureFlightPlanSimbrief, getActivePilotBooking, getPilotBooking, getPilotFlightPlan, markFlightPlanDispatchOpened, setPilotBookingFleetSelection, updateFlightPlanFromSimbrief, updatePilotBookingAircraft } from "@/lib/pilot-operations-store";
 import { requirePilotSession } from "@/lib/pilot-auth";
 import { buildSimbriefDispatchUrl, fetchLatestSimbriefPlan, getSimbriefCodes } from "@/lib/simbrief";
@@ -90,10 +92,12 @@ export async function changeBookingAircraft(formData: FormData) {
 
   const route = booking.routeId ? await getBookableRoute(booking.routeId) : null;
   const activeRoute = route?.active && !route.catalogueOnly ? route : null;
-  const approvedAircraft = new Set(activeRoute ? [activeRoute.aircraft, ...(activeRoute.aircraftOptions ?? [])] : [booking.aircraft]);
+  const approvedAircraft = new Set(booking.alliance ? allianceAircraftOptions(booking.alliance.schedule) : activeRoute ? [activeRoute.aircraft, ...(activeRoute.aircraftOptions ?? [])] : [booking.aircraft]);
   if (!approvedAircraft.has(requestedAircraft)) redirect(`${flightPlanPath(bookingId)}?error=aircraft-change`);
 
-  const eligibility = getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: requestedAircraft });
+  const eligibility = booking.alliance
+    ? booking.alliance.mode === "realistic_operations" ? await checkAircraftCareerEligibility(pilot, requestedAircraft) : { eligible: true }
+    : getPilotAircraftEligibility({ rank: pilot.rank, typeRatings: pilot.typeRatings, aircraft: requestedAircraft });
   if (!eligibility.eligible) redirect(`${flightPlanPath(bookingId)}?error=aircraft-qualification`);
 
   await updatePilotBookingAircraft({ bookingId, pilotId: session.pilotId, aircraft: requestedAircraft });

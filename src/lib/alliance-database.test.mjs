@@ -7,15 +7,17 @@ import { pilot, pirep, snapshot, fixtureSchedule, mutation, persisted, prepareAl
 const db = new PGlite();
 const migration = name => readFileSync(new URL(`../../supabase/migrations/${name}`, import.meta.url), "utf8");
 const allianceSql = migration("20261106090000_alliance_operations.sql");
+const pilotChoiceSql = migration("20261107090000_alliance_pilot_dispatch_choices.sql");
 before(async () => {
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls;");
   for (const name of ["20260912100000_acars_persistence.sql", "20260912120000_pilot_state_persistence.sql", "20260919090000_schedule_flexibility_rewards.sql", "20260927090000_pilot_career_finance_qualifications.sql"]) await db.exec(migration(name));
   await db.exec(allianceSql);
   await db.exec(migration("20261106091000_finance_rpc_column_qualification.sql"));
+  await db.exec(pilotChoiceSql);
 });
 after(async () => db.close());
-async function seedBooking(id = pirep.bookingId, schedule = fixtureSchedule) {
-  const book = { id, pilotId: pilot.id, routeId: `alliance:${schedule.id}`, date: "2026-11-06", flightNumber: schedule.operatingFlightNumber, callsign: schedule.callsign, from: schedule.origin, to: schedule.destination, aircraft: schedule.aircraft, fleetAircraftId: null, registration: null, status: "booked", alliance: { ...snapshot, schedule } };
+async function seedBooking(id = pirep.bookingId, schedule = fixtureSchedule, overrides = {}) {
+  const book = { id, pilotId: pilot.id, routeId: `alliance:${schedule.id}`, date: "2026-11-06", departure: "19:45", flightNumber: schedule.operatingFlightNumber, callsign: schedule.callsign, from: schedule.origin, to: schedule.destination, aircraft: schedule.aircraft || "Boeing 787-9", fleetAircraftId: null, registration: null, status: "booked", alliance: { ...snapshot, schedule }, ...overrides };
   const plan = { id: "33333333-3333-4333-8333-333333333333", bookingId: id, pilotId: pilot.id, status: "draft" };
   const { rows } = await db.query("select bav_alliance_book($1,$2,$3,$4) as id", [pilot.id, JSON.stringify(book), JSON.stringify(plan), JSON.stringify({ ...snapshot, schedule })]);
   return rows[0].id;
@@ -46,6 +48,20 @@ test("actual PostgreSQL approval atomically credits career, airline ledger, sour
   assert.equal((await db.query("select status from pilot_pireps")).rows[0].status, "accepted");
   assert.equal(Number((await db.query("select current_balance from pilot_finance_accounts")).rows[0].current_balance), 300);
   assert.equal(Number((await db.query("select count(*) as n from alliance_audit where action='pirep.accepted'")).rows[0].n), 1);
+});
+
+test("pilot dispatch choices accept untimed routes and different aircraft without weakening route identity", async () => {
+  await db.query("update pilot_state set state=jsonb_set(state,'{operationsState,bookings,0,status}','\"completed\"') where singleton");
+  const route = { ...fixtureSchedule, aircraft: "", aircraftIcao: "", departure: "", arrival: "", blockSeconds: 0, days: [1] };
+  await db.query("update alliance_schedules set data=$1 where id=$2", [JSON.stringify(route), route.id]);
+  const id = "99999999-9999-4999-8999-999999999999";
+  for (const override of [{ callsign: "BAW1" }, { from: "KJFK" }, { flightNumber: "QR9" }, { aircraft: "" }, { departure: "25:01" }, { registration: "G-TEST" }]) {
+    await assert.rejects(seedBooking(id, route, override), /Invalid booking snapshot/);
+  }
+  await seedBooking(id, route);
+  const state = (await db.query("select state->'operationsState'->'bookings'->1 as booking from pilot_state")).rows[0].booking;
+  assert.equal(state.aircraft, "Boeing 787-9"); assert.equal(state.departure, "19:45"); assert.equal(state.callsign, "QTR1");
+  assert.deepEqual((await db.query("select snapshot->'schedule' as route from alliance_bookings where booking_id=$1", [id])).rows[0].route, route);
 });
 test("concurrent duplicate approvals and subsequent replay post once", async () => {
   const m = mutation(); await Promise.all([review(m), review(m)]); await review(m);
@@ -123,7 +139,7 @@ test("stale pilot snapshot rolls back every side effect and a fresh retry succee
   assert.equal((await readPilot()).points, 201);
 });
 test("historic totals survive migration and idempotent reapplication without guessed bank entries", async () => {
-  const initial = await readPilot(); await db.exec(allianceSql); assert.deepEqual(await readPilot(), initial);
+  const initial = await readPilot(); await db.exec(allianceSql); await db.exec(pilotChoiceSql); assert.deepEqual(await readPilot(), initial);
   assert.equal((await db.query("select * from alliance_credit_ledger")).rows.length, 0);
   assert.equal((await db.query("select * from alliance_carriers")).rows.length, 16);
 });

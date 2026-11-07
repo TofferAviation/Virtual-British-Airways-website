@@ -25,7 +25,7 @@ export function carrierEligible(carrier: AllianceCarrier, date: string) {
 
 export function scheduleAvailable(schedule: AllianceSchedule, date: string) {
   const day = new Date(`${date}T12:00:00Z`);
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === date && schedule.enabled && schedule.validFrom <= date && schedule.validUntil >= date && schedule.days.includes(day.getUTCDay());
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === date && schedule.enabled && schedule.validFrom <= date && schedule.validUntil >= date;
 }
 
 const text = (value: unknown, name: string, max = 300) => {
@@ -39,6 +39,8 @@ export function validateAllianceSchedule(raw: unknown): AllianceSchedule {
   const code = (name: string, pattern: RegExp) => { const value = string(name, 30).toUpperCase(); if (!pattern.test(value)) throw new Error(`Invalid ${name}.`); return value; };
   const date = (name: string) => { const value = string(name, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) throw new Error(`Invalid ${name}.`); return value; };
   const integer = (name: string, min: number, max: number) => { const value = r[name]; if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) throw new Error(`Invalid ${name}.`); return value; };
+  const optional = (name: string, max: number) => r[name] == null || r[name] === "" ? "" : string(name, max);
+  const time = (name: string) => r[name] == null || r[name] === "" ? "" : code(name, /^(?:[01]\d|2[0-3]):[0-5]\d$/);
   const sourceType = string("sourceType") as AllianceSchedule["sourceType"];
   const confidence = string("confidence") as AllianceSchedule["confidence"];
   if (!["high", "medium", "low"].includes(confidence)) throw new Error("Record the staff-assessed source confidence: high, medium or low.");
@@ -47,17 +49,18 @@ export function validateAllianceSchedule(raw: unknown): AllianceSchedule {
   if (!/^https:\/\//.test(sourceUrl)) throw new Error("A public HTTPS source/reference URL is required.");
   const verifiedAt = string("verifiedAt", 40);
   if (!Number.isFinite(Date.parse(verifiedAt)) || Date.parse(verifiedAt) > Date.now() + 60_000) throw new Error("Invalid verification timestamp.");
-  const days = r.days;
+  const days = r.days ?? [0, 1, 2, 3, 4, 5, 6];
   if (!Array.isArray(days) || !days.length || days.some(day => !Number.isInteger(day) || day < 0 || day > 6)) throw new Error("days must contain UTC weekdays 0–6.");
   const result: AllianceSchedule = {
     id: code("id", /^[a-zA-Z0-9_-]{1,100}$/).toLowerCase(), operatorId: string("operatorId", 40), marketingCarrierId: string("marketingCarrierId", 40),
     flightNumber: code("flightNumber", /^[A-Z0-9]{2}\d{1,4}[A-Z]?$/), operatingFlightNumber: code("operatingFlightNumber", /^[A-Z0-9]{2}\d{1,4}[A-Z]?$/), callsign: code("callsign", /^[A-Z]{3}[A-Z0-9]{1,7}$/),
     origin: code("origin", /^[A-Z]{4}$/), destination: code("destination", /^[A-Z]{4}$/), originIata: code("originIata", /^[A-Z]{3}$/), destinationIata: code("destinationIata", /^[A-Z]{3}$/),
-    originCountry: string("originCountry", 80), destinationCountry: string("destinationCountry", 80), region: string("region", 80), aircraft: string("aircraft", 80), aircraftIcao: code("aircraftIcao", /^[A-Z0-9]{2,4}$/),
-    departure: code("departure", /^(?:[01]\d|2[0-3]):[0-5]\d$/), arrival: code("arrival", /^(?:[01]\d|2[0-3]):[0-5]\d$/), blockSeconds: integer("blockSeconds", 60, 172800), distanceNm: integer("distanceNm", 1, 15000), days: [...new Set(days)],
+    originCountry: string("originCountry", 80), destinationCountry: string("destinationCountry", 80), region: string("region", 80), aircraft: optional("aircraft", 80), aircraftIcao: r.aircraftIcao ? code("aircraftIcao", /^[A-Z0-9]{2,4}$/) : "",
+    departure: time("departure"), arrival: time("arrival"), blockSeconds: r.blockSeconds == null ? 0 : integer("blockSeconds", 0, 172800), distanceNm: r.distanceNm == null ? 0 : integer("distanceNm", 0, 15000), days: [...new Set(days)],
     validFrom: date("validFrom"), validUntil: date("validUntil"), sourceUrl, permission: string("permission", 1000), verifiedAt, sourceType, confidence, enabled: r.enabled === true,
   };
   if (result.origin === result.destination || result.validUntil < result.validFrom) throw new Error("Invalid route or schedule validity range.");
+  if (Boolean(result.aircraft) !== Boolean(result.aircraftIcao)) throw new Error("Reference aircraft name and ICAO code must be supplied together, or both omitted.");
   return result;
 }
 
